@@ -1,0 +1,69 @@
+{
+  "name": "InventoryItem",
+  "type": "object",
+  "properties": {
+    "ingredient": {
+      "type": "string",
+      "description": "Ingredient or supply name"
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "kg",
+        "g",
+        "L",
+        "mL",
+        "units",
+        "cases",
+        "bottles"
+      ],
+      "description": "Unit of measurement"
+    },
+    "stock": {
+      "type": "number",
+      "description": "Current stock quantity"
+    },
+    "reorder_point": {
+      "type": "number",
+      "description": "Quantity at which to reorder"
+    },
+    "max_stock": {
+      "type": "number",
+      "description": "Maximum storage capacity"
+    },
+    "cost_per_unit": {
+      "type": "number",
+      "description": "Cost per unit"
+    },
+    "supplier": {
+      "type": "string",
+      "description": "Supplier name"
+    },
+    "location": {
+      "type": "string",
+      "description": "Storage location (e.g. Cold Room, Dry Store)"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Produce",
+        "Juice Base",
+        "Spices & Herbs",
+        "Packaging",
+        "Supplies",
+        "Other"
+      ],
+      "description": "Category"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  },
+  "required": [
+    "ingredient",
+    "unit",
+    "stock",
+    "reorder_point"
+  ]
+}

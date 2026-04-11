@@ -1,0 +1,65 @@
+{
+  "name": "Resource",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Resource title"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Brand Assets",
+        "SOPs",
+        "Training",
+        "Templates",
+        "Legal",
+        "Events",
+        "Wholesale",
+        "Internal Forms",
+        "Other"
+      ],
+      "description": "Resource category"
+    },
+    "description": {
+      "type": "string",
+      "description": "What this resource contains or is used for"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "URL to the uploaded file"
+    },
+    "file_name": {
+      "type": "string",
+      "description": "Original file name"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Searchable tags"
+    },
+    "version": {
+      "type": "string",
+      "description": "Document version e.g. v1.2"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Active",
+        "Draft",
+        "Archived"
+      ],
+      "description": "Document status"
+    },
+    "last_updated_by": {
+      "type": "string",
+      "description": "Who last updated this"
+    }
+  },
+  "required": [
+    "title",
+    "category"
+  ]
+}

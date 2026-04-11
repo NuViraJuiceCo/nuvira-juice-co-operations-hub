@@ -1,0 +1,78 @@
+{
+  "name": "Event",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Event name"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "Pop-Up",
+        "Market",
+        "Corporate",
+        "Tasting",
+        "Festival",
+        "Wholesale Meeting",
+        "Other"
+      ],
+      "description": "Event type"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Confirmed",
+        "Pending",
+        "Applied",
+        "Cancelled",
+        "Completed"
+      ],
+      "description": "Event status"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Event date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "End date if multi-day"
+    },
+    "location": {
+      "type": "string",
+      "description": "Venue/address"
+    },
+    "expected_attendees": {
+      "type": "number",
+      "description": "Expected number of attendees"
+    },
+    "products": {
+      "type": "string",
+      "description": "Products/quantities to bring"
+    },
+    "contact_name": {
+      "type": "string",
+      "description": "Event contact person"
+    },
+    "contact_email": {
+      "type": "string",
+      "description": "Event contact email"
+    },
+    "revenue": {
+      "type": "number",
+      "description": "Actual or projected revenue"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Setup notes, logistics, etc."
+    }
+  },
+  "required": [
+    "name",
+    "type",
+    "status",
+    "date"
+  ]
+}

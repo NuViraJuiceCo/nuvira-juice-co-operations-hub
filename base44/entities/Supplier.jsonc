@@ -1,0 +1,69 @@
+{
+  "name": "Supplier",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Supplier business name"
+    },
+    "contact_name": {
+      "type": "string",
+      "description": "Primary contact person"
+    },
+    "email": {
+      "type": "string",
+      "description": "Contact email"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Contact phone number"
+    },
+    "location": {
+      "type": "string",
+      "description": "City/Province"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Produce",
+        "Juice Base",
+        "Spices & Herbs",
+        "Packaging",
+        "Exotic Produce",
+        "Citrus",
+        "Equipment",
+        "Other"
+      ],
+      "description": "Supply category"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Active",
+        "Inactive",
+        "Negotiating"
+      ],
+      "description": "Relationship status"
+    },
+    "lead_time_days": {
+      "type": "number",
+      "description": "Typical lead time in days"
+    },
+    "payment_terms": {
+      "type": "string",
+      "description": "e.g. Net 30, COD"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes about supplier"
+    },
+    "rating": {
+      "type": "number",
+      "description": "Rating out of 5"
+    }
+  },
+  "required": [
+    "name",
+    "status"
+  ]
+}

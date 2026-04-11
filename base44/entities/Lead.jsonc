@@ -1,0 +1,81 @@
+{
+  "name": "Lead",
+  "type": "object",
+  "properties": {
+    "business_name": {
+      "type": "string",
+      "description": "Business or contact name"
+    },
+    "contact_name": {
+      "type": "string",
+      "description": "Primary contact person"
+    },
+    "email": {
+      "type": "string",
+      "description": "Contact email"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Contact phone"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "Wholesale",
+        "Retail",
+        "Corporate",
+        "Event",
+        "Distributor",
+        "Referral",
+        "Other"
+      ],
+      "description": "Lead type"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "New",
+        "Contacted",
+        "Proposal Sent",
+        "Negotiating",
+        "Won",
+        "Lost"
+      ],
+      "description": "Pipeline stage"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "Instagram",
+        "Referral",
+        "Event",
+        "Cold Outreach",
+        "Website",
+        "Market",
+        "Other"
+      ],
+      "description": "Lead source"
+    },
+    "estimated_value": {
+      "type": "number",
+      "description": "Estimated monthly/annual value"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Notes and follow-up details"
+    },
+    "next_follow_up": {
+      "type": "string",
+      "format": "date",
+      "description": "Next follow-up date"
+    },
+    "location": {
+      "type": "string",
+      "description": "City/area"
+    }
+  },
+  "required": [
+    "business_name",
+    "stage"
+  ]
+}
