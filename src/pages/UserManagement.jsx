@@ -22,7 +22,7 @@ export default function UserManagement() {
   const [updatingId, setUpdatingId] = useState(null);
 
   useEffect(() => {
-    base44.entities.User.list().then(data => {
+    base44.entities.User.list('-created_date', 200).then(data => {
       setUsers(data);
       setLoading(false);
     });
