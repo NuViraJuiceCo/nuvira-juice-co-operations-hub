@@ -5,6 +5,7 @@ import StatCard from "../components/shared/StatCard";
 import HeroBanner from "../components/dashboard/HeroBanner";
 import RecentOrders from "../components/dashboard/RecentOrders";
 import UpcomingProduction from "../components/dashboard/UpcomingProduction";
+import DashboardInsights from "../components/dashboard/DashboardInsights";
 import moment from "moment";
 
 export default function Dashboard() {
@@ -61,8 +62,10 @@ export default function Dashboard() {
         <StatCard label="Exceptions" value={0} icon={AlertCircle} />
       </div>
 
+      {/* Insights Row */}
+      <DashboardInsights orders={orders} />
+
       {/* Hero Banner */}
-      <HeroBanner />
 
       {/* Orders + Production */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
