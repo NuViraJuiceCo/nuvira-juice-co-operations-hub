@@ -12,6 +12,17 @@ import Production from './pages/Production';
 import Fulfillment from './pages/Fulfillment';
 import Reporting from './pages/Reporting';
 import OperationsCalendar from './pages/OperationsCalendar';
+import Inventory from './pages/Inventory';
+import Suppliers from './pages/Suppliers';
+import Compliance from './pages/Compliance';
+import Resources from './pages/Resources';
+import Events from './pages/Events';
+import Partnerships from './pages/Partnerships';
+import ProdScheduler from './pages/ProdScheduler';
+import PurchaseOrders from './pages/PurchaseOrders';
+import RouteOptimizer from './pages/RouteOptimizer';
+import UserManagement from './pages/UserManagement';
+import AuditLogs from './pages/AuditLogs';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -46,6 +57,17 @@ const AuthenticatedApp = () => {
         <Route path="/fulfillment" element={<Fulfillment />} />
         <Route path="/reporting" element={<Reporting />} />
         <Route path="/calendar" element={<OperationsCalendar />} />
+        <Route path="/inventory" element={<Inventory />} />
+        <Route path="/suppliers" element={<Suppliers />} />
+        <Route path="/compliance" element={<Compliance />} />
+        <Route path="/resources" element={<Resources />} />
+        <Route path="/events" element={<Events />} />
+        <Route path="/partnerships" element={<Partnerships />} />
+        <Route path="/prod-scheduler" element={<ProdScheduler />} />
+        <Route path="/purchase-orders" element={<PurchaseOrders />} />
+        <Route path="/route-optimizer" element={<RouteOptimizer />} />
+        <Route path="/users" element={<UserManagement />} />
+        <Route path="/audit-logs" element={<AuditLogs />} />
         <Route path="*" element={<PageNotFound />} />
       </Route>
     </Routes>
