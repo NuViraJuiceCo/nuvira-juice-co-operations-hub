@@ -1,11 +1,15 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, LogOut, ShoppingCart, Factory, Truck, CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/orders", label: "Orders", icon: ShoppingCart },
+  { path: "/production", label: "Production", icon: Factory },
+  { path: "/fulfillment", label: "Fulfillment", icon: Truck },
   { path: "/reporting", label: "Reporting", icon: BarChart3 },
+  { path: "/calendar", label: "Calendar", icon: CalendarDays },
 ];
 
 export default function Sidebar() {
