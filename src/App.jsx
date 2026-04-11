@@ -23,6 +23,7 @@ import PurchaseOrders from './pages/PurchaseOrders';
 import RouteOptimizer from './pages/RouteOptimizer';
 import UserManagement from './pages/UserManagement';
 import AuditLogs from './pages/AuditLogs';
+import ReportScheduler from './pages/ReportScheduler';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -68,6 +69,7 @@ const AuthenticatedApp = () => {
         <Route path="/route-optimizer" element={<RouteOptimizer />} />
         <Route path="/users" element={<UserManagement />} />
         <Route path="/audit-logs" element={<AuditLogs />} />
+        <Route path="/report-scheduler" element={<ReportScheduler />} />
         <Route path="*" element={<PageNotFound />} />
       </Route>
     </Routes>
