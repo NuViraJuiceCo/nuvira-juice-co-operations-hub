@@ -1,5 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, LogOut, ShoppingCart, Factory, Truck, CalendarDays, Package, Users, ShieldCheck, Wrench, CalendarCheck, Handshake, ClipboardList, ShoppingBag, Route, UserCog, ScrollText, FileBarChart } from "lucide-react";
+import {
+  LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, LogOut,
+  ShoppingCart, Factory, Truck, CalendarDays, Package, Users,
+  ShieldCheck, Wrench, CalendarCheck, Handshake, ClipboardList,
+  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X,
+} from "lucide-react";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 
@@ -34,23 +39,75 @@ const navGroups = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ open, onClose }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
+  const NavLink = ({ item }) => {
+    const isActive = location.pathname === item.path;
+    const Icon = item.icon;
+    return (
+      <Link
+        to={item.path}
+        onClick={onClose}
+        className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${
+          isActive
+            ? "bg-sidebar-accent text-sidebar-primary"
+            : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+        }`}
+      >
+        <Icon className="h-[17px] w-[17px] flex-shrink-0" />
+        {!collapsed && <span className="text-sm font-medium truncate">{item.label}</span>}
+      </Link>
+    );
+  };
+
   return (
-    <aside
-      className={`fixed left-0 top-0 h-screen bg-sidebar flex flex-col z-50 transition-all duration-300 ${
-        collapsed ? "w-16" : "w-56"
-      }`}
-    >
+    <>
+      {/* Desktop sidebar */}
+      <aside
+        className={`hidden lg:flex fixed left-0 top-0 h-screen bg-sidebar flex-col z-50 transition-all duration-300 ${
+          collapsed ? "w-16" : "w-56"
+        }`}
+      >
+        <SidebarContent
+          collapsed={collapsed}
+          setCollapsed={setCollapsed}
+          navGroups={navGroups}
+          NavLink={NavLink}
+          showCollapseBtn
+        />
+      </aside>
+
+      {/* Mobile/Tablet drawer */}
+      <aside
+        className={`lg:hidden fixed left-0 top-0 h-screen w-64 bg-sidebar flex flex-col z-50 transition-transform duration-300 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <SidebarContent
+          collapsed={false}
+          setCollapsed={() => {}}
+          navGroups={navGroups}
+          NavLink={NavLink}
+          showCloseBtn
+          onClose={onClose}
+        />
+      </aside>
+    </>
+  );
+}
+
+function SidebarContent({ collapsed, setCollapsed, navGroups, NavLink, showCollapseBtn, showCloseBtn, onClose }) {
+  return (
+    <>
       {/* Logo */}
       <div className="px-4 py-5 flex items-center gap-3">
         <div className="h-9 w-9 rounded-lg bg-sidebar-primary/20 flex items-center justify-center flex-shrink-0">
           <span className="text-sidebar-primary font-bold text-lg font-display">N</span>
         </div>
         {!collapsed && (
-          <div className="overflow-hidden">
+          <div className="overflow-hidden flex-1">
             <h1 className="text-sidebar-foreground font-display font-bold text-lg leading-tight tracking-tight">
               nuVira
             </h1>
@@ -59,10 +116,15 @@ export default function Sidebar() {
             </p>
           </div>
         )}
+        {showCloseBtn && (
+          <button onClick={onClose} className="ml-auto text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors p-1">
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 mt-2 overflow-y-auto space-y-4">
+      <nav className="flex-1 px-3 mt-2 overflow-y-auto space-y-4 pb-4">
         {navGroups.map((group, gi) => (
           <div key={gi}>
             {group.label && !collapsed && (
@@ -71,47 +133,26 @@ export default function Sidebar() {
               </p>
             )}
             <div className="space-y-0.5">
-              {group.items.map((item) => {
-                const isActive = location.pathname === item.path;
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${
-                      isActive
-                        ? "bg-sidebar-accent text-sidebar-primary"
-                        : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
-                    }`}
-                  >
-                    <Icon className="h-[17px] w-[17px] flex-shrink-0" />
-                    {!collapsed && (
-                      <span className="text-sm font-medium truncate">{item.label}</span>
-                    )}
-                  </Link>
-                );
-              })}
+              {group.items.map(item => <NavLink key={item.path} item={item} />)}
             </div>
           </div>
         ))}
       </nav>
 
-      {/* Collapse toggle */}
-      <div className="relative">
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-3 top-0 h-6 w-6 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground shadow-sm transition-colors"
-        >
-          {collapsed ? (
-            <ChevronRight className="h-3 w-3" />
-          ) : (
-            <ChevronLeft className="h-3 w-3" />
-          )}
-        </button>
-      </div>
+      {/* Collapse toggle — desktop only */}
+      {showCollapseBtn && (
+        <div className="relative px-3 py-1">
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            className="w-full flex items-center justify-center gap-2 py-2 text-xs text-sidebar-foreground/40 hover:text-sidebar-foreground transition-colors"
+          >
+            {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <><ChevronLeft className="h-3.5 w-3.5" /><span>Collapse</span></>}
+          </button>
+        </div>
+      )}
 
       {/* Footer */}
-      <div className="px-3 pb-4 pt-2 border-t border-sidebar-border mt-2">
+      <div className="px-3 pb-4 pt-2 border-t border-sidebar-border">
         <button
           onClick={() => base44.auth.logout()}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all w-full"
@@ -120,6 +161,6 @@ export default function Sidebar() {
           {!collapsed && <span className="text-sm">Sign Out</span>}
         </button>
       </div>
-    </aside>
+    </>
   );
 }
