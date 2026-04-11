@@ -1,0 +1,129 @@
+import { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { Calendar } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import StatusBadge from "../components/shared/StatusBadge";
+import moment from "moment";
+import _ from "lodash";
+
+export default function Production() {
+  const [batches, setBatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  useEffect(() => {
+    async function load() {
+      const data = await base44.entities.ProductionBatch.list("production_date", 100);
+      setBatches(data);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const filtered = batches.filter(
+    (b) => statusFilter === "all" || b.status === statusFilter
+  );
+
+  const grouped = _.groupBy(filtered, (b) => b.production_date);
+  const activeBatches = batches.filter((b) => b.status !== "Completed").length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const today = moment().format("YYYY-MM-DD");
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
+          <p className="text-muted-foreground mt-1">
+            {batches.length} batches · {activeBatches} active
+          </p>
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="Planned">Planned</SelectItem>
+            <SelectItem value="Awaiting Ingredients">Awaiting Ingredients</SelectItem>
+            <SelectItem value="In Production">In Production</SelectItem>
+            <SelectItem value="In Packing">In Packing</SelectItem>
+            <SelectItem value="Completed">Completed</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Grouped by Date */}
+      <div className="space-y-8">
+        {Object.entries(grouped)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, dateBatches]) => {
+            const isToday = date === today;
+            const dateLabel = isToday
+              ? `Today — ${moment(date).format("dddd, MMM D")}`
+              : moment(date).format("dddd, MMM D, YYYY");
+
+            return (
+              <div key={date}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold text-foreground">{dateLabel}</h3>
+                  <span className="text-xs text-muted-foreground">
+                    ({dateBatches.length} batches)
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {dateBatches.map((batch) => (
+                    <div
+                      key={batch.id}
+                      className="bg-card border border-border rounded-xl p-5 hover:shadow-sm transition-shadow"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-semibold text-foreground">{batch.product_name}</h4>
+                          <p className="text-xs text-muted-foreground mt-0.5">{batch.batch_id}</p>
+                        </div>
+                        <StatusBadge status={batch.status} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 mt-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Planned</p>
+                          <p className="text-lg font-semibold text-foreground">{batch.planned_units} units</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Actual</p>
+                          <p className="text-lg font-semibold text-foreground">
+                            {batch.actual_units || "—"}
+                          </p>
+                        </div>
+                      </div>
+                      {(batch.assigned_to || batch.notes) && (
+                        <div className="mt-3 pt-3 border-t border-border space-y-1">
+                          {batch.assigned_to && (
+                            <p className="text-xs text-muted-foreground">
+                              Assigned: {batch.assigned_to}
+                            </p>
+                          )}
+                          {batch.notes && (
+                            <p className="text-xs text-muted-foreground">{batch.notes}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+}

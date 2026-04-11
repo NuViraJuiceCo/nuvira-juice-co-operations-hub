@@ -1,0 +1,113 @@
+{
+  "name": "Order",
+  "type": "object",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "Display order ID like NV-001"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Customer full name"
+    },
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email address"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "Shopify Web Store",
+        "Instagram",
+        "NuVira Juice App",
+        "Facebook",
+        "Event Order"
+      ],
+      "description": "Sales channel"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "New",
+        "Confirmed",
+        "Scheduled for Production",
+        "In Production",
+        "Completed",
+        "Cancelled"
+      ],
+      "description": "Order status"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Paid",
+        "Refunded"
+      ],
+      "description": "Payment status"
+    },
+    "fulfillment_type": {
+      "type": "string",
+      "enum": [
+        "Delivery",
+        "Pickup",
+        "Wholesale",
+        "Event"
+      ],
+      "description": "How the order will be fulfilled"
+    },
+    "fulfillment_window": {
+      "type": "string",
+      "description": "Time window like 10am-12pm"
+    },
+    "subtotal": {
+      "type": "number",
+      "description": "Subtotal before tax and discounts"
+    },
+    "tax": {
+      "type": "number",
+      "description": "Tax amount"
+    },
+    "discount": {
+      "type": "number",
+      "description": "Discount amount"
+    },
+    "total": {
+      "type": "number",
+      "description": "Total amount"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "price": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "Order line items"
+    },
+    "delivery_address": {
+      "type": "string",
+      "description": "Delivery address if applicable"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Order notes"
+    }
+  },
+  "required": [
+    "order_id",
+    "customer_name",
+    "channel",
+    "status",
+    "total"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "name": "FulfillmentTask",
+  "type": "object",
+  "properties": {
+    "customer_name": {
+      "type": "string",
+      "description": "Customer name"
+    },
+    "fulfillment_type": {
+      "type": "string",
+      "enum": [
+        "Delivery",
+        "Pickup",
+        "Wholesale",
+        "Event"
+      ],
+      "description": "Type of fulfillment"
+    },
+    "time_window": {
+      "type": "string",
+      "description": "Delivery/pickup time window"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Unassigned",
+        "Scheduled",
+        "Packed",
+        "In Transit",
+        "Completed"
+      ],
+      "description": "Fulfillment status"
+    },
+    "scheduled_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Scheduled date"
+    },
+    "address": {
+      "type": "string",
+      "description": "Delivery address"
+    },
+    "assigned_driver": {
+      "type": "string",
+      "description": "Assigned delivery driver"
+    },
+    "items_summary": {
+      "type": "string",
+      "description": "Summary of items e.g. 5 bottles: 3x Green Glow, 2x Berry Blast"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Related order ID"
+    }
+  },
+  "required": [
+    "customer_name",
+    "fulfillment_type",
+    "status",
+    "scheduled_date"
+  ]
+}
