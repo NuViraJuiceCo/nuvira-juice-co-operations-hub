@@ -38,14 +38,14 @@ export default function ActiveOrderStatusWidget({ orders }) {
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={180}>
-        <PieChart>
+      <ResponsiveContainer width="100%" height={240}>
+        <PieChart margin={{ top: 0, right: 0, bottom: 40, left: 0 }}>
           <Pie
             data={chartData}
             cx="50%"
-            cy="50%"
-            innerRadius={50}
-            outerRadius={80}
+            cy="40%"
+            innerRadius={40}
+            outerRadius={70}
             paddingAngle={2}
             dataKey="value"
           >
@@ -54,7 +54,7 @@ export default function ActiveOrderStatusWidget({ orders }) {
             ))}
           </Pie>
           <Tooltip />
-          <Legend wrapperStyle={{ fontSize: "12px" }} />
+          <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: "12px", paddingTop: "20px" }} />
         </PieChart>
       </ResponsiveContainer>
     </div>
