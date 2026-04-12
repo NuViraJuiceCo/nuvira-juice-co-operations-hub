@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Search, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import StatusBadge from "../components/shared/StatusBadge";
 import PullToRefresh from "../components/shared/PullToRefresh";
+import SelectMobile from "../components/SelectMobile";
 import moment from "moment";
 
 export default function Orders() {
@@ -86,10 +87,7 @@ export default function Orders() {
             className="pl-10"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
+        <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-full sm:w-44">
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="New">New</SelectItem>
@@ -98,11 +96,8 @@ export default function Orders() {
             <SelectItem value="In Production">In Production</SelectItem>
             <SelectItem value="Completed">Completed</SelectItem>
           </SelectContent>
-        </Select>
-        <Select value={channelFilter} onValueChange={setChannelFilter}>
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="All Channels" />
-          </SelectTrigger>
+        </SelectMobile>
+        <SelectMobile value={channelFilter} onValueChange={setChannelFilter} placeholder="All Channels" triggerClassName="w-full sm:w-44">
           <SelectContent>
             <SelectItem value="all">All Channels</SelectItem>
             <SelectItem value="Shopify Web Store">Shopify Web Store</SelectItem>
@@ -111,7 +106,7 @@ export default function Orders() {
             <SelectItem value="Facebook">Facebook</SelectItem>
             <SelectItem value="Event Order">Event Order</SelectItem>
           </SelectContent>
-        </Select>
+        </SelectMobile>
       </div>
 
       {/* Table */}
@@ -129,7 +124,7 @@ export default function Orders() {
             </thead>
             <tbody>
               {filtered.map((order) => (
-                <tr key={order.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
+                <tr key={order.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors min-h-touch">
                   <td className="px-5 py-3.5">
                     <span className="text-sm font-medium text-primary">{order.order_id}</span>
                   </td>

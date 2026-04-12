@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Calendar } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SelectContent, SelectItem } from "@/components/ui/select";
 import StatusBadge from "../components/shared/StatusBadge";
 import PullToRefresh from "../components/shared/PullToRefresh";
+import SelectMobile from "../components/SelectMobile";
 import moment from "moment";
 import _ from "lodash";
 
@@ -53,10 +54,7 @@ export default function Production() {
             {batches.length} batches · {activeBatches} active
           </p>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
+        <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-44">
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="Planned">Planned</SelectItem>
@@ -65,7 +63,7 @@ export default function Production() {
             <SelectItem value="In Packing">In Packing</SelectItem>
             <SelectItem value="Completed">Completed</SelectItem>
           </SelectContent>
-        </Select>
+        </SelectMobile>
       </div>
 
       {/* Grouped by Date */}

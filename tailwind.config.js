@@ -15,6 +15,12 @@ module.exports = {
   ],
   theme: {
     extend: {
+      minHeight: {
+        touch: '44px',
+      },
+      minWidth: {
+        touch: '44px',
+      },
       fontFamily: {
         sans: ['var(--font-sans)'],
         display: ['var(--font-display)'],
@@ -90,6 +96,7 @@ module.exports = {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
       },
+      safelist: ['min-h-touch', 'min-w-touch'],
     },
   },
   plugins: [require("tailwindcss-animate")],

@@ -29,9 +29,18 @@ export default function UserManagement() {
   }, []);
 
   const updateRole = async (userId, newRole) => {
-    setUpdatingId(userId);
-    await base44.entities.User.update(userId, { role: newRole });
+    // Optimistic update
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+    setUpdatingId(userId);
+    try {
+      await base44.entities.User.update(userId, { role: newRole });
+    } catch (error) {
+      // Revert on error
+      const originalUser = users.find(u => u.id === userId);
+      if (originalUser) {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: originalUser.role } : u));
+      }
+    }
     setUpdatingId(null);
   };
 

@@ -3,6 +3,8 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
+import PageTransition from './components/PageTransition';
+import ThemeProvider from './components/ThemeProvider';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from './components/layout/AppLayout';
@@ -53,25 +55,25 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/orders" element={<Orders />} />
-        <Route path="/production" element={<Production />} />
-        <Route path="/fulfillment" element={<Fulfillment />} />
-        <Route path="/reporting" element={<Reporting />} />
-        <Route path="/calendar" element={<OperationsCalendar />} />
-        <Route path="/inventory" element={<Inventory />} />
-        <Route path="/suppliers" element={<Suppliers />} />
-        <Route path="/compliance" element={<Compliance />} />
-        <Route path="/resources" element={<Resources />} />
-        <Route path="/events" element={<Events />} />
-        <Route path="/partnerships" element={<Partnerships />} />
-        <Route path="/prod-scheduler" element={<ProdScheduler />} />
-        <Route path="/purchase-orders" element={<PurchaseOrders />} />
-        <Route path="/route-optimizer" element={<RouteOptimizer />} />
-        <Route path="/users" element={<UserManagement />} />
-        <Route path="/audit-logs" element={<AuditLogs />} />
-        <Route path="/report-scheduler" element={<ReportScheduler />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/" element={<PageTransition><Dashboard /></PageTransition>} />
+        <Route path="/orders" element={<PageTransition><Orders /></PageTransition>} />
+        <Route path="/production" element={<PageTransition><Production /></PageTransition>} />
+        <Route path="/fulfillment" element={<PageTransition><Fulfillment /></PageTransition>} />
+        <Route path="/reporting" element={<PageTransition><Reporting /></PageTransition>} />
+        <Route path="/calendar" element={<PageTransition><OperationsCalendar /></PageTransition>} />
+        <Route path="/inventory" element={<PageTransition><Inventory /></PageTransition>} />
+        <Route path="/suppliers" element={<PageTransition><Suppliers /></PageTransition>} />
+        <Route path="/compliance" element={<PageTransition><Compliance /></PageTransition>} />
+        <Route path="/resources" element={<PageTransition><Resources /></PageTransition>} />
+        <Route path="/events" element={<PageTransition><Events /></PageTransition>} />
+        <Route path="/partnerships" element={<PageTransition><Partnerships /></PageTransition>} />
+        <Route path="/prod-scheduler" element={<PageTransition><ProdScheduler /></PageTransition>} />
+        <Route path="/purchase-orders" element={<PageTransition><PurchaseOrders /></PageTransition>} />
+        <Route path="/route-optimizer" element={<PageTransition><RouteOptimizer /></PageTransition>} />
+        <Route path="/users" element={<PageTransition><UserManagement /></PageTransition>} />
+        <Route path="/audit-logs" element={<PageTransition><AuditLogs /></PageTransition>} />
+        <Route path="/report-scheduler" element={<PageTransition><ReportScheduler /></PageTransition>} />
+        <Route path="/settings" element={<PageTransition><Settings /></PageTransition>} />
         <Route path="*" element={<PageNotFound />} />
       </Route>
     </Routes>
@@ -82,14 +84,16 @@ const AuthenticatedApp = () => {
 function App() {
 
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
-      </QueryClientProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </QueryClientProvider>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 
