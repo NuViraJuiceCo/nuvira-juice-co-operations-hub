@@ -6,6 +6,7 @@ import HeroBanner from "../components/dashboard/HeroBanner";
 import RecentOrders from "../components/dashboard/RecentOrders";
 import UpcomingProduction from "../components/dashboard/UpcomingProduction";
 import DashboardInsights from "../components/dashboard/DashboardInsights";
+import PullToRefresh from "../components/shared/PullToRefresh";
 import moment from "moment";
 
 export default function Dashboard() {
@@ -40,8 +41,18 @@ export default function Dashboard() {
   const lowStock = batches.filter((b) => b.status === "Awaiting Ingredients").length;
   const revenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
 
+  const handleRefresh = async () => {
+    const [orderData, batchData] = await Promise.all([
+      base44.entities.Order.list("-created_date", 50),
+      base44.entities.ProductionBatch.list("-production_date", 50),
+    ]);
+    setOrders(orderData);
+    setBatches(batchData);
+  };
+
   return (
-    <div className="space-y-6">
+    <PullToRefresh onRefresh={handleRefresh}>
+      <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">
@@ -77,5 +88,6 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
+    </PullToRefresh>
   );
 }

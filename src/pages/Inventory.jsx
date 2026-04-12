@@ -4,6 +4,7 @@ import { Package, AlertTriangle, TrendingDown, Plus, Search } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import StatCard from "../components/shared/StatCard";
+import PullToRefresh from "../components/shared/PullToRefresh";
 
 export default function Inventory() {
   const [items, setItems] = useState([]);
@@ -37,8 +38,14 @@ export default function Inventory() {
     "Out of Stock": "bg-red-100 text-red-800",
   };
 
+  const handleRefresh = async () => {
+    const data = await base44.entities.InventoryItem.list("-updated_date", 100);
+    setItems(data);
+  };
+
   return (
-    <div className="space-y-6">
+    <PullToRefresh onRefresh={handleRefresh}>
+      <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Inventory</h1>
@@ -92,5 +99,6 @@ export default function Inventory() {
         </div>
       </div>
     </div>
+    </PullToRefresh>
   );
 }

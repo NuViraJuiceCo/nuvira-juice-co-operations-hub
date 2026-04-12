@@ -20,7 +20,7 @@ export default function MobileNav() {
           <Link
             key={item.path}
             to={item.path}
-            className={`flex-1 flex flex-col items-center justify-center py-3 transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center min-h-touch transition-colors ${
               isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
             }`}
           >
