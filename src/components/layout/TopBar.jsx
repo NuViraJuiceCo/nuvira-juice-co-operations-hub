@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Menu, Bell, X, AlertTriangle, CheckCircle2, Clock, Info } from "lucide-react";
+import { Menu, Bell, X, AlertTriangle, CheckCircle2, Clock, Info, ArrowLeft } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import moment from "moment";
@@ -20,6 +21,9 @@ const iconStyle = {
 
 export default function TopBar({ onMenuClick }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isRootPage = location.pathname === "/";
   const [alerts, setAlerts] = useState([]);
   const [showPanel, setShowPanel] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -142,14 +146,27 @@ export default function TopBar({ onMenuClick }) {
 
   return (
     <header className="sticky top-0 z-30 h-14 bg-background/95 backdrop-blur border-b border-border flex items-center px-4 gap-3">
-      {/* Hamburger — mobile only */}
-      <button
-        onClick={onMenuClick}
-        className="lg:hidden p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-        aria-label="Open menu"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
+      {/* Back Button — mobile, non-root pages */}
+      {!isRootPage && (
+        <button
+          onClick={() => navigate(-1)}
+          className="lg:hidden p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          aria-label="Go back"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* Hamburger — mobile only, root page */}
+      {isRootPage && (
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      )}
 
       {/* Brand — mobile */}
       <span className="lg:hidden font-display font-bold text-primary text-lg">nuVira</span>

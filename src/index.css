@@ -86,5 +86,9 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
+    overscroll-behavior: none;
+  }
+  button, [role="button"], nav {
+    user-select: none;
   }
 }

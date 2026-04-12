@@ -3,7 +3,7 @@ import {
   LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, LogOut,
   ShoppingCart, Factory, Truck, CalendarDays, Package, Users,
   ShieldCheck, Wrench, CalendarCheck, Handshake, ClipboardList,
-  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X,
+  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings,
 } from "lucide-react";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
@@ -35,6 +35,7 @@ const navGroups = [
       { path: "/users", label: "User Management", icon: UserCog },
       { path: "/audit-logs", label: "Audit Logs", icon: ScrollText },
       { path: "/report-scheduler", label: "Reports", icon: FileBarChart },
+      { path: "/settings", label: "Settings", icon: Settings },
     ],
   },
 ];
