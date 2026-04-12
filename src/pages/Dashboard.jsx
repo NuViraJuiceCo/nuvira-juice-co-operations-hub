@@ -62,7 +62,7 @@ export default function Dashboard() {
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">
