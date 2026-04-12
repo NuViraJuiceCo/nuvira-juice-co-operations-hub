@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Calendar } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import StatusBadge from "../components/shared/StatusBadge";
+import PullToRefresh from "../components/shared/PullToRefresh";
 import moment from "moment";
 import _ from "lodash";
 
@@ -19,6 +20,11 @@ export default function Production() {
     }
     load();
   }, []);
+
+  const handleRefresh = async () => {
+    const data = await base44.entities.ProductionBatch.list("production_date", 100);
+    setBatches(data);
+  };
 
   const filtered = batches.filter(
     (b) => statusFilter === "all" || b.status === statusFilter
@@ -38,7 +44,8 @@ export default function Production() {
   const today = moment().format("YYYY-MM-DD");
 
   return (
-    <div className="space-y-6">
+    <PullToRefresh onRefresh={handleRefresh}>
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
@@ -125,5 +132,6 @@ export default function Production() {
           })}
       </div>
     </div>
+    </PullToRefresh>
   );
 }

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import StatusBadge from "../components/shared/StatusBadge";
+import PullToRefresh from "../components/shared/PullToRefresh";
 import moment from "moment";
 
 export default function Orders() {
@@ -22,6 +23,11 @@ export default function Orders() {
     }
     load();
   }, []);
+
+  const handleRefresh = async () => {
+    const data = await base44.entities.Order.list("-created_date", 100);
+    setOrders(data);
+  };
 
   const filtered = orders.filter((o) => {
     const matchSearch =
@@ -57,7 +63,8 @@ export default function Orders() {
   }
 
   return (
-    <div className="space-y-6">
+    <PullToRefresh onRefresh={handleRefresh}>
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Orders</h1>
@@ -149,5 +156,6 @@ export default function Orders() {
         </div>
       </div>
     </div>
+    </PullToRefresh>
   );
 }
