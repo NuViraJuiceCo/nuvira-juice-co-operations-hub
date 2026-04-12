@@ -6,22 +6,30 @@ import HeroBanner from "../components/dashboard/HeroBanner";
 import RecentOrders from "../components/dashboard/RecentOrders";
 import UpcomingProduction from "../components/dashboard/UpcomingProduction";
 import DashboardInsights from "../components/dashboard/DashboardInsights";
+import DashboardWidgetSelector from "../components/dashboard/DashboardWidgetSelector";
+import ProductionThroughputWidget from "../components/dashboard/ProductionThroughputWidget";
+import ActiveOrderStatusWidget from "../components/dashboard/ActiveOrderStatusWidget";
+import InventoryAlertsWidget from "../components/dashboard/InventoryAlertsWidget";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import moment from "moment";
 
 export default function Dashboard() {
   const [orders, setOrders] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [visibleWidgets, setVisibleWidgets] = useState(["production", "orders", "inventory"]);
 
   useEffect(() => {
     async function load() {
-      const [orderData, batchData] = await Promise.all([
+      const [orderData, batchData, inventoryData] = await Promise.all([
         base44.entities.Order.list("-created_date", 50),
         base44.entities.ProductionBatch.list("-production_date", 50),
+        base44.entities.InventoryItem.list("-updated_date", 100),
       ]);
       setOrders(orderData);
       setBatches(batchData);
+      setItems(inventoryData);
       setLoading(false);
     }
     load();
@@ -42,12 +50,14 @@ export default function Dashboard() {
   const revenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
 
   const handleRefresh = async () => {
-    const [orderData, batchData] = await Promise.all([
+    const [orderData, batchData, inventoryData] = await Promise.all([
       base44.entities.Order.list("-created_date", 50),
       base44.entities.ProductionBatch.list("-production_date", 50),
+      base44.entities.InventoryItem.list("-updated_date", 100),
     ]);
     setOrders(orderData);
     setBatches(batchData);
+    setItems(inventoryData);
   };
 
   return (
@@ -73,10 +83,22 @@ export default function Dashboard() {
         <StatCard label="Exceptions" value={0} icon={AlertCircle} />
       </div>
 
+      {/* Widget Selector */}
+      <DashboardWidgetSelector widgets={visibleWidgets} onToggle={(id) => {
+        setVisibleWidgets(prev => 
+          prev.includes(id) ? prev.filter(w => w !== id) : [...prev, id]
+        );
+      }} />
+
+      {/* Widgets Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {visibleWidgets.includes("production") && <ProductionThroughputWidget batches={batches} />}
+        {visibleWidgets.includes("orders") && <ActiveOrderStatusWidget orders={orders} />}
+        {visibleWidgets.includes("inventory") && <InventoryAlertsWidget items={items} />}
+      </div>
+
       {/* Insights Row */}
       <DashboardInsights orders={orders} />
-
-      {/* Hero Banner */}
 
       {/* Orders + Production */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

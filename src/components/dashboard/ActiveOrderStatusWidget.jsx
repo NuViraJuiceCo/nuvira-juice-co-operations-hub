@@ -1,0 +1,62 @@
+import { ShoppingCart, TrendingUp } from "lucide-react";
+import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
+
+export default function ActiveOrderStatusWidget({ orders }) {
+  const statusCounts = {
+    New: orders.filter(o => o.status === "New").length,
+    Confirmed: orders.filter(o => o.status === "Confirmed").length,
+    "In Production": orders.filter(o => o.status === "In Production").length,
+    Completed: orders.filter(o => o.status === "Completed").length,
+  };
+
+  const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const avgOrderValue = orders.length > 0 ? (totalRevenue / orders.length).toFixed(2) : 0;
+
+  const chartData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+  const colors = ["#991b1b", "#ea580c", "#2563eb", "#059669"];
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <ShoppingCart className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold text-foreground">Active Order Status</h3>
+        </div>
+        <span className="text-sm font-medium text-blue-600 flex items-center gap-1">
+          <TrendingUp className="h-4 w-4" /> {orders.length} Orders
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <p className="text-xs text-muted-foreground">Total Revenue</p>
+          <p className="text-2xl font-bold text-foreground">${totalRevenue.toFixed(0)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Avg Order Value</p>
+          <p className="text-2xl font-bold text-primary">${avgOrderValue}</p>
+        </div>
+      </div>
+
+      <ResponsiveContainer width="100%" height={180}>
+        <PieChart>
+          <Pie
+            data={chartData}
+            cx="50%"
+            cy="50%"
+            innerRadius={50}
+            outerRadius={80}
+            paddingAngle={2}
+            dataKey="value"
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+            ))}
+          </Pie>
+          <Tooltip />
+          <Legend wrapperStyle={{ fontSize: "12px" }} />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
