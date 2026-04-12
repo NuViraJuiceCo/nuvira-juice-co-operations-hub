@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { MoreVertical, LogOut } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useState } from "react";
@@ -26,14 +26,14 @@ export default function MobileMoreMenu() {
   const [open, setOpen] = useState(false);
 
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
         <button className="flex-1 flex flex-col items-center justify-center py-2 px-1 min-h-touch text-muted-foreground hover:text-foreground transition-colors">
           <MoreVertical className="h-5 w-5" />
           <span className="text-[10px] font-medium mt-0.5 leading-tight">More</span>
         </button>
-      </DrawerTrigger>
-      <DrawerContent className="max-h-[80vh]">
+      </SheetTrigger>
+      <SheetContent side="bottom" className="max-h-[80vh]">
         <div className="overflow-y-auto p-4 space-y-2">
           {moreItems.map((item) => (
             <Link
@@ -56,7 +56,7 @@ export default function MobileMoreMenu() {
             Sign Out
           </button>
         </div>
-      </DrawerContent>
-    </Drawer>
+      </SheetContent>
+    </Sheet>
   );
 }
