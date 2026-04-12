@@ -102,10 +102,20 @@ function SidebarContent({ collapsed, setCollapsed, navGroups, NavLink, showColla
   return (
     <>
       {/* Logo */}
-      <div className="px-4 py-4 flex items-center justify-center relative">
-        <img src="https://media.base44.com/images/public/69da9e8036b037ad40a9a73f/cf3e4bb21_Untitleddesign-4.png" alt="nuVira" className={`flex-shrink-0 ${collapsed ? 'h-8' : 'h-12'}`} />
+      <div className="px-4 py-5 flex items-center gap-3">
+        <img src="https://media.base44.com/images/public/69da9e8036b037ad40a9a73f/cf3e4bb21_Untitleddesign-4.png" alt="nuVira" className="h-9 w-auto flex-shrink-0" />
+        {!collapsed && (
+          <div className="overflow-hidden flex-1">
+            <h1 className="text-sidebar-foreground font-display font-bold text-sm leading-tight tracking-tight">
+              nuVira Juice Co.
+            </h1>
+            <p className="text-sidebar-foreground/50 text-[10px] uppercase tracking-widest">
+              Operations Hub
+            </p>
+          </div>
+        )}
         {showCloseBtn && (
-          <button onClick={onClose} className="absolute right-4 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors p-1">
+          <button onClick={onClose} className="ml-auto text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors p-1">
             <X className="h-4 w-4" />
           </button>
         )}
