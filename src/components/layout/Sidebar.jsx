@@ -103,7 +103,7 @@ function SidebarContent({ collapsed, setCollapsed, navGroups, NavLink, showColla
     <>
       {/* Logo */}
       <div className="mx-4 mt-4 px-4 py-5 rounded-lg bg-sidebar-accent/30 flex items-center gap-3">
-        <img src="https://media.base44.com/images/public/69da9e8036b037ad40a9a73f/cf3e4bb21_Untitleddesign-4.png" alt="nuVira" className="h-9 w-auto flex-shrink-0" />
+        <img src="https://media.base44.com/images/public/69da9e8036b037ad40a9a73f/cf3e4bb21_Untitleddesign-4.png" alt="nuVira" className="h-9 w-auto flex-shrink-0 rounded-md" />
         {!collapsed && (
           <div className="overflow-hidden flex-1">
             <h1 className="text-sidebar-foreground font-display font-bold text-sm leading-tight tracking-tight">
