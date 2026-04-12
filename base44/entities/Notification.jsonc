@@ -1,0 +1,37 @@
+{
+  "name": "Notification",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Notification title"
+    },
+    "message": {
+      "type": "string",
+      "description": "Notification message content"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "info",
+        "success",
+        "warning",
+        "error"
+      ],
+      "description": "Notification type"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "Target user email"
+    },
+    "read": {
+      "type": "boolean",
+      "description": "Whether the notification has been read"
+    }
+  },
+  "required": [
+    "title",
+    "message",
+    "type"
+  ]
+}
