@@ -4,12 +4,18 @@ import { Package, AlertTriangle, TrendingDown, Plus, Search } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import StatCard from "../components/shared/StatCard";
+import BulkActionsBar from "../components/shared/BulkActionsBar";
+import ColumnSorter from "../components/shared/ColumnSorter";
 import PullToRefresh from "../components/shared/PullToRefresh";
 
 export default function Inventory() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("ingredient");
+  const [sortDir, setSortDir] = useState("asc");
+  const [selected, setSelected] = useState(new Set());
 
   useEffect(() => {
     base44.entities.InventoryItem.list("-updated_date", 100).then(data => {
@@ -27,7 +33,49 @@ export default function Inventory() {
     return "OK";
   };
 
-  const filtered = items.filter(i => i.ingredient?.toLowerCase().includes(search.toLowerCase()) || i.supplier?.toLowerCase().includes(search.toLowerCase()));
+  const filtered = items.filter(i => {
+    const matchSearch = i.ingredient?.toLowerCase().includes(search.toLowerCase()) || i.supplier?.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === "all" || getStatus(i) === statusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    let aVal = a[sortBy];
+    let bVal = b[sortBy];
+    if (["stock", "reorder_point", "max_stock", "cost_per_unit"].includes(sortBy)) {
+      aVal = parseFloat(aVal) || 0;
+      bVal = parseFloat(bVal) || 0;
+    }
+    const cmp = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  const handleSort = (col) => {
+    if (sortBy === col) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(col);
+      setSortDir("asc");
+    }
+  };
+
+  const toggleSelect = (id) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelected(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === sorted.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(sorted.map(i => i.id)));
+    }
+  };
   const low = items.filter(i => getStatus(i) === "Low").length;
   const critical = items.filter(i => getStatus(i) === "Critical" || getStatus(i) === "Out of Stock").length;
 
@@ -37,6 +85,8 @@ export default function Inventory() {
     Critical: "bg-red-50 text-red-700",
     "Out of Stock": "bg-red-100 text-red-800",
   };
+
+  const statusOptions = ["all", "OK", "Low", "Critical", "Out of Stock"];
 
   const handleRefresh = async () => {
     const data = await base44.entities.InventoryItem.list("-updated_date", 100);
@@ -61,26 +111,70 @@ export default function Inventory() {
         <StatCard label="Categories" value={[...new Set(items.map(i => i.category).filter(Boolean))].length} icon={Package} />
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Search ingredients..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input className="pl-9" placeholder="Search ingredients..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-4 py-2 rounded-lg border border-input bg-background text-sm"
+        >
+          {statusOptions.map(s => (
+            <option key={s} value={s}>{s === "all" ? "All Statuses" : s}</option>
+          ))}
+        </select>
       </div>
+
+      {/* Bulk Actions */}
+      <BulkActionsBar
+        selectedCount={selected.size}
+        onClearSelection={() => setSelected(new Set())}
+      />
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                {["Ingredient", "Category", "Stock", "Unit", "Reorder At", "Status", "Supplier", "Location"].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{h}</th>
+                <th className="px-4 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === sorted.length && sorted.length > 0}
+                    onChange={toggleSelectAll}
+                    className="cursor-pointer"
+                  />
+                </th>
+                {[
+                  { label: "Ingredient", col: "ingredient" },
+                  { label: "Category", col: "category" },
+                  { label: "Stock", col: "stock" },
+                  { label: "Unit", col: "unit" },
+                  { label: "Reorder At", col: "reorder_point" },
+                  { label: "Status", col: "status" },
+                  { label: "Supplier", col: "supplier" },
+                  { label: "Location", col: "location" },
+                ].map(h => (
+                  <th key={h.col} className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort(h.col)}>
+                    <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map(item => {
+              {sorted.map(item => {
                 const status = getStatus(item);
                 return (
                   <tr key={item.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3.5">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(item.id)}
+                        onChange={() => toggleSelect(item.id)}
+                        className="cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-3.5 font-medium text-sm text-foreground">{item.ingredient}</td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.category || "—"}</td>
                     <td className="px-4 py-3.5 text-sm font-semibold text-foreground">{item.stock}</td>

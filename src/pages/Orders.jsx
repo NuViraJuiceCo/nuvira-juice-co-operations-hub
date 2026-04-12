@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import StatusBadge from "../components/shared/StatusBadge";
+import BulkActionsBar from "../components/shared/BulkActionsBar";
+import ColumnSorter from "../components/shared/ColumnSorter";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import SelectMobile from "../components/SelectMobile";
 import moment from "moment";
@@ -15,6 +17,9 @@ export default function Orders() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [channelFilter, setChannelFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("created_date");
+  const [sortDir, setSortDir] = useState("desc");
+  const [selected, setSelected] = useState(new Set());
 
   useEffect(() => {
     async function load() {
@@ -39,6 +44,47 @@ export default function Orders() {
     const matchChannel = channelFilter === "all" || o.channel === channelFilter;
     return matchSearch && matchStatus && matchChannel;
   });
+
+  const sorted = [...filtered].sort((a, b) => {
+    let aVal = a[sortBy];
+    let bVal = b[sortBy];
+    if (sortBy === "total") {
+      aVal = parseFloat(aVal) || 0;
+      bVal = parseFloat(bVal) || 0;
+    } else if (sortBy === "created_date") {
+      aVal = new Date(aVal);
+      bVal = new Date(bVal);
+    }
+    const cmp = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  const handleSort = (col) => {
+    if (sortBy === col) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(col);
+      setSortDir("asc");
+    }
+  };
+
+  const toggleSelect = (id) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelected(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === sorted.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(sorted.map(o => o.id)));
+    }
+  };
 
   const exportCSV = () => {
     const headers = "Order ID,Customer,Email,Channel,Status,Payment,Fulfillment,Total,Date\n";
@@ -109,22 +155,53 @@ export default function Orders() {
         </SelectMobile>
       </div>
 
+      {/* Bulk Actions */}
+      <BulkActionsBar
+        selectedCount={selected.size}
+        onClearSelection={() => setSelected(new Set())}
+      />
+
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                {["Order ID", "Customer", "Channel", "Status", "Payment", "Fulfillment", "Total", "Date"].map((h) => (
-                  <th key={h} className={`px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider ${h === "Total" ? "text-right" : "text-left"}`}>
-                    {h}
+                <th className="px-5 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === sorted.length && sorted.length > 0}
+                    onChange={toggleSelectAll}
+                    className="cursor-pointer"
+                  />
+                </th>
+                {[
+                  { label: "Order ID", col: "order_id" },
+                  { label: "Customer", col: "customer_name" },
+                  { label: "Channel", col: "channel" },
+                  { label: "Status", col: "status" },
+                  { label: "Payment", col: "payment_status" },
+                  { label: "Fulfillment", col: "fulfillment_type" },
+                  { label: "Total", col: "total" },
+                  { label: "Date", col: "created_date" },
+                ].map((h) => (
+                  <th key={h.col} className={`px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50 ${h.col === "total" ? "text-right" : "text-left"}`} onClick={() => handleSort(h.col)}>
+                    <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((order) => (
+              {sorted.map((order) => (
                 <tr key={order.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors min-h-touch">
+                  <td className="px-5 py-3.5">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(order.id)}
+                      onChange={() => toggleSelect(order.id)}
+                      className="cursor-pointer"
+                    />
+                  </td>
                   <td className="px-5 py-3.5">
                     <span className="text-sm font-medium text-primary">{order.order_id}</span>
                   </td>
