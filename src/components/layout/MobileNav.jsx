@@ -20,12 +20,12 @@ export default function MobileNav() {
           <Link
             key={item.path}
             to={item.path}
-            className={`flex-1 flex flex-col items-center justify-center min-h-touch transition-colors ${
+            className={`flex-1 flex flex-col items-center justify-center py-2 px-1 min-h-touch transition-colors ${
               isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <Icon className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">{item.label}</span>
+            <Icon className="h-5 w-5" />
+            <span className="text-[10px] font-medium mt-0.5 leading-tight">{item.label}</span>
           </Link>
         );
       })}
