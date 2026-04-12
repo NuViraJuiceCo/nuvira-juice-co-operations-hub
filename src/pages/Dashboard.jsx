@@ -97,8 +97,8 @@ export default function Dashboard() {
         {visibleWidgets.includes("inventory") && <InventoryAlertsWidget items={items} />}
       </div>
 
-      {/* Insights Row */}
-      <DashboardInsights orders={orders} />
+      {/* Insights Row — hide if widgets visible to avoid duplication */}
+      {visibleWidgets.length === 0 && <DashboardInsights orders={orders} />}
 
       {/* Orders + Production */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
