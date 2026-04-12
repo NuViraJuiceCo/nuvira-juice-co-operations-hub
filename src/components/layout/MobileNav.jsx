@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { LayoutDashboard, ShoppingCart, Factory, Truck } from "lucide-react";
+import MobileMoreMenu from "./MobileMoreMenu";
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -29,6 +30,7 @@ export default function MobileNav() {
           </Link>
         );
       })}
+      <MobileMoreMenu />
     </nav>
   );
 }
