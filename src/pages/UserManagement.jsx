@@ -10,15 +10,17 @@ export default function UserManagement() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    base44.entities.User.list('-created_date', 200)
-      .then(data => {
-        setUsers(data);
-        setLoading(false);
-      })
-      .catch(err => {
+    async function loadUsers() {
+      try {
+        const data = await base44.entities.User.list('-created_date', 200);
+        setUsers(data || []);
+      } catch (err) {
+        console.error('Failed to load users:', err);
         setError(err.message || 'Failed to load users');
-        setLoading(false);
-      });
+      }
+      setLoading(false);
+    }
+    loadUsers();
   }, []);
 
   if (loading) {
@@ -71,12 +73,12 @@ export default function UserManagement() {
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-semibold flex-shrink-0">
-                        {user.full_name?.split(" ").map(n => n[0]).join("").slice(0, 2) || "?"}
+                        {(user.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2)}
                       </div>
-                      <span className="font-medium text-sm text-foreground">{user.full_name}</span>
+                      <span className="font-medium text-sm text-foreground">{user.full_name || "Unknown"}</span>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{user.email}</td>
+                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{user.email || "—"}</td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{user.title || "—"}</td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{user.phone || "—"}</td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{moment(user.created_date).format("MMM D, YYYY")}</td>
