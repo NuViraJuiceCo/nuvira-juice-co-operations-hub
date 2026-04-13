@@ -31,9 +31,11 @@ export default function UserManagement() {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-          <p className="text-red-700 font-medium">Failed to load users</p>
+          <p className="text-red-700 font-medium">Error loading users</p>
           <p className="text-red-500 text-sm mt-1">{error}</p>
-          <p className="text-muted-foreground text-sm mt-3">You may need admin privileges to view this page.</p>
+          <Button variant="outline" onClick={() => window.location.reload()} className="mt-4">
+            Try Again
+          </Button>
         </div>
       </div>
     );
