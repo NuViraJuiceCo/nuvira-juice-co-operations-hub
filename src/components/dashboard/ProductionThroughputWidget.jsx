@@ -37,13 +37,13 @@ export default function ProductionThroughputWidget({ batches }) {
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={weekData}>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={weekData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
           <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} />
+          <YAxis tick={{ fontSize: 12 }} width={40} />
           <Tooltip />
-          <Bar dataKey="units" fill="hsl(var(--primary))" />
+          <Bar dataKey="units" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
