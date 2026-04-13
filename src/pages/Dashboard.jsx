@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 import { ShoppingCart, Factory, Truck, AlertTriangle, DollarSign, AlertCircle } from "lucide-react";
 import StatCard from "../components/shared/StatCard";
 import HeroBanner from "../components/dashboard/HeroBanner";
@@ -14,6 +15,7 @@ import PullToRefresh from "../components/shared/PullToRefresh";
 import moment from "moment";
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [batches, setBatches] = useState([]);
   const [items, setItems] = useState([]);
@@ -66,7 +68,7 @@ export default function Dashboard() {
       {/* Header */}
       <div>
         <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">
-          Welcome back, there
+          Welcome back, {user?.display_name || user?.full_name || "there"}
         </h1>
         <p className="text-muted-foreground mt-1">
           Here's what's happening at NuVira today · {moment().format("dddd, MMMM D")}
