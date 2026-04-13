@@ -21,6 +21,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
+  const [editingDept, setEditingDept] = useState(null);
 
   useEffect(() => {
     base44.entities.User.list('-created_date', 200)
@@ -44,6 +45,18 @@ export default function UserManagement() {
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: originalRole } : u));
     }
     setUpdatingId(null);
+  };
+
+  const updateDepartment = async (userId, newDept) => {
+    const originalDept = users.find(u => u.id === userId)?.department;
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, department: newDept } : u));
+    setEditingDept(userId);
+    try {
+      await base44.entities.User.update(userId, { department: newDept });
+    } catch (error) {
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, department: originalDept } : u));
+    }
+    setEditingDept(null);
   };
 
   if (loading) {
@@ -96,7 +109,7 @@ export default function UserManagement() {
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 {["Name", "Email", "Role", "Department", "Joined"].map(h => (
-                  <th key={h} className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{h}</th>
+                  <th key={h} className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{h === "Department" ? "Department (click to edit)" : h}</th>
                 ))}
               </tr>
             </thead>
@@ -125,7 +138,16 @@ export default function UserManagement() {
                       <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none opacity-50" />
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{user.department || "—"}</td>
+                  <td className="px-5 py-3.5">
+                    <input
+                      type="text"
+                      value={user.department || ""}
+                      onChange={(e) => updateDepartment(user.id, e.target.value)}
+                      placeholder="Add department"
+                      disabled={editingDept === user.id}
+                      className="px-2 py-1 text-sm text-foreground bg-transparent border border-border rounded hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors w-32"
+                    />
+                  </td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{moment(user.created_date).format("MMM D, YYYY")}</td>
                 </tr>
               ))}
