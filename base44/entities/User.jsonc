@@ -2,42 +2,18 @@
   "name": "User",
   "type": "object",
   "properties": {
-    "role": {
+    "title": {
       "type": "string",
-      "enum": [
-        "admin",
-        "production_manager",
-        "inventory_manager",
-        "fulfillment_driver",
-        "sales_rep",
-        "compliance_manager",
-        "viewer"
-      ],
-      "description": "User role in the organization"
-    },
-    "department": {
-      "type": "string",
-      "enum": [
-        "Operations",
-        "Production",
-        "Sales",
-        "Logistics",
-        "Admin",
-        "Compliance"
-      ],
-      "description": "Department"
+      "description": "Job title or position"
     },
     "phone": {
       "type": "string",
       "description": "Contact phone number"
     },
-    "avatar_url": {
+    "bio": {
       "type": "string",
-      "description": "Profile photo URL"
-    },
-    "is_active": {
-      "type": "boolean",
-      "description": "Whether the user account is active"
+      "description": "Short bio or notes"
     }
-  }
+  },
+  "required": []
 }

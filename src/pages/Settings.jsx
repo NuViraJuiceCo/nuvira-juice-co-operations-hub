@@ -1,13 +1,42 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Trash2, AlertTriangle } from "lucide-react";
+import { Trash2, AlertTriangle, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function Settings() {
   const { user } = useAuth();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    title: "",
+    phone: "",
+    bio: ""
+  });
+
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        title: user.title || "",
+        phone: user.phone || "",
+        bio: user.bio || ""
+      });
+    }
+  }, [user]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await base44.auth.updateMe(formData);
+      setEditing(false);
+    } catch (error) {
+      alert("Error saving profile: " + error.message);
+    }
+    setSaving(false);
+  };
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
@@ -29,24 +58,109 @@ export default function Settings() {
 
       {/* Account Info */}
       <div className="bg-card border border-border rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Account Information</h2>
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</p>
-            <p className="text-sm text-foreground mt-1">{user?.full_name || "N/A"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</p>
-            <p className="text-sm text-foreground mt-1">{user?.email || "N/A"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Role</p>
-            <p className="text-sm text-foreground mt-1">{user?.role || "viewer"}</p>
-          </div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-foreground">Profile Information</h2>
+          {!editing && (
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          )}
         </div>
+        
+        {editing ? (
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</label>
+              <p className="text-sm text-foreground mt-1">{user?.full_name}</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</label>
+              <p className="text-sm text-foreground mt-1">{user?.email}</p>
+            </div>
+            <div>
+              <label htmlFor="title" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Job Title</label>
+              <Input
+                id="title"
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="e.g. Operations Manager"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label htmlFor="phone" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Phone</label>
+              <Input
+                id="phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="e.g. +1 (555) 123-4567"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label htmlFor="bio" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Bio</label>
+              <textarea
+                id="bio"
+                value={formData.bio}
+                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                placeholder="Tell us about yourself..."
+                className="w-full px-3 py-2 mt-1 rounded-lg border border-input bg-background text-sm"
+                rows="3"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                onClick={handleSave}
+                disabled={saving}
+                className="gap-2 flex-1"
+              >
+                <Save className="h-4 w-4" />
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setEditing(false)}
+                disabled={saving}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</p>
+              <p className="text-sm text-foreground mt-1">{user?.full_name || "N/A"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</p>
+              <p className="text-sm text-foreground mt-1">{user?.email || "N/A"}</p>
+            </div>
+            {formData.title && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Job Title</p>
+                <p className="text-sm text-foreground mt-1">{formData.title}</p>
+              </div>
+            )}
+            {formData.phone && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Phone</p>
+                <p className="text-sm text-foreground mt-1">{formData.phone}</p>
+              </div>
+            )}
+            {formData.bio && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Bio</p>
+                <p className="text-sm text-foreground mt-1">{formData.bio}</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Delete Account */}
+      {!editing && (
       <div className="bg-red-50 border border-red-200 rounded-xl p-6">
         <div className="flex items-start gap-4">
           <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -67,6 +181,7 @@ export default function Settings() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       {showDeleteDialog && (
