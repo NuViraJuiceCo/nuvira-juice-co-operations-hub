@@ -2,18 +2,29 @@
   "name": "User",
   "type": "object",
   "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "description": "User role"
+    },
     "title": {
       "type": "string",
-      "description": "Job title or position"
+      "description": "Job title"
     },
     "phone": {
       "type": "string",
-      "description": "Contact phone number"
+      "description": "Phone number"
     },
     "bio": {
       "type": "string",
-      "description": "Short bio or notes"
+      "description": "User bio"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Display name (editable alternative to full_name)"
     }
-  },
-  "required": []
+  }
 }

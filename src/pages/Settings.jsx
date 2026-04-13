@@ -12,6 +12,7 @@ export default function Settings() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
+    display_name: "",
     title: "",
     phone: "",
     bio: ""
@@ -20,6 +21,7 @@ export default function Settings() {
   useEffect(() => {
     if (user) {
       setFormData({
+        display_name: user.display_name || user.full_name || "",
         title: user.title || "",
         phone: user.phone || "",
         bio: user.bio || ""
@@ -70,8 +72,14 @@ export default function Settings() {
         {editing ? (
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</label>
-              <p className="text-sm text-foreground mt-1">{user?.full_name}</p>
+              <label htmlFor="display_name" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</label>
+              <Input
+                id="display_name"
+                value={formData.display_name}
+                onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+                placeholder="Display name"
+                className="mt-1"
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</label>
@@ -131,7 +139,7 @@ export default function Settings() {
           <div className="space-y-3">
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</p>
-              <p className="text-sm text-foreground mt-1">{user?.full_name || "N/A"}</p>
+              <p className="text-sm text-foreground mt-1">{formData.display_name || user?.full_name || "N/A"}</p>
             </div>
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</p>
