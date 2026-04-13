@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -33,6 +33,7 @@ export default function Settings() {
     setSaving(true);
     try {
       await base44.auth.updateMe(formData);
+      await refreshUser();
       setEditing(false);
     } catch (error) {
       alert("Error saving profile: " + error.message);
