@@ -52,11 +52,7 @@ const AuthenticatedApp = () => {
     }
   }
 
-  // Require login — redirect unauthenticated users (only after loading is done)
-  if (!isLoadingAuth && !isLoadingPublicSettings && !isAuthenticated && !authError) {
-    navigateToLogin();
-    return null;
-  }
+
 
   // Render the main app
   return (
