@@ -29,17 +29,13 @@ export default function UserManagement() {
   }, []);
 
   const updateRole = async (userId, newRole) => {
-    // Optimistic update
+    const originalRole = users.find(u => u.id === userId)?.role;
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
     setUpdatingId(userId);
     try {
       await base44.entities.User.update(userId, { role: newRole });
     } catch (error) {
-      // Revert on error
-      const originalUser = users.find(u => u.id === userId);
-      if (originalUser) {
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: originalUser.role } : u));
-      }
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: originalRole } : u));
     }
     setUpdatingId(null);
   };
@@ -49,7 +45,7 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">User Management</h1>
