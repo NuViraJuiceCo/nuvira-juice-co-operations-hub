@@ -12,8 +12,8 @@ export default function UserManagement() {
   useEffect(() => {
     async function loadUsers() {
       try {
-        const data = await base44.entities.User.list('-created_date', 200);
-        setUsers(data || []);
+        const res = await base44.functions.invoke('getUsers', {});
+        setUsers(res.data.users || []);
       } catch (err) {
         console.error('Failed to load users:', err);
         setError(err.message || 'Failed to load users');
