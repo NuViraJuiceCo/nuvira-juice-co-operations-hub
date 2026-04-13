@@ -153,7 +153,7 @@ function SidebarContent({ collapsed, setCollapsed, navGroups, NavLink, showColla
       {/* Footer */}
       <div className="px-3 pb-4 pt-2 border-t border-sidebar-border">
         <button
-          onClick={() => base44.auth.logout()}
+          onClick={() => base44.auth.logout(window.location.origin)}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all w-full"
         >
           <LogOut className="h-[18px] w-[18px] flex-shrink-0" />
