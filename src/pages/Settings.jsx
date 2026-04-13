@@ -72,38 +72,41 @@ export default function Settings() {
         {editing ? (
           <div className="space-y-4">
             <div>
-              <label htmlFor="display_name" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</label>
-              <Input
-                id="display_name"
-                value={formData.display_name}
-                onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                placeholder="Display name"
-                className="mt-1"
-              />
+             <label htmlFor="display_name" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</label>
+             <input
+               type="text"
+               id="display_name"
+               value={formData.display_name}
+               onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+               placeholder="Display name"
+               className="w-full px-3 py-2 mt-1 rounded-lg border border-input bg-background text-sm"
+             />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</label>
               <p className="text-sm text-foreground mt-1">{user?.email}</p>
             </div>
             <div>
-              <label htmlFor="title" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Job Title</label>
-              <Input
-                id="title"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="e.g. Operations Manager"
-                className="mt-1"
-              />
+             <label htmlFor="title" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Job Title</label>
+             <input
+               type="text"
+               id="title"
+               value={formData.title}
+               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+               placeholder="e.g. Operations Manager"
+               className="w-full px-3 py-2 mt-1 rounded-lg border border-input bg-background text-sm"
+             />
             </div>
             <div>
-              <label htmlFor="phone" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Phone</label>
-              <Input
-                id="phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="e.g. +1 (555) 123-4567"
-                className="mt-1"
-              />
+             <label htmlFor="phone" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Phone</label>
+             <input
+               type="tel"
+               id="phone"
+               value={formData.phone}
+               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+               placeholder="e.g. +1 (555) 123-4567"
+               className="w-full px-3 py-2 mt-1 rounded-lg border border-input bg-background text-sm"
+             />
             </div>
             <div>
               <label htmlFor="bio" className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Bio</label>
