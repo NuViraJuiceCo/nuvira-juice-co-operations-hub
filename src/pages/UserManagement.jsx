@@ -19,13 +19,19 @@ const roleStyle = {
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
   useEffect(() => {
-    base44.entities.User.list('-created_date', 200).then(data => {
-      setUsers(data);
-      setLoading(false);
-    });
+    base44.entities.User.list('-created_date', 200)
+      .then(data => {
+        setUsers(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err.message || 'Failed to load users');
+        setLoading(false);
+      });
   }, []);
 
   const updateRole = async (userId, newRole) => {
@@ -42,6 +48,18 @@ export default function UserManagement() {
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+          <p className="text-red-700 font-medium">Failed to load users</p>
+          <p className="text-red-500 text-sm mt-1">{error}</p>
+          <p className="text-muted-foreground text-sm mt-3">You may need admin privileges to view this page.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
