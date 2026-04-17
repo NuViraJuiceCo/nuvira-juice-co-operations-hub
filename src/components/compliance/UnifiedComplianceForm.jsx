@@ -35,6 +35,31 @@ const LOG_TYPES = {
     label: '📋 Daily Checklist',
     fields: ['shift', 'fridge_logged', 'sanitizer_checked', 'equipment_sanitized', 'areas_cleaned', 'batches_logged'],
     defaults: { shift: 'Morning', fridge_logged: false, sanitizer_checked: false, equipment_sanitized: false, areas_cleaned: false, batches_logged: false }
+  },
+  batch: {
+    label: '🍵 Batch Log',
+    fields: ['batch_id', 'juice_flavor', 'ingredients', 'start_time', 'end_time', 'quantity', 'staff_on_duty', 'ph_result', 'passed_failed'],
+    defaults: { batch_id: '', juice_flavor: '', ingredients: '', start_time: '', end_time: '', quantity: '', staff_on_duty: '', ph_result: '', passed_failed: 'pass' }
+  },
+  receiving: {
+    label: '📦 Receiving',
+    fields: ['supplier', 'item', 'quantity', 'condition', 'accepted', 'stored_at'],
+    defaults: { supplier: '', item: '', quantity: '', condition: '', accepted: true, stored_at: '' }
+  },
+  pest_monitoring: {
+    label: '🐭 Pest Monitoring',
+    fields: ['inspection_area', 'evidence_observed', 'pest_type', 'action_taken', 'reported_manager'],
+    defaults: { inspection_area: '', evidence_observed: '', pest_type: '', action_taken: '', reported_manager: '' }
+  },
+  employee_illness: {
+    label: '🏥 Employee Illness',
+    fields: ['employee_name', 'symptoms', 'excluded_from_work', 'return_date', 'reported_manager'],
+    defaults: { employee_name: '', symptoms: '', excluded_from_work: false, return_date: '', reported_manager: '' }
+  },
+  calibration: {
+    label: '⚙️ Calibration',
+    fields: ['equipment_id', 'equipment_type', 'calibration_method', 'expected_value', 'observed_value', 'within_range', 'adjusted'],
+    defaults: { equipment_id: '', equipment_type: '', calibration_method: '', expected_value: '', observed_value: '', within_range: true, adjusted: false }
   }
 };
 
@@ -118,9 +143,9 @@ export default function UnifiedComplianceForm() {
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={handleLogTypeChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 gap-1">
             {Object.entries(LOG_TYPES).map(([key, val]) => (
-              <TabsTrigger key={key} value={key} className="text-xs">{val.label}</TabsTrigger>
+              <TabsTrigger key={key} value={key} className="text-[10px] px-2">{val.label}</TabsTrigger>
             ))}
           </TabsList>
 
