@@ -13,11 +13,7 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body = await req.json();
-    const { since_timestamp, order_ids } = body;
-
-    if (!since_timestamp && !order_ids) {
-      return Response.json({ error: 'Provide since_timestamp or order_ids' }, { status: 400 });
-    }
+    const { since_timestamp, order_ids, production_status, fulfillment_status } = body;
 
     const base44 = createClientFromRequest(req);
 
@@ -29,11 +25,23 @@ Deno.serve(async (req) => {
         const result = await base44.entities.ShopifyOrder.filter({ shopify_order_id: orderId });
         orders = orders.concat(result);
       }
-    } else if (since_timestamp) {
-      // Fetch orders updated since timestamp
+    } else {
+      // Fetch all orders with optional timestamp filter
       const allOrders = await base44.entities.ShopifyOrder.list('-updated_date', 500);
-      const sinceTime = new Date(since_timestamp);
-      orders = allOrders.filter(o => new Date(o.updated_date) >= sinceTime);
+      if (since_timestamp) {
+        const sinceTime = new Date(since_timestamp);
+        orders = allOrders.filter(o => new Date(o.updated_date) >= sinceTime);
+      } else {
+        orders = allOrders;
+      }
+    }
+
+    // Apply status filters
+    if (production_status) {
+      orders = orders.filter(o => o.production_status === production_status);
+    }
+    if (fulfillment_status) {
+      orders = orders.filter(o => o.fulfillment_status === fulfillment_status);
     }
 
     // Format response with only essential sync fields
