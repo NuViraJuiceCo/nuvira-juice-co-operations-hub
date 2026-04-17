@@ -69,7 +69,6 @@ const AuthenticatedApp = () => {
         <Route path="/calendar" element={<PageTransition><OperationsCalendar /></PageTransition>} />
         <Route path="/inventory" element={<PageTransition><Inventory /></PageTransition>} />
         <Route path="/suppliers" element={<PageTransition><Suppliers /></PageTransition>} />
-        <Route path="/compliance" element={<PageTransition><Compliance /></PageTransition>} />
         <Route path="/resources" element={<PageTransition><Resources /></PageTransition>} />
         <Route path="/events" element={<PageTransition><Events /></PageTransition>} />
         <Route path="/partnerships" element={<PageTransition><Partnerships /></PageTransition>} />
