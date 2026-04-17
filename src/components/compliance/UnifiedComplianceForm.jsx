@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 const LOG_TYPES = {
   temperature: {
@@ -70,6 +71,11 @@ export default function UnifiedComplianceForm() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
+  const { data: products = [] } = useQuery({
+    queryKey: ['products'],
+    queryFn: () => base44.entities.Product.list('name', 100),
+  });
+
   useEffect(() => {
     base44.auth.me().then(u => setUser(u));
   }, []);
@@ -82,6 +88,18 @@ export default function UnifiedComplianceForm() {
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleProductSelect = (productId) => {
+    const product = products.find(p => p.id === productId);
+    if (product) {
+      setFormData(prev => ({
+        ...prev,
+        juice_flavor: product.name,
+        ingredients: product.ingredients?.join(', ') || '',
+        batch_id: product.batch_id || prev.batch_id
+      }));
+    }
   };
 
   const handleSubmit = async () => {
@@ -151,6 +169,20 @@ export default function UnifiedComplianceForm() {
 
           {Object.entries(LOG_TYPES).map(([logType, cfg]) => (
             <TabsContent key={logType} value={logType} className="space-y-4">
+              {logType === 'batch' && (
+                <div>
+                  <label className="text-sm font-medium">Select Juice Product</label>
+                  <select
+                    onChange={(e) => handleProductSelect(e.target.value)}
+                    className="mt-1 w-full p-2 border rounded-lg"
+                  >
+                    <option value="">-- Choose a product --</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {cfg.fields.map(field => (
                   <div key={field}>
