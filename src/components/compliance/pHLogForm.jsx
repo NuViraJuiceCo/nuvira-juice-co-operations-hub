@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
 
-export default function pHLogForm({ onClose }) {
+export default function PHLogForm({ onClose }) {
   const [user, setUser] = useState(null);
   const [formData, setFormData] = useState({
     log_date: new Date().toISOString().split('T')[0],

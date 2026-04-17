@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { AlertCircle, CheckCircle2, Clock, AlertTriangle, Plus, Eye, Download } from 'lucide-react';
 import ComplianceDashboard from '@/components/compliance/ComplianceDashboard';
 import TemperatureLogForm from '@/components/compliance/TemperatureLogForm';
-import pHLogForm from '@/components/compliance/pHLogForm';
+import PHLogForm from '@/components/compliance/pHLogForm';
 import CCPLogForm from '@/components/compliance/CCPLogForm';
 import SanitationLogForm from '@/components/compliance/SanitationLogForm';
 import CorrectiveActionForm from '@/components/compliance/CorrectiveActionForm';
@@ -117,8 +117,8 @@ export default function ComplianceCenter() {
                   <Plus className="w-4 h-4 mr-2" /> New Log
                 </Button>
               </div>
-              {showNewEntry === 'pH' && <pHLogForm onClose={() => setShowNewEntry(null)} />}
-              <pHLogsList />
+              {showNewEntry === 'pH' && <PHLogForm onClose={() => setShowNewEntry(null)} />}
+              <PHLogsList />
             </div>
           </TabsContent>
 
@@ -205,7 +205,7 @@ function TemperatureLogsList() {
   );
 }
 
-function pHLogsList() {
+function PHLogsList() {
   const { data: logs } = useQuery({
     queryKey: ['pH_logs'],
     queryFn: () => base44.entities.pHLog.list('-log_date', 50),
