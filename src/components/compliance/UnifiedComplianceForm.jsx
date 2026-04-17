@@ -143,9 +143,9 @@ export default function UnifiedComplianceForm() {
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={handleLogTypeChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 gap-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 h-auto">
             {Object.entries(LOG_TYPES).map(([key, val]) => (
-              <TabsTrigger key={key} value={key} className="text-[10px] px-2">{val.label}</TabsTrigger>
+              <TabsTrigger key={key} value={key} className="text-xs py-2">{val.label}</TabsTrigger>
             ))}
           </TabsList>
 
