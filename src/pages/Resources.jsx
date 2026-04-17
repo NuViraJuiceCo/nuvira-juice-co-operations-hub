@@ -1,36 +1,40 @@
-import { useState } from "react";
-import { Users, Wrench, Plus, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, Wrench, Plus, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import ResourceAddForm from "../components/resources/ResourceAddForm";
-
-const team = [
-  { id: 1, name: "Amar Kahlon", role: "Production Lead", shift: "Mon–Fri, 6am–2pm", status: "Active" },
-  { id: 2, name: "Kirandeep Kahlon", role: "Production Staff", shift: "Mon–Fri, 6am–2pm", status: "Active" },
-  { id: 3, name: "Preet Singh", role: "Delivery Driver", shift: "Tue/Thu/Sat, 10am–4pm", status: "Active" },
-  { id: 4, name: "Maya Torres", role: "Packing & QC", shift: "Mon–Wed–Fri, 8am–2pm", status: "Active" },
-];
-
-const equipment = [
-  { id: 1, name: "Cold Press Juicer #1", type: "Juicer", status: "Operational", lastService: "2026-03-15" },
-  { id: 2, name: "Cold Press Juicer #2", type: "Juicer", status: "Maintenance", lastService: "2026-04-08" },
-  { id: 3, name: "Walk-In Refrigerator", type: "Cold Storage", status: "Operational", lastService: "2026-02-20" },
-  { id: 4, name: "Bottle Labeller", type: "Packaging", status: "Operational", lastService: "2026-03-01" },
-  { id: 5, name: "Delivery Van", type: "Vehicle", status: "Operational", lastService: "2026-04-01" },
-];
+import ResourceEditForm from "../components/resources/ResourceEditForm";
 
 export default function Resources() {
-  const [teamData, setTeamData] = useState(team);
-  const [equipmentData, setEquipmentData] = useState(equipment);
+  const [resources, setResources] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState(new Set());
   const [selectedEquip, setSelectedEquip] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingResource, setEditingResource] = useState(null);
 
-  const handleDeleteTeam = async (id) => {
+  useEffect(() => {
+    loadResources();
+  }, []);
+
+  const loadResources = async () => {
+    try {
+      const data = await base44.entities.Resource.list("-created_date", 100);
+      setResources(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const teamData = resources.filter(r => r.category === "Team Member");
+  const equipmentData = resources.filter(r => r.category === "Equipment");
+
+  const handleDelete = async (id) => {
     setDeleting(id);
     try {
-      setTeamData(teamData.filter(m => m.id !== id));
+      await base44.entities.Resource.delete(id);
+      setResources(resources.filter(r => r.id !== id));
     } finally {
       setDeleting(null);
     }
@@ -40,19 +44,11 @@ export default function Resources() {
     if (!window.confirm(`Delete ${selectedTeam.size} team member(s)?`)) return;
     setDeleting(true);
     try {
-      setTeamData(teamData.filter(m => !selectedTeam.has(m.id)));
+      await Promise.all(Array.from(selectedTeam).map(id => base44.entities.Resource.delete(id)));
+      setResources(resources.filter(r => !selectedTeam.has(r.id)));
       setSelectedTeam(new Set());
     } finally {
       setDeleting(false);
-    }
-  };
-
-  const handleDeleteEquip = async (id) => {
-    setDeleting(id);
-    try {
-      setEquipmentData(equipmentData.filter(e => e.id !== id));
-    } finally {
-      setDeleting(null);
     }
   };
 
@@ -60,11 +56,17 @@ export default function Resources() {
     if (!window.confirm(`Delete ${selectedEquip.size} equipment item(s)?`)) return;
     setDeleting(true);
     try {
-      setEquipmentData(equipmentData.filter(e => !selectedEquip.has(e.id)));
+      await Promise.all(Array.from(selectedEquip).map(id => base44.entities.Resource.delete(id)));
+      setResources(resources.filter(r => !selectedEquip.has(r.id)));
       setSelectedEquip(new Set());
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleSaveEdit = async () => {
+    await loadResources();
+    setEditingResource(null);
   };
 
   const toggleTeamSelect = (id) => {
@@ -80,6 +82,14 @@ export default function Resources() {
     else newSelected.add(id);
     setSelectedEquip(newSelected);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -118,13 +128,21 @@ export default function Resources() {
                 onChange={() => toggleTeamSelect(member.id)}
                 className="absolute top-3 left-3"
               />
-              <button
-                onClick={() => handleDeleteTeam(member.id)}
-                disabled={deleting === member.id}
-                className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="absolute top-3 right-3 flex items-center gap-2">
+                <button
+                  onClick={() => setEditingResource(member)}
+                  className="text-primary hover:text-primary/80"
+                >
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(member.id)}
+                  disabled={deleting === member.id}
+                  className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0 ml-6">
                 {member.name.split(" ").map(n => n[0]).join("")}
               </div>
@@ -189,13 +207,21 @@ export default function Resources() {
                   </td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{eq.lastService}</td>
                   <td className="px-5 py-3.5 text-center">
-                    <button
-                      onClick={() => handleDeleteEquip(eq.id)}
-                      disabled={deleting === eq.id}
-                      className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setEditingResource(eq)}
+                        className="text-primary hover:text-primary/80"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(eq.id)}
+                        disabled={deleting === eq.id}
+                        className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -207,14 +233,15 @@ export default function Resources() {
       {showAddForm && (
         <ResourceAddForm
           onClose={() => setShowAddForm(false)}
-          onAddTeam={(member) => {
-            setTeamData([...teamData, { ...member, id: Math.max(...teamData.map(m => m.id), 0) + 1 }]);
-            setShowAddForm(false);
-          }}
-          onAddEquipment={(item) => {
-            setEquipmentData([...equipmentData, { ...item, id: Math.max(...equipmentData.map(e => e.id), 0) + 1 }]);
-            setShowAddForm(false);
-          }}
+          onSave={loadResources}
+        />
+      )}
+
+      {editingResource && (
+        <ResourceEditForm
+          resource={editingResource}
+          onClose={() => setEditingResource(null)}
+          onSave={handleSaveEdit}
         />
       )}
     </div>

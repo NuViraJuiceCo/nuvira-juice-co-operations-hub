@@ -2,9 +2,12 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { base44 } from "@/api/base44Client";
 
-export default function ResourceAddForm({ onClose, onAddTeam, onAddEquipment }) {
+export default function ResourceAddForm({ onClose, onSave }) {
   const [type, setType] = useState("team");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     role: "",
@@ -20,31 +23,42 @@ export default function ResourceAddForm({ onClose, onAddTeam, onAddEquipment }) 
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (type === "team") {
-      if (!formData.name || !formData.role || !formData.shift) {
-        alert("Please fill in all team member fields");
-        return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (type === "team") {
+        if (!formData.name || !formData.role || !formData.shift) {
+          setError("Please fill in all team member fields");
+          return;
+        }
+        await base44.entities.Resource.create({
+          title: formData.name,
+          category: "Team Member",
+          description: `${formData.role} - ${formData.shift}`,
+          version: formData.status,
+          status: "Active",
+        });
+      } else {
+        if (!formData.name || !formData.equipType) {
+          setError("Please fill in all equipment fields");
+          return;
+        }
+        await base44.entities.Resource.create({
+          title: formData.name,
+          category: "Equipment",
+          description: `Type: ${formData.equipType} | Last Service: ${formData.lastService}`,
+          version: formData.equipStatus,
+          status: "Active",
+        });
       }
-      onAddTeam({
-        name: formData.name,
-        role: formData.role,
-        shift: formData.shift,
-        status: formData.status,
-      });
-    } else {
-      if (!formData.name || !formData.equipType) {
-        alert("Please fill in all equipment fields");
-        return;
-      }
-      onAddEquipment({
-        name: formData.name,
-        type: formData.equipType,
-        status: formData.equipStatus,
-        lastService: formData.lastService,
-      });
+      await onSave();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -59,6 +73,7 @@ export default function ResourceAddForm({ onClose, onAddTeam, onAddEquipment }) 
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">{error}</div>}
           <div>
             <label className="text-sm font-medium text-foreground">Resource Type</label>
             <select
@@ -187,15 +202,17 @@ export default function ResourceAddForm({ onClose, onAddTeam, onAddEquipment }) 
               type="button"
               variant="outline"
               onClick={onClose}
+              disabled={loading}
               className="flex-1"
             >
               Cancel
             </Button>
             <Button
               type="submit"
+              disabled={loading}
               className="flex-1"
             >
-              Add Resource
+              {loading ? "Adding..." : "Add Resource"}
             </Button>
           </div>
         </form>
