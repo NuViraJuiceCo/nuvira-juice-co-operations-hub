@@ -144,12 +144,11 @@ export default function Resources() {
                 </button>
               </div>
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0 ml-6">
-                {member.name.split(" ").map(n => n[0]).join("")}
+                {member.title?.split(" ").map(n => n[0]).join("") || "?"}
               </div>
               <div>
-                <p className="font-medium text-sm text-foreground">{member.name}</p>
-                <p className="text-xs text-muted-foreground">{member.role}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{member.shift}</p>
+                <p className="font-medium text-sm text-foreground">{member.title}</p>
+                <p className="text-xs text-muted-foreground">{member.description}</p>
               </div>
               <div className="ml-auto">
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">{member.status}</span>
@@ -198,14 +197,14 @@ export default function Resources() {
                       onChange={() => toggleEquipSelect(eq.id)}
                     />
                   </td>
-                  <td className="px-5 py-3.5 font-medium text-sm text-foreground">{eq.name}</td>
-                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{eq.type}</td>
+                  <td className="px-5 py-3.5 font-medium text-sm text-foreground">{eq.title}</td>
+                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{eq.description}</td>
                   <td className="px-5 py-3.5">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${eq.status === "Operational" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                      {eq.status}
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${eq.version === "Operational" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {eq.version || "Operational"}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{eq.lastService}</td>
+                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{eq.file_url ? "Active" : "—"}</td>
                   <td className="px-5 py-3.5 text-center">
                     <div className="flex items-center gap-2">
                       <button
