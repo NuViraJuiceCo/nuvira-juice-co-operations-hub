@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Search, Download } from "lucide-react";
+import { Search, Download, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ export default function Orders() {
   const [sortBy, setSortBy] = useState("created_date");
   const [sortDir, setSortDir] = useState("desc");
   const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -83,6 +84,28 @@ export default function Orders() {
       setSelected(new Set());
     } else {
       setSelected(new Set(sorted.map(o => o.id)));
+    }
+  };
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    try {
+      await base44.entities.Order.delete(id);
+      setOrders(orders.filter(o => o.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.size} order(s)?`)) return;
+    setDeleting(true);
+    try {
+      await Promise.all(Array.from(selected).map(id => base44.entities.Order.delete(id)));
+      setOrders(orders.filter(o => !selected.has(o.id)));
+      setSelected(new Set());
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -156,6 +179,17 @@ export default function Orders() {
       </div>
 
       {/* Bulk Actions */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
+          <button onClick={handleBulkDelete} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+            {deleting ? "Deleting..." : "Delete Selected"}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
+            Cancel
+          </button>
+        </div>
+      )}
       <BulkActionsBar
         selectedCount={selected.size}
         onClearSelection={() => setSelected(new Set())}
@@ -184,12 +218,13 @@ export default function Orders() {
                   { label: "Fulfillment", col: "fulfillment_type" },
                   { label: "Total", col: "total" },
                   { label: "Date", col: "created_date" },
-                ].map((h) => (
+                  ].map((h) => (
                   <th key={h.col} className={`px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50 ${h.col === "total" ? "text-right" : "text-left"}`} onClick={() => handleSort(h.col)}>
                     <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   </th>
-                ))}
-              </tr>
+                  ))}
+                  <th className="px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
+                  </tr>
             </thead>
             <tbody>
               {sorted.map((order) => (
@@ -221,7 +256,16 @@ export default function Orders() {
                   <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
                     {moment(order.created_date).format("MMM D, h:mm A")}
                   </td>
-                </tr>
+                  <td className="px-5 py-3.5 text-center">
+                    <button
+                      onClick={() => handleDelete(order.id)}
+                      disabled={deleting === order.id}
+                      className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
+                  </tr>
               ))}
             </tbody>
           </table>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ShoppingBag, Plus, AlertTriangle } from "lucide-react";
+import { ShoppingBag, Plus, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 import StatCard from "../components/shared/StatCard";
@@ -17,6 +17,8 @@ export default function PurchaseOrders() {
   const [pos, setPos] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -28,6 +30,35 @@ export default function PurchaseOrders() {
       setLoading(false);
     });
   }, []);
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    try {
+      await base44.entities.PurchaseOrder.delete(id);
+      setPos(pos.filter(p => p.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.size} PO(s)?`)) return;
+    setDeleting(true);
+    try {
+      await Promise.all(Array.from(selected).map(id => base44.entities.PurchaseOrder.delete(id)));
+      setPos(pos.filter(p => !selected.has(p.id)));
+      setSelected(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelected(newSelected);
+  };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;
 
@@ -65,28 +96,58 @@ export default function PurchaseOrders() {
         </div>
       )}
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
+          <button onClick={handleBulkDelete} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+            {deleting ? "Deleting..." : "Delete Selected"}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
+            Cancel
+          </button>
+        </div>
+      )}
+
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/30">
+                <th className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Select</th>
                 {["PO #", "Supplier", "Amount", "Status", "Ordered", "ETA"].map(h => (
                   <th key={h} className={`px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider ${h === "Amount" ? "text-right" : "text-left"}`}>{h}</th>
                 ))}
+                <th className="px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
               </tr>
             </thead>
             <tbody>
               {pos.map(po => (
                 <tr key={po.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
+                  <td className="px-5 py-3.5">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(po.id)}
+                      onChange={() => toggleSelect(po.id)}
+                    />
+                  </td>
                   <td className="px-5 py-3.5 font-medium text-sm text-primary">{po.po_number}</td>
                   <td className="px-5 py-3.5 text-sm font-medium text-foreground">{po.supplier}</td>
                   <td className="px-5 py-3.5 text-sm font-semibold text-foreground text-right">${(po.total_amount || 0).toFixed(2)}</td>
                   <td className="px-5 py-3.5"><span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[po.status]}`}>{po.status}</span></td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{po.order_date ? moment(po.order_date).format("MMM D") : "—"}</td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{po.expected_date ? moment(po.expected_date).format("MMM D") : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
+                  <td className="px-5 py-3.5 text-center">
+                    <button
+                      onClick={() => handleDelete(po.id)}
+                      disabled={deleting === po.id}
+                      className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
+                  </tr>
+                  ))}
+                  </tbody>
           </table>
         </div>
       </div>

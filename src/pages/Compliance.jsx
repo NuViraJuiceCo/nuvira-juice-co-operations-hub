@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ShieldCheck, AlertTriangle, Clock, CheckCircle2, Plus, FileText } from "lucide-react";
+import { ShieldCheck, AlertTriangle, Clock, CheckCircle2, Plus, FileText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StatCard from "../components/shared/StatCard";
 import moment from "moment";
@@ -17,6 +17,8 @@ const statusIcon = { Valid: CheckCircle2, "Due Soon": Clock, Overdue: AlertTrian
 export default function Compliance() {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     base44.entities.ComplianceDoc.list("-expiry_date", 50).then(data => {
@@ -24,6 +26,35 @@ export default function Compliance() {
       setLoading(false);
     });
   }, []);
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    try {
+      await base44.entities.ComplianceDoc.delete(id);
+      setDocs(docs.filter(d => d.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.size} document(s)?`)) return;
+    setDeleting(true);
+    try {
+      await Promise.all(Array.from(selected).map(id => base44.entities.ComplianceDoc.delete(id)));
+      setDocs(docs.filter(d => !selected.has(d.id)));
+      setSelected(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelected(newSelected);
+  };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;
 
@@ -47,15 +78,40 @@ export default function Compliance() {
         <StatCard label="Overdue" value={overdue} icon={AlertTriangle} />
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
+          <button onClick={handleBulkDelete} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+            {deleting ? "Deleting..." : "Delete Selected"}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
+            Cancel
+          </button>
+        </div>
+      )}
+
       <div className="space-y-3">
         {docs.map(doc => {
           const Icon = statusIcon[doc.status] || CheckCircle2;
           return (
-            <div key={doc.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4 hover:shadow-sm transition-shadow">
+            <div key={doc.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4 hover:shadow-sm transition-shadow relative">
+              <input
+                type="checkbox"
+                checked={selected.has(doc.id)}
+                onChange={() => toggleSelect(doc.id)}
+                className="absolute top-3 left-3"
+              />
+              <button
+                onClick={() => handleDelete(doc.id)}
+                disabled={deleting === doc.id}
+                className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
               <div className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${statusStyle[doc.status] || "bg-gray-50 text-gray-700"}`}>
                 <Icon className="h-4 w-4" />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 pl-6">
                 <p className="font-medium text-sm text-foreground">{doc.name}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{doc.type} · {doc.owner || doc.issuing_body || "—"}</p>
               </div>

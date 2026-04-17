@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Mail, Phone, Plus, TrendingUp } from "lucide-react";
+import { Mail, Phone, Plus, TrendingUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StatCard from "../components/shared/StatCard";
 
@@ -26,6 +26,8 @@ const typeColors = {
 export default function Partnerships() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     base44.entities.Lead.list("-updated_date", 50).then(data => {
@@ -33,6 +35,35 @@ export default function Partnerships() {
       setLoading(false);
     });
   }, []);
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    try {
+      await base44.entities.Lead.delete(id);
+      setLeads(leads.filter(l => l.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.size} lead(s)?`)) return;
+    setDeleting(true);
+    try {
+      await Promise.all(Array.from(selected).map(id => base44.entities.Lead.delete(id)));
+      setLeads(leads.filter(l => !selected.has(l.id)));
+      setSelected(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelected(newSelected);
+  };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;
 
@@ -58,6 +89,18 @@ export default function Partnerships() {
         <StatCard label="Pipeline Value" value={`$${totalValue.toLocaleString()}`} icon={TrendingUp} />
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
+          <button onClick={handleBulkDelete} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+            {deleting ? "Deleting..." : "Delete Selected"}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Pipeline by stage */}
       <div className="space-y-4">
         {stages.map(stage => {
@@ -71,8 +114,21 @@ export default function Partnerships() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {stageLeads.map(lead => (
-                  <div key={lead.id} className="bg-card border border-border rounded-xl p-4 hover:shadow-sm transition-shadow">
-                    <div className="flex items-start justify-between mb-2">
+                  <div key={lead.id} className="bg-card border border-border rounded-xl p-4 hover:shadow-sm transition-shadow relative">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(lead.id)}
+                      onChange={() => toggleSelect(lead.id)}
+                      className="absolute top-3 left-3"
+                    />
+                    <button
+                      onClick={() => handleDelete(lead.id)}
+                      disabled={deleting === lead.id}
+                      className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                    <div className="flex items-start justify-between mb-2 pl-6">
                       <div>
                         <p className="font-semibold text-sm text-foreground">{lead.business_name}</p>
                         {lead.contact_name && <p className="text-xs text-muted-foreground">{lead.contact_name}</p>}
