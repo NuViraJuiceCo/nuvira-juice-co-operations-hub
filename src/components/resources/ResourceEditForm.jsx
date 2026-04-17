@@ -8,9 +8,18 @@ export default function ResourceEditForm({ resource, onClose, onSave }) {
   const isTeam = resource.category === "Team Member";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const getTagValue = (prefix) => {
+    if (!resource.tags) return "";
+    const tag = resource.tags.find(t => t.startsWith(prefix));
+    return tag ? tag.replace(prefix, "") : "";
+  };
+
   const [formData, setFormData] = useState({
     name: resource.title,
     description: resource.description || "",
+    shift: isTeam ? (resource.tags?.[0] || "") : "",
+    lastService: !isTeam ? getTagValue("LastService:") : "",
     version: resource.version || (isTeam ? "Active" : "Operational"),
   });
 
@@ -25,11 +34,19 @@ export default function ResourceEditForm({ resource, onClose, onSave }) {
     setError(null);
 
     try {
-      await base44.entities.Resource.update(resource.id, {
+      const updateData = {
         title: formData.name,
         description: formData.description,
         version: formData.version,
-      });
+      };
+
+      if (isTeam) {
+        updateData.tags = [formData.shift];
+      } else {
+        updateData.tags = [`LastService:${formData.lastService}`];
+      }
+
+      await base44.entities.Resource.update(resource.id, updateData);
       await onSave();
     } catch (err) {
       setError(err.message);
@@ -63,16 +80,42 @@ export default function ResourceEditForm({ resource, onClose, onSave }) {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground">Description</label>
+            <label className="text-sm font-medium text-foreground">{isTeam ? "Role" : "Type"}</label>
             <textarea
               name="description"
               value={formData.description}
               onChange={handleChange}
-              placeholder={isTeam ? "Role and shift details" : "Type and service details"}
+              placeholder={isTeam ? "Job role" : "Equipment type"}
               className="mt-1 w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
-              rows="3"
+              rows="2"
             />
           </div>
+
+          {isTeam && (
+            <div>
+              <label className="text-sm font-medium text-foreground">Shift</label>
+              <Input
+                name="shift"
+                value={formData.shift}
+                onChange={handleChange}
+                placeholder="e.g., Morning, Afternoon, Night"
+                className="mt-1"
+              />
+            </div>
+          )}
+
+          {!isTeam && (
+            <div>
+              <label className="text-sm font-medium text-foreground">Last Service Date</label>
+              <Input
+                type="date"
+                name="lastService"
+                value={formData.lastService}
+                onChange={handleChange}
+                className="mt-1"
+              />
+            </div>
+          )}
 
           <div>
             <label className="text-sm font-medium text-foreground">Status</label>
