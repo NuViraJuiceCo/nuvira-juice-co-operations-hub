@@ -55,6 +55,7 @@ export default function ResourceAddForm({ onClose, onSave }) {
         });
       }
       await onSave();
+      onClose();
     } catch (err) {
       setError(err.message);
     } finally {
