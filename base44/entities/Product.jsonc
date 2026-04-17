@@ -1,0 +1,51 @@
+{
+  "name": "Product",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Product name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Product description"
+    },
+    "price": {
+      "type": "number",
+      "description": "Product price"
+    },
+    "sku": {
+      "type": "string",
+      "description": "Stock keeping unit"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Product image URL"
+    },
+    "category": {
+      "type": "string",
+      "description": "Product category"
+    },
+    "ingredients": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of ingredients"
+    },
+    "availability": {
+      "type": "boolean",
+      "description": "Product availability",
+      "default": true
+    },
+    "batch_id": {
+      "type": "string",
+      "description": "Link to production batch"
+    }
+  },
+  "required": [
+    "name",
+    "price",
+    "sku"
+  ]
+}

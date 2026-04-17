@@ -1,0 +1,51 @@
+{
+  "name": "Rewards",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Reward title",
+      "required": true
+    },
+    "description": {
+      "type": "string",
+      "description": "Reward description"
+    },
+    "points_required": {
+      "type": "number",
+      "description": "Points needed to redeem",
+      "required": true
+    },
+    "reward_type": {
+      "type": "string",
+      "enum": [
+        "free_bottle",
+        "discount",
+        "free_delivery",
+        "bundle",
+        "exclusive"
+      ],
+      "description": "Type of reward",
+      "required": true
+    },
+    "icon": {
+      "type": "string",
+      "description": "Icon identifier"
+    },
+    "is_active": {
+      "type": "boolean",
+      "description": "Is reward active",
+      "default": true
+    },
+    "sort_order": {
+      "type": "number",
+      "description": "Display order",
+      "default": 0
+    }
+  },
+  "required": [
+    "title",
+    "points_required",
+    "reward_type"
+  ]
+}

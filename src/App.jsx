@@ -30,6 +30,7 @@ import Settings from './pages/Settings';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import ComplianceCenter from './pages/ComplianceCenter';
+import LoyaltyRewards from './pages/LoyaltyRewards';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -79,6 +80,7 @@ const AuthenticatedApp = () => {
         <Route path="/report-scheduler" element={<PageTransition><ReportScheduler /></PageTransition>} />
         <Route path="/settings" element={<PageTransition><Settings /></PageTransition>} />
         <Route path="/compliance" element={<PageTransition><ComplianceCenter /></PageTransition>} />
+        <Route path="/loyalty" element={<PageTransition><LoyaltyRewards /></PageTransition>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<PageNotFound />} />

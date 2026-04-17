@@ -1,0 +1,55 @@
+{
+  "name": "CustomerLoyalty",
+  "type": "object",
+  "properties": {
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email address",
+      "required": true
+    },
+    "total_points": {
+      "type": "number",
+      "description": "Current available points",
+      "default": 0
+    },
+    "lifetime_points": {
+      "type": "number",
+      "description": "Total points earned lifetime",
+      "default": 0
+    },
+    "redeemed_points": {
+      "type": "number",
+      "description": "Total points redeemed",
+      "default": 0
+    },
+    "points_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "earned",
+              "redeemed",
+              "bonus"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "History of point transactions"
+    }
+  },
+  "required": [
+    "customer_email"
+  ]
+}
