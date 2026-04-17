@@ -41,10 +41,10 @@ export default function OperationsCalendar() {
   }
 
   // Build calendar events
-  const events = [];
+  const calendarEvents = [];
 
   batches.forEach((b) => {
-    events.push({
+    calendarEvents.push({
       date: b.production_date,
       label: b.product_name,
       type: "production",
@@ -53,13 +53,13 @@ export default function OperationsCalendar() {
 
   tasks.forEach((t) => {
     if (t.fulfillment_type === "Delivery" || t.fulfillment_type === "Pickup") {
-      events.push({
+      calendarEvents.push({
         date: t.scheduled_date,
         label: t.customer_name,
         type: "delivery",
       });
     } else if (t.fulfillment_type === "Event") {
-      events.push({
+      calendarEvents.push({
         date: t.scheduled_date,
         label: t.customer_name,
         type: "event",
@@ -67,7 +67,15 @@ export default function OperationsCalendar() {
     }
   });
 
-  const totalEvents = events.filter((e) => {
+  events.forEach((e) => {
+    calendarEvents.push({
+      date: e.date,
+      label: e.name,
+      type: "event",
+    });
+  });
+
+  const totalEvents = calendarEvents.filter((e) => {
     const m = moment(e.date);
     return m.month() === currentMonth.month() && m.year() === currentMonth.year();
   }).length;
@@ -112,7 +120,25 @@ export default function OperationsCalendar() {
         ))}
       </div>
 
-      <CalendarGrid currentMonth={currentMonth} events={events} />
+      <div className="flex items-center gap-2 mb-4">
+        <Button onClick={() => setCreatingEvent(true)} className="gap-2"><Plus className="h-4 w-4" /> Add Event</Button>
+      </div>
+
+      <CalendarGrid currentMonth={currentMonth} events={calendarEvents} />
+
+      {creatingEvent && (
+        <EventCreateForm
+          onClose={() => setCreatingEvent(false)}
+          onSave={() => {
+            setCreatingEvent(false);
+            const load = async () => {
+              const e = await base44.entities.Event.list("date", 100);
+              setEvents(e);
+            };
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }
