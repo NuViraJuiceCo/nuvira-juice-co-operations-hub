@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Calendar } from "lucide-react";
+import { Calendar, Trash2 } from "lucide-react";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import StatusBadge from "../components/shared/StatusBadge";
 import PullToRefresh from "../components/shared/PullToRefresh";
@@ -12,6 +12,8 @@ export default function Production() {
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -25,6 +27,35 @@ export default function Production() {
   const handleRefresh = async () => {
     const data = await base44.entities.ProductionBatch.list("production_date", 100);
     setBatches(data);
+  };
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    try {
+      await base44.entities.ProductionBatch.delete(id);
+      setBatches(batches.filter(b => b.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.size} batch(es)?`)) return;
+    setDeleting(true);
+    try {
+      await Promise.all(Array.from(selected).map(id => base44.entities.ProductionBatch.delete(id)));
+      setBatches(batches.filter(b => !selected.has(b.id)));
+      setSelected(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelected(newSelected);
   };
 
   const filtered = batches.filter(
@@ -64,9 +95,21 @@ export default function Production() {
             <SelectItem value="Completed">Completed</SelectItem>
           </SelectContent>
         </SelectMobile>
-      </div>
+        </div>
 
-      {/* Grouped by Date */}
+        {selected.size > 0 && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
+            <button onClick={handleBulkDelete} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+              {deleting ? "Deleting..." : "Delete Selected"}
+            </button>
+            <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Grouped by Date */}
       <div className="space-y-8">
         {Object.entries(grouped)
           .sort(([a], [b]) => a.localeCompare(b))
@@ -89,9 +132,22 @@ export default function Production() {
                   {dateBatches.map((batch) => (
                     <div
                       key={batch.id}
-                      className="bg-card border border-border rounded-xl p-5 hover:shadow-sm transition-shadow"
+                      className="bg-card border border-border rounded-xl p-5 hover:shadow-sm transition-shadow relative"
                     >
-                      <div className="flex items-start justify-between">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(batch.id)}
+                        onChange={() => toggleSelect(batch.id)}
+                        className="absolute top-3 left-3"
+                      />
+                      <button
+                        onClick={() => handleDelete(batch.id)}
+                        disabled={deleting === batch.id}
+                        className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      <div className="flex items-start justify-between pl-6">
                         <div>
                           <h4 className="font-semibold text-foreground">{batch.product_name}</h4>
                           <p className="text-xs text-muted-foreground mt-0.5">{batch.batch_id}</p>

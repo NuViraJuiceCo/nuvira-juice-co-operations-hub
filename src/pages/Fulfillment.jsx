@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Clock, MapPin, User } from "lucide-react";
+import { Clock, MapPin, User, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import StatusBadge from "../components/shared/StatusBadge";
 import moment from "moment";
@@ -9,6 +9,8 @@ export default function Fulfillment() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -18,6 +20,35 @@ export default function Fulfillment() {
     }
     load();
   }, []);
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    try {
+      await base44.entities.FulfillmentTask.delete(id);
+      setTasks(tasks.filter(t => t.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.size} task(s)?`)) return;
+    setDeleting(true);
+    try {
+      await Promise.all(Array.from(selected).map(id => base44.entities.FulfillmentTask.delete(id)));
+      setTasks(tasks.filter(t => !selected.has(t.id)));
+      setSelected(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelected(newSelected);
+  };
 
   const filtered = tasks.filter(
     (t) => statusFilter === "all" || t.status === statusFilter
@@ -59,14 +90,39 @@ export default function Fulfillment() {
         </Select>
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
+          <button onClick={handleBulkDelete} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+            {deleting ? "Deleting..." : "Delete Selected"}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((task) => (
           <div
             key={task.id}
-            className="bg-card border border-border rounded-xl p-5 hover:shadow-sm transition-shadow"
+            className="bg-card border border-border rounded-xl p-5 hover:shadow-sm transition-shadow relative"
           >
-            <div className="flex items-start justify-between mb-3">
+            <input
+              type="checkbox"
+              checked={selected.has(task.id)}
+              onChange={() => toggleSelect(task.id)}
+              className="absolute top-3 left-3"
+            />
+            <button
+              onClick={() => handleDelete(task.id)}
+              disabled={deleting === task.id}
+              className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+            <div className="flex items-start justify-between mb-3 pl-6">
               <div>
                 <h4 className="font-semibold text-foreground">{task.customer_name}</h4>
                 <p className="text-xs text-muted-foreground mt-0.5">

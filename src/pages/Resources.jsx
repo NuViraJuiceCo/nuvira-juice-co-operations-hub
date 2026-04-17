@@ -1,5 +1,7 @@
-import { Users, Wrench, Plus } from "lucide-react";
+import { useState } from "react";
+import { Users, Wrench, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { base44 } from "@/api/base44Client";
 
 const team = [
   { id: 1, name: "Amar Kahlon", role: "Production Lead", shift: "Mon–Fri, 6am–2pm", status: "Active" },
@@ -17,6 +19,66 @@ const equipment = [
 ];
 
 export default function Resources() {
+  const [teamData, setTeamData] = useState(team);
+  const [equipmentData, setEquipmentData] = useState(equipment);
+  const [selectedTeam, setSelectedTeam] = useState(new Set());
+  const [selectedEquip, setSelectedEquip] = useState(new Set());
+  const [deleting, setDeleting] = useState(null);
+
+  const handleDeleteTeam = async (id) => {
+    setDeleting(id);
+    try {
+      setTeamData(teamData.filter(m => m.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleBulkDeleteTeam = async () => {
+    if (!window.confirm(`Delete ${selectedTeam.size} team member(s)?`)) return;
+    setDeleting(true);
+    try {
+      setTeamData(teamData.filter(m => !selectedTeam.has(m.id)));
+      setSelectedTeam(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteEquip = async (id) => {
+    setDeleting(id);
+    try {
+      setEquipmentData(equipmentData.filter(e => e.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleBulkDeleteEquip = async () => {
+    if (!window.confirm(`Delete ${selectedEquip.size} equipment item(s)?`)) return;
+    setDeleting(true);
+    try {
+      setEquipmentData(equipmentData.filter(e => !selectedEquip.has(e.id)));
+      setSelectedEquip(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleTeamSelect = (id) => {
+    const newSelected = new Set(selectedTeam);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelectedTeam(newSelected);
+  };
+
+  const toggleEquipSelect = (id) => {
+    const newSelected = new Set(selectedEquip);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelectedEquip(newSelected);
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -32,12 +94,36 @@ export default function Resources() {
         <div className="flex items-center gap-2 mb-4">
           <Users className="h-4 w-4 text-muted-foreground" />
           <h2 className="font-semibold text-foreground">Team</h2>
-          <span className="text-xs text-muted-foreground">({team.length} members)</span>
+          <span className="text-xs text-muted-foreground">({teamData.length} members)</span>
         </div>
+        {selectedTeam.size > 0 && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <span className="text-sm font-medium text-blue-900">{selectedTeam.size} selected</span>
+            <button onClick={handleBulkDeleteTeam} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+              {deleting ? "Deleting..." : "Delete Selected"}
+            </button>
+            <button onClick={() => setSelectedTeam(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
+              Cancel
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {team.map((member) => (
-            <div key={member.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0">
+          {teamData.map((member) => (
+            <div key={member.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4 relative">
+              <input
+                type="checkbox"
+                checked={selectedTeam.has(member.id)}
+                onChange={() => toggleTeamSelect(member.id)}
+                className="absolute top-3 left-3"
+              />
+              <button
+                onClick={() => handleDeleteTeam(member.id)}
+                disabled={deleting === member.id}
+                className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0 ml-6">
                 {member.name.split(" ").map(n => n[0]).join("")}
               </div>
               <div>
@@ -58,20 +144,40 @@ export default function Resources() {
         <div className="flex items-center gap-2 mb-4">
           <Wrench className="h-4 w-4 text-muted-foreground" />
           <h2 className="font-semibold text-foreground">Equipment</h2>
-          <span className="text-xs text-muted-foreground">({equipment.length} items)</span>
+          <span className="text-xs text-muted-foreground">({equipmentData.length} items)</span>
         </div>
+        {selectedEquip.size > 0 && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <span className="text-sm font-medium text-blue-900">{selectedEquip.size} selected</span>
+            <button onClick={handleBulkDeleteEquip} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+              {deleting ? "Deleting..." : "Delete Selected"}
+            </button>
+            <button onClick={() => setSelectedEquip(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
+              Cancel
+            </button>
+          </div>
+        )}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/30">
+                <th className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Select</th>
                 {["Equipment", "Type", "Status", "Last Service"].map(h => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{h}</th>
                 ))}
+                <th className="px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
               </tr>
             </thead>
             <tbody>
-              {equipment.map((eq) => (
+              {equipmentData.map((eq) => (
                 <tr key={eq.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
+                  <td className="px-5 py-3.5">
+                    <input
+                      type="checkbox"
+                      checked={selectedEquip.has(eq.id)}
+                      onChange={() => toggleEquipSelect(eq.id)}
+                    />
+                  </td>
                   <td className="px-5 py-3.5 font-medium text-sm text-foreground">{eq.name}</td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{eq.type}</td>
                   <td className="px-5 py-3.5">
@@ -80,6 +186,15 @@ export default function Resources() {
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{eq.lastService}</td>
+                  <td className="px-5 py-3.5 text-center">
+                    <button
+                      onClick={() => handleDeleteEquip(eq.id)}
+                      disabled={deleting === eq.id}
+                      className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

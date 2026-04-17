@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { CalendarDays, MapPin, Users, Plus } from "lucide-react";
+import { CalendarDays, MapPin, Users, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 
@@ -24,6 +24,8 @@ const statusStyle = {
 export default function Events() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     base44.entities.Event.list("date", 50).then(data => {
@@ -31,6 +33,35 @@ export default function Events() {
       setLoading(false);
     });
   }, []);
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    try {
+      await base44.entities.Event.delete(id);
+      setEvents(events.filter(e => e.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.size} event(s)?`)) return;
+    setDeleting(true);
+    try {
+      await Promise.all(Array.from(selected).map(id => base44.entities.Event.delete(id)));
+      setEvents(events.filter(e => !selected.has(e.id)));
+      setSelected(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelected(newSelected);
+  };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;
 
@@ -44,9 +75,34 @@ export default function Events() {
         <Button className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Event</Button>
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
+          <button onClick={handleBulkDelete} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+            {deleting ? "Deleting..." : "Delete Selected"}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
+            Cancel
+          </button>
+        </div>
+      )}
+
       <div className="space-y-4">
         {events.map(event => (
-          <div key={event.id} className="bg-card border border-border rounded-xl p-5 hover:shadow-sm transition-shadow">
+          <div key={event.id} className="bg-card border border-border rounded-xl p-5 hover:shadow-sm transition-shadow relative">
+            <input
+              type="checkbox"
+              checked={selected.has(event.id)}
+              onChange={() => toggleSelect(event.id)}
+              className="absolute top-3 left-3 z-10"
+            />
+            <button
+              onClick={() => handleDelete(event.id)}
+              disabled={deleting === event.id}
+              className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50 z-10"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0 text-center bg-muted rounded-xl p-3 min-w-[56px]">
                 <p className="text-xs font-medium text-muted-foreground uppercase">{moment(event.date).format("MMM")}</p>
