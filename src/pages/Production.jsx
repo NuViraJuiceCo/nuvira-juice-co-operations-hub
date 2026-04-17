@@ -84,6 +84,7 @@ export default function Production() {
   const today = moment().format("YYYY-MM-DD");
 
   return (
+    <>
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between">
@@ -211,5 +212,6 @@ export default function Production() {
           onSave={handleSaveEdit}
         />
       )}
-      </>;
-      }
+    </>
+  );
+}
