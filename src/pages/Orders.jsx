@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import OrderEditForm from "../components/orders/OrderEditForm";
 import { base44 } from "@/api/base44Client";
-import { Search, Download, Trash2 } from "lucide-react";
+import { Search, Download, Trash2, Edit2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export default function Orders() {
   const [sortDir, setSortDir] = useState("desc");
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -34,6 +36,11 @@ export default function Orders() {
   const handleRefresh = async () => {
     const data = await base44.entities.Order.list("-created_date", 100);
     setOrders(data);
+  };
+
+  const handleSaveEdit = async () => {
+    await handleRefresh();
+    setEditingOrder(null);
   };
 
   const filtered = orders.filter((o) => {
@@ -133,6 +140,7 @@ export default function Orders() {
   }
 
   return (
+    <>
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between">
@@ -257,13 +265,21 @@ export default function Orders() {
                     {moment(order.created_date).format("MMM D, h:mm A")}
                   </td>
                   <td className="px-5 py-3.5 text-center">
-                    <button
-                      onClick={() => handleDelete(order.id)}
-                      disabled={deleting === order.id}
-                      className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => setEditingOrder(order)}
+                        className="text-primary hover:text-primary/80"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(order.id)}
+                        disabled={deleting === order.id}
+                        className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                   </tr>
               ))}
@@ -273,5 +289,14 @@ export default function Orders() {
       </div>
     </div>
     </PullToRefresh>
+
+    {editingOrder && (
+      <OrderEditForm
+        order={editingOrder}
+        onClose={() => setEditingOrder(null)}
+        onSave={handleSaveEdit}
+      />
+    )}
+    </>
   );
 }

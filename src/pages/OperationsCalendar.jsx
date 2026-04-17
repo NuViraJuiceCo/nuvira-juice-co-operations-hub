@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CalendarGrid from "../components/calendar/CalendarGrid";
+import EventCreateForm from "../components/calendar/EventCreateForm";
 import moment from "moment";
 
 export default function OperationsCalendar() {
@@ -10,18 +11,22 @@ export default function OperationsCalendar() {
   const [orders, setOrders] = useState([]);
   const [batches, setBatches] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [creatingEvent, setCreatingEvent] = useState(false);
 
   useEffect(() => {
     async function load() {
-      const [o, b, t] = await Promise.all([
+      const [o, b, t, e] = await Promise.all([
         base44.entities.Order.list("-created_date", 100),
         base44.entities.ProductionBatch.list("production_date", 100),
         base44.entities.FulfillmentTask.list("scheduled_date", 100),
+        base44.entities.Event.list("date", 100),
       ]);
       setOrders(o);
       setBatches(b);
       setTasks(t);
+      setEvents(e);
       setLoading(false);
     }
     load();
