@@ -1,0 +1,374 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery } from '@tanstack/react-query';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { AlertCircle, CheckCircle2, Clock, AlertTriangle, Plus, Eye, Download } from 'lucide-react';
+import ComplianceDashboard from '@/components/compliance/ComplianceDashboard';
+import TemperatureLogForm from '@/components/compliance/TemperatureLogForm';
+import pHLogForm from '@/components/compliance/pHLogForm';
+import CCPLogForm from '@/components/compliance/CCPLogForm';
+import SanitationLogForm from '@/components/compliance/SanitationLogForm';
+import CorrectiveActionForm from '@/components/compliance/CorrectiveActionForm';
+import DailyChecklistForm from '@/components/compliance/DailyChecklistForm';
+import ComplianceMonitor from '@/components/compliance/ComplianceMonitor';
+
+export default function ComplianceCenter() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [showNewEntry, setShowNewEntry] = useState(null);
+  const [user, setUser] = useState(null);
+
+  const { data: alerts } = useQuery({
+    queryKey: ['compliance_alerts'],
+    queryFn: async () => {
+      const result = await base44.entities.ComplianceAlert.list('-triggered_date', 50);
+      return result.filter(a => a.status === 'Active');
+    },
+  });
+
+  const { data: checklists } = useQuery({
+    queryKey: ['daily_checklists_today'],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      return base44.entities.DailyChecklist.filter({ checklist_date: today });
+    },
+  });
+
+  useEffect(() => {
+    base44.auth.me().then(u => setUser(u));
+  }, []);
+
+  const criticalAlerts = alerts?.filter(a => a.severity === 'Critical') || [];
+  const incompleteChecklists = checklists?.filter(c => c.overall_status === 'Incomplete') || [];
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="border-b border-border bg-card p-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">NuVira Compliance Center</h1>
+              <p className="text-sm text-muted-foreground mt-1">Operations, Audit Readiness & Compliance Tracking</p>
+            </div>
+            <ComplianceMonitor />
+          </div>
+
+          {(criticalAlerts.length > 0 || incompleteChecklists.length > 0) && (
+            <div className="grid gap-2 mt-4">
+              {criticalAlerts.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-red-900">{criticalAlerts.length} Critical Alert{criticalAlerts.length > 1 ? 's' : ''}</p>
+                    <p className="text-sm text-red-700">{criticalAlerts[0].message}</p>
+                  </div>
+                </div>
+              )}
+              {incompleteChecklists.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-yellow-900">{incompleteChecklists.length} Incomplete Checklist{incompleteChecklists.length > 1 ? 's' : ''}</p>
+                    <p className="text-sm text-yellow-700">Daily checklists must be completed before end of shift.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto p-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-8 mb-6">
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+            <TabsTrigger value="temperature">🌡️ Temperature</TabsTrigger>
+            <TabsTrigger value="pH">🧪 pH</TabsTrigger>
+            <TabsTrigger value="CCP">⚠️ CCP</TabsTrigger>
+            <TabsTrigger value="sanitation">🧹 Sanitation</TabsTrigger>
+            <TabsTrigger value="corrective">🔧 Corrective</TabsTrigger>
+            <TabsTrigger value="checklist">📋 Checklist</TabsTrigger>
+            <TabsTrigger value="export">📊 Export</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="dashboard">
+            <ComplianceDashboard />
+          </TabsContent>
+
+          <TabsContent value="temperature">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">Temperature Logs</h2>
+                <Button onClick={() => setShowNewEntry('temperature')} size="sm">
+                  <Plus className="w-4 h-4 mr-2" /> New Log
+                </Button>
+              </div>
+              {showNewEntry === 'temperature' && <TemperatureLogForm onClose={() => setShowNewEntry(null)} />}
+              <TemperatureLogsList />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="pH">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">pH Logs</h2>
+                <Button onClick={() => setShowNewEntry('pH')} size="sm">
+                  <Plus className="w-4 h-4 mr-2" /> New Log
+                </Button>
+              </div>
+              {showNewEntry === 'pH' && <pHLogForm onClose={() => setShowNewEntry(null)} />}
+              <pHLogsList />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="CCP">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">CCP Logs</h2>
+                <Button onClick={() => setShowNewEntry('CCP')} size="sm">
+                  <Plus className="w-4 h-4 mr-2" /> New Log
+                </Button>
+              </div>
+              {showNewEntry === 'CCP' && <CCPLogForm onClose={() => setShowNewEntry(null)} />}
+              <CCPLogsList />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="sanitation">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">Sanitation Logs</h2>
+                <Button onClick={() => setShowNewEntry('sanitation')} size="sm">
+                  <Plus className="w-4 h-4 mr-2" /> New Log
+                </Button>
+              </div>
+              {showNewEntry === 'sanitation' && <SanitationLogForm onClose={() => setShowNewEntry(null)} />}
+              <SanitationLogsList />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="corrective">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">Corrective Actions</h2>
+                <Button onClick={() => setShowNewEntry('corrective')} size="sm">
+                  <Plus className="w-4 h-4 mr-2" /> New Action
+                </Button>
+              </div>
+              {showNewEntry === 'corrective' && <CorrectiveActionForm onClose={() => setShowNewEntry(null)} />}
+              <CorrectiveActionsList />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="checklist">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">Daily Checklists</h2>
+              </div>
+              <DailyChecklistForm />
+              <DailyChecklistsList />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="export">
+            <ExportCenter />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+// Placeholder components for log lists (will be created separately)
+function TemperatureLogsList() {
+  const { data: logs } = useQuery({
+    queryKey: ['temperature_logs'],
+    queryFn: () => base44.entities.TemperatureLog.list('-log_date', 50),
+  });
+
+  if (!logs?.length) return <p className="text-muted-foreground">No temperature logs yet.</p>;
+
+  return (
+    <div className="space-y-2">
+      {logs.map(log => (
+        <div key={log.id} className="border rounded-lg p-3 flex justify-between items-start">
+          <div>
+            <p className="font-semibold">{log.location}</p>
+            <p className="text-sm text-muted-foreground">{log.log_date} {log.log_time} • {log.staff_member}</p>
+            <p className="text-sm mt-1">{log.temperature}°C {log.within_range ? '✓' : '⚠️'}</p>
+          </div>
+          <Button variant="ghost" size="sm"><Eye className="w-4 h-4" /></Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function pHLogsList() {
+  const { data: logs } = useQuery({
+    queryKey: ['pH_logs'],
+    queryFn: () => base44.entities.pHLog.list('-log_date', 50),
+  });
+
+  if (!logs?.length) return <p className="text-muted-foreground">No pH logs yet.</p>;
+
+  return (
+    <div className="space-y-2">
+      {logs.map(log => (
+        <div key={log.id} className="border rounded-lg p-3 flex justify-between items-start">
+          <div>
+            <p className="font-semibold">{log.batch_id} • {log.product_name}</p>
+            <p className="text-sm text-muted-foreground">{log.log_date} {log.log_time} • {log.staff_member}</p>
+            <p className="text-sm mt-1">pH {log.ph_value} {log.within_range ? '✓' : '⚠️'}</p>
+          </div>
+          <Button variant="ghost" size="sm"><Eye className="w-4 h-4" /></Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CCPLogsList() {
+  const { data: logs } = useQuery({
+    queryKey: ['CCP_logs'],
+    queryFn: () => base44.entities.CCPLog.list('-log_date', 50),
+  });
+
+  if (!logs?.length) return <p className="text-muted-foreground">No CCP logs yet.</p>;
+
+  return (
+    <div className="space-y-2">
+      {logs.map(log => (
+        <div key={log.id} className="border rounded-lg p-3 flex justify-between items-start">
+          <div>
+            <p className="font-semibold">{log.ccp_point}</p>
+            <p className="text-sm text-muted-foreground">{log.log_date} {log.log_time} • {log.staff_member}</p>
+            <p className={`text-sm mt-1 font-semibold ${log.result === 'Pass' ? 'text-green-600' : 'text-red-600'}`}>{log.result}</p>
+          </div>
+          <Button variant="ghost" size="sm"><Eye className="w-4 h-4" /></Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SanitationLogsList() {
+  const { data: logs } = useQuery({
+    queryKey: ['sanitation_logs'],
+    queryFn: () => base44.entities.SanitationLog.list('-log_date', 50),
+  });
+
+  if (!logs?.length) return <p className="text-muted-foreground">No sanitation logs yet.</p>;
+
+  return (
+    <div className="space-y-2">
+      {logs.map(log => (
+        <div key={log.id} className="border rounded-lg p-3 flex justify-between items-start">
+          <div>
+            <p className="font-semibold">{log.area}</p>
+            <p className="text-sm text-muted-foreground">{log.log_date} {log.log_time} • {log.staff_member}</p>
+            <p className="text-sm mt-1">{log.cleaned && log.sanitized ? '✓ Complete' : '⚠️ Incomplete'}</p>
+          </div>
+          <Button variant="ghost" size="sm"><Eye className="w-4 h-4" /></Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CorrectiveActionsList() {
+  const { data: logs } = useQuery({
+    queryKey: ['corrective_logs'],
+    queryFn: () => base44.entities.CorrectiveActionLog.list('-log_date', 50),
+  });
+
+  if (!logs?.length) return <p className="text-muted-foreground">No corrective actions yet.</p>;
+
+  return (
+    <div className="space-y-2">
+      {logs.map(log => (
+        <div key={log.id} className="border rounded-lg p-3 flex justify-between items-start">
+          <div>
+            <p className="font-semibold">{log.issue_type}</p>
+            <p className="text-sm text-muted-foreground">{log.log_date} {log.log_time} • {log.staff_member}</p>
+            <p className="text-sm mt-1">{log.corrective_action_taken}</p>
+            <span className={`inline-block text-xs px-2 py-1 rounded mt-2 ${log.status === 'Verified' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{log.status}</span>
+          </div>
+          <Button variant="ghost" size="sm"><Eye className="w-4 h-4" /></Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DailyChecklistsList() {
+  const today = new Date().toISOString().split('T')[0];
+  const { data: checklists } = useQuery({
+    queryKey: ['checklists_today'],
+    queryFn: () => base44.entities.DailyChecklist.filter({ checklist_date: today }),
+  });
+
+  if (!checklists?.length) return <p className="text-muted-foreground">No checklists yet today.</p>;
+
+  return (
+    <div className="space-y-2">
+      {checklists.map(checklist => (
+        <div key={checklist.id} className="border rounded-lg p-3 flex justify-between items-start">
+          <div>
+            <p className="font-semibold">{checklist.staff_member} • {checklist.shift} Shift</p>
+            <p className="text-sm text-muted-foreground">Completed: {checklist.overall_status === 'Complete' ? '✓' : '⚠️'}</p>
+          </div>
+          <Button variant="ghost" size="sm"><Eye className="w-4 h-4" /></Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ExportCenter() {
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleGenerateAudit = async () => {
+    if (!startDate || !endDate) return;
+    setIsLoading(true);
+    try {
+      const response = await base44.functions.invoke('generateAuditPacket', {
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (response.data.file_url) {
+        window.open(response.data.file_url, '_blank');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Generate Audit Packet</CardTitle>
+        <CardDescription>Compile all compliance logs into a single professional PDF</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium">Start Date</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-md p-2 mt-1" />
+          </div>
+          <div>
+            <label className="text-sm font-medium">End Date</label>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border rounded-md p-2 mt-1" />
+          </div>
+        </div>
+        <Button onClick={handleGenerateAudit} disabled={isLoading} className="w-full">
+          <Download className="w-4 h-4 mr-2" />
+          {isLoading ? 'Generating...' : 'Generate Audit Packet'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

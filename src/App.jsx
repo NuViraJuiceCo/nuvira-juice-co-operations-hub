@@ -29,6 +29,7 @@ import ReportScheduler from './pages/ReportScheduler';
 import Settings from './pages/Settings';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
+import ComplianceCenter from './pages/ComplianceCenter';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -77,6 +78,7 @@ const AuthenticatedApp = () => {
         <Route path="/audit-logs" element={<PageTransition><AuditLogs /></PageTransition>} />
         <Route path="/report-scheduler" element={<PageTransition><ReportScheduler /></PageTransition>} />
         <Route path="/settings" element={<PageTransition><Settings /></PageTransition>} />
+        <Route path="/compliance" element={<PageTransition><ComplianceCenter /></PageTransition>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<PageNotFound />} />
