@@ -36,12 +36,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Apply status filters
+    // Apply status filters (support both single string and array)
     if (production_status) {
-      orders = orders.filter(o => o.production_status === production_status);
+      const statuses = Array.isArray(production_status) ? production_status : [production_status];
+      orders = orders.filter(o => statuses.includes(o.production_status));
     }
     if (fulfillment_status) {
-      orders = orders.filter(o => o.fulfillment_status === fulfillment_status);
+      const statuses = Array.isArray(fulfillment_status) ? fulfillment_status : [fulfillment_status];
+      orders = orders.filter(o => statuses.includes(o.fulfillment_status));
     }
 
     // Format response with only essential sync fields
