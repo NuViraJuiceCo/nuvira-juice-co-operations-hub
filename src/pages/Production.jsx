@@ -199,7 +199,10 @@ export default function Production() {
                 </div>
               </div>
             );
-          })}
+            })}
+      </div>
+      </PullToRefresh>
+
       {editingBatch && (
         <BatchEditForm
           batch={editingBatch}
@@ -207,8 +210,5 @@ export default function Production() {
           onSave={handleSaveEdit}
         />
       )}
-      </div>
-      </div>
-      </PullToRefresh>
       );
       }
