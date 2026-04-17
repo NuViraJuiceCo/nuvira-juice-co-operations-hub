@@ -18,7 +18,7 @@ const navGroups = [
       { path: "/fulfillment", label: "Fulfillment", icon: Truck },
       { path: "/inventory", label: "Inventory", icon: Package },
       { path: "/suppliers", label: "Suppliers", icon: Users },
-      { path: "/compliance", label: "Compliance", icon: ShieldCheck },
+      { path: "/compliance", label: "Compliance Logs", icon: ShieldCheck },
       { path: "/resources", label: "Resources", icon: Wrench },
       { path: "/events", label: "Events", icon: CalendarCheck },
       { path: "/loyalty", label: "Loyalty Rewards", icon: Gift },
