@@ -11,6 +11,7 @@ export default function BatchEditForm({ batch, onClose, onSave }) {
     notes: batch.notes || '',
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -18,11 +19,13 @@ export default function BatchEditForm({ batch, onClose, onSave }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
     setLoading(true);
     try {
       await base44.entities.ProductionBatch.update(batch.id, formData);
       onSave();
-    } finally {
+    } catch (err) {
+      setError(err.message || 'Failed to save changes');
       setLoading(false);
     }
   };
@@ -36,6 +39,12 @@ export default function BatchEditForm({ batch, onClose, onSave }) {
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
