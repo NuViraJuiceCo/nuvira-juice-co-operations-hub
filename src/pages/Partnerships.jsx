@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Mail, Phone, Plus, TrendingUp, Trash2 } from "lucide-react";
+import { Mail, Phone, Plus, TrendingUp, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StatCard from "../components/shared/StatCard";
+import PartnershipEditForm from "../components/partnerships/PartnershipEditForm";
 
 const stageStyle = {
   New: "bg-blue-50 text-blue-700",
@@ -28,6 +29,7 @@ export default function Partnerships() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
+  const [editingLead, setEditingLead] = useState(null);
 
   useEffect(() => {
     base44.entities.Lead.list("-updated_date", 50).then(data => {
@@ -35,6 +37,12 @@ export default function Partnerships() {
       setLoading(false);
     });
   }, []);
+
+  const handleSaveEdit = async () => {
+    const data = await base44.entities.Lead.list("-updated_date", 50);
+    setLeads(data);
+    setEditingLead(null);
+  };
 
   const handleDelete = async (id) => {
     setDeleting(id);
@@ -121,13 +129,21 @@ export default function Partnerships() {
                       onChange={() => toggleSelect(lead.id)}
                       className="absolute top-3 left-3"
                     />
-                    <button
-                      onClick={() => handleDelete(lead.id)}
-                      disabled={deleting === lead.id}
-                      className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="absolute top-3 right-3 flex gap-1">
+                      <button
+                        onClick={() => setEditingLead(lead)}
+                        className="text-primary hover:text-primary/80"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(lead.id)}
+                        disabled={deleting === lead.id}
+                        className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                     <div className="flex items-start justify-between mb-2 pl-6">
                       <div>
                         <p className="font-semibold text-sm text-foreground">{lead.business_name}</p>
@@ -150,6 +166,14 @@ export default function Partnerships() {
           );
         })}
       </div>
+
+      {editingLead && (
+        <PartnershipEditForm
+          lead={editingLead}
+          onClose={() => setEditingLead(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
   );
 }

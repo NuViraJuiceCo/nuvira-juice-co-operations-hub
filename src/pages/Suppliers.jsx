@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Phone, Mail, MapPin, Plus, Star, Trash2 } from "lucide-react";
+import { Phone, Mail, MapPin, Plus, Star, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SupplierEditForm from "../components/suppliers/SupplierEditForm";
 
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
+  const [editingSupplier, setEditingSupplier] = useState(null);
 
   useEffect(() => {
     base44.entities.Supplier.list("-updated_date", 50).then(data => {
@@ -15,6 +17,12 @@ export default function Suppliers() {
       setLoading(false);
     });
   }, []);
+
+  const handleSaveEdit = async () => {
+    const data = await base44.entities.Supplier.list("-updated_date", 50);
+    setSuppliers(data);
+    setEditingSupplier(null);
+  };
 
   const handleDelete = async (id) => {
     setDeleting(id);
@@ -84,13 +92,21 @@ export default function Suppliers() {
               onChange={() => toggleSelect(s.id)}
               className="absolute top-3 left-3"
             />
-            <button
-              onClick={() => handleDelete(s.id)}
-              disabled={deleting === s.id}
-              className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="absolute top-3 right-3 flex gap-1">
+              <button
+                onClick={() => setEditingSupplier(s)}
+                className="text-primary hover:text-primary/80"
+              >
+                <Edit2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => handleDelete(s.id)}
+                disabled={deleting === s.id}
+                className="text-red-600 hover:text-red-700 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
             <div className="flex items-start justify-between mb-3 pl-6">
               <div>
                 <h3 className="font-semibold text-foreground">{s.name}</h3>
@@ -117,6 +133,14 @@ export default function Suppliers() {
           </div>
         ))}
       </div>
+
+      {editingSupplier && (
+        <SupplierEditForm
+          supplier={editingSupplier}
+          onClose={() => setEditingSupplier(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
   );
 }

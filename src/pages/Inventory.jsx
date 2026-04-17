@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Package, AlertTriangle, TrendingDown, Plus, Search, Trash2 } from "lucide-react";
+import { Package, AlertTriangle, TrendingDown, Plus, Search, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQueryClient } from "@tanstack/react-query";
@@ -8,6 +8,7 @@ import StatCard from "../components/shared/StatCard";
 import BulkActionsBar from "../components/shared/BulkActionsBar";
 import ColumnSorter from "../components/shared/ColumnSorter";
 import PullToRefresh from "../components/shared/PullToRefresh";
+import InventoryEditForm from "../components/inventory/InventoryEditForm";
 
 export default function Inventory() {
   const [items, setItems] = useState([]);
@@ -18,6 +19,7 @@ export default function Inventory() {
   const [sortDir, setSortDir] = useState("asc");
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
 
   useEffect(() => {
     base44.entities.InventoryItem.list("-updated_date", 100).then(data => {
@@ -93,6 +95,11 @@ export default function Inventory() {
   const handleRefresh = async () => {
     const data = await base44.entities.InventoryItem.list("-updated_date", 100);
     setItems(data);
+  };
+
+  const handleSaveEdit = async () => {
+    await handleRefresh();
+    setEditingItem(null);
   };
 
   const handleDelete = async (id) => {
@@ -229,14 +236,23 @@ export default function Inventory() {
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.supplier || "—"}</td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.location || "—"}</td>
                     <td className="px-4 py-3.5 text-center">
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        disabled={deleting === item.id}
-                        className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                        title="Delete ingredient"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setEditingItem(item)}
+                          className="text-primary hover:text-primary/80"
+                          title="Edit ingredient"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          disabled={deleting === item.id}
+                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                          title="Delete ingredient"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -245,6 +261,14 @@ export default function Inventory() {
           </table>
         </div>
       </div>
+
+      {editingItem && (
+        <InventoryEditForm
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
     </PullToRefresh>
   );
