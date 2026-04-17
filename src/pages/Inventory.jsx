@@ -105,6 +105,18 @@ export default function Inventory() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.size} ingredient(s)?`)) return;
+    setDeleting(true);
+    try {
+      await Promise.all(Array.from(selected).map(id => base44.entities.InventoryItem.delete(id)));
+      setItems(items.filter(i => !selected.has(i.id)));
+      setSelected(new Set());
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6">
@@ -140,6 +152,24 @@ export default function Inventory() {
       </div>
 
       {/* Bulk Actions */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
+          <button
+            onClick={handleBulkDelete}
+            disabled={deleting}
+            className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {deleting ? "Deleting..." : "Delete Selected"}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
       <BulkActionsBar
         selectedCount={selected.size}
         onClearSelection={() => setSelected(new Set())}
