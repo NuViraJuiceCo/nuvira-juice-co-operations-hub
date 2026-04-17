@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Package, AlertTriangle, TrendingDown, Plus, Search } from "lucide-react";
+import { Package, AlertTriangle, TrendingDown, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useQueryClient } from "@tanstack/react-query";
 import StatCard from "../components/shared/StatCard";
 import BulkActionsBar from "../components/shared/BulkActionsBar";
 import ColumnSorter from "../components/shared/ColumnSorter";
@@ -16,6 +17,7 @@ export default function Inventory() {
   const [sortBy, setSortBy] = useState("ingredient");
   const [sortDir, setSortDir] = useState("asc");
   const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     base44.entities.InventoryItem.list("-updated_date", 100).then(data => {
@@ -93,6 +95,16 @@ export default function Inventory() {
     setItems(data);
   };
 
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    try {
+      await base44.entities.InventoryItem.delete(id);
+      setItems(items.filter(i => i.id !== id));
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   return (
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6">
@@ -147,19 +159,20 @@ export default function Inventory() {
                   />
                 </th>
                 {[
-                  { label: "Ingredient", col: "ingredient" },
-                  { label: "Category", col: "category" },
-                  { label: "Stock", col: "stock" },
-                  { label: "Unit", col: "unit" },
-                  { label: "Reorder At", col: "reorder_point" },
-                  { label: "Status", col: "status" },
-                  { label: "Supplier", col: "supplier" },
-                  { label: "Location", col: "location" },
+                   { label: "Ingredient", col: "ingredient" },
+                   { label: "Category", col: "category" },
+                   { label: "Stock", col: "stock" },
+                   { label: "Unit", col: "unit" },
+                   { label: "Reorder At", col: "reorder_point" },
+                   { label: "Status", col: "status" },
+                   { label: "Supplier", col: "supplier" },
+                   { label: "Location", col: "location" },
                 ].map(h => (
-                  <th key={h.col} className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort(h.col)}>
-                    <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                  </th>
-                ))}
+                   <th key={h.col} className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort(h.col)}>
+                     <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                   </th>
+                 ))}
+                <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -185,6 +198,16 @@ export default function Inventory() {
                     </td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.supplier || "—"}</td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.location || "—"}</td>
+                    <td className="px-4 py-3.5 text-center">
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deleting === item.id}
+                        className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                        title="Delete ingredient"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
