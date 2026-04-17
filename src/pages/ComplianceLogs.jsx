@@ -207,11 +207,7 @@ export default function ComplianceLogs() {
                     <p className="text-sm text-muted-foreground mb-2">
                       {log.log_date} {log.log_time} • {log.staff_member} • Shift: {log.shift}
                     </p>
-                    {log.data && (
-                      <div className="text-sm bg-muted p-2 rounded">
-                        <pre className="text-xs">{JSON.stringify(log.data, null, 2)}</pre>
-                      </div>
-                    )}
+
                     {log.notes && <p className="text-sm mt-2 text-muted-foreground">📝 {log.notes}</p>}
                   </div>
                   <Button
