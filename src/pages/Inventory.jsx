@@ -125,6 +125,7 @@ export default function Inventory() {
   };
 
   return (
+    <>
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -262,14 +263,16 @@ export default function Inventory() {
         </div>
       </div>
 
-      {editingItem && (
-        <InventoryEditForm
-          item={editingItem}
-          onClose={() => setEditingItem(null)}
-          onSave={handleSaveEdit}
-        />
-      )}
-    </div>
+      </div>
     </PullToRefresh>
+
+    {editingItem && (
+      <InventoryEditForm
+        item={editingItem}
+        onClose={() => setEditingItem(null)}
+        onSave={handleSaveEdit}
+      />
+    )}
+    </>
   );
 }
