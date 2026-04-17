@@ -1,19 +1,21 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Download, Filter, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Download, Filter, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import UnifiedComplianceForm from '@/components/compliance/UnifiedComplianceForm';
 import moment from 'moment';
 
 export default function ComplianceLogs() {
+  const queryClient = useQueryClient();
   const [startDate, setStartDate] = useState(moment().subtract(30, 'days').format('YYYY-MM-DD'));
   const [endDate, setEndDate] = useState(moment().format('YYYY-MM-DD'));
   const [logTypeFilter, setLogTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isExporting, setIsExporting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const { data: logs = [], isLoading, refetch } = useQuery({
     queryKey: ['compliance_logs', startDate, endDate],
@@ -44,6 +46,18 @@ export default function ComplianceLogs() {
       console.error('Export failed:', error);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleDelete = async (logId) => {
+    setDeletingId(logId);
+    try {
+      await base44.entities.ComplianceLog.delete(logId);
+      queryClient.invalidateQueries({ queryKey: ['compliance_logs'] });
+    } catch (error) {
+      console.error('Delete failed:', error);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -200,6 +214,15 @@ export default function ComplianceLogs() {
                     )}
                     {log.notes && <p className="text-sm mt-2 text-muted-foreground">📝 {log.notes}</p>}
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDelete(log.id)}
+                    disabled={deletingId === log.id}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
