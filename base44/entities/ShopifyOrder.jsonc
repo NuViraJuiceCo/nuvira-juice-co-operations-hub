@@ -1,0 +1,121 @@
+{
+  "name": "ShopifyOrder",
+  "type": "object",
+  "properties": {
+    "shopify_order_id": {
+      "type": "string",
+      "description": "Shopify order GID or numeric ID"
+    },
+    "shopify_order_number": {
+      "type": "string",
+      "description": "e.g. #1001"
+    },
+    "base44_order_id": {
+      "type": "string",
+      "description": "Linked Base44 Order record ID"
+    },
+    "source_channel": {
+      "type": "string",
+      "enum": [
+        "online",
+        "pos",
+        "draft",
+        "subscription",
+        "wholesale",
+        "admin",
+        "event"
+      ],
+      "default": "online"
+    },
+    "customer_email": {
+      "type": "string"
+    },
+    "customer_phone": {
+      "type": "string"
+    },
+    "line_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "price": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "fulfillment_method": {
+      "type": "string",
+      "enum": [
+        "delivery",
+        "pickup",
+        "shipping",
+        "pos"
+      ],
+      "default": "delivery"
+    },
+    "delivery_address": {
+      "type": "string"
+    },
+    "requested_delivery_date": {
+      "type": "string"
+    },
+    "payment_status": {
+      "type": "string"
+    },
+    "fulfillment_status": {
+      "type": "string"
+    },
+    "subtotal": {
+      "type": "number"
+    },
+    "total_price": {
+      "type": "number"
+    },
+    "customer_notes": {
+      "type": "string"
+    },
+    "internal_notes": {
+      "type": "string"
+    },
+    "production_status": {
+      "type": "string",
+      "enum": [
+        "new",
+        "awaiting_production",
+        "in_production",
+        "bottled",
+        "labeled",
+        "qc_checked",
+        "packed",
+        "in_cold_storage",
+        "assigned_for_pickup",
+        "assigned_for_delivery",
+        "fulfilled",
+        "canceled",
+        "refunded"
+      ],
+      "default": "new"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assigned_delivery_date": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "shopify_order_id",
+    "shopify_order_number"
+  ]
+}
