@@ -201,6 +201,7 @@ export default function Production() {
             );
             })}
       </div>
+      </div>
       </PullToRefresh>
 
       {editingBatch && (
