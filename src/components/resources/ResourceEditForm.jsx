@@ -41,9 +41,10 @@ export default function ResourceEditForm({ resource, onClose, onSave }) {
       };
 
       if (isTeam) {
-        updateData.tags = [formData.shift];
+        updateData.tags = [formData.shift, formData.version];
       } else {
-        updateData.tags = [`LastService:${formData.lastService}`];
+        const otherTags = (resource.tags || []).filter(t => !t.startsWith("LastService:"));
+        updateData.tags = [`LastService:${formData.lastService}`, ...otherTags];
       }
 
       await base44.entities.Resource.update(resource.id, updateData);
