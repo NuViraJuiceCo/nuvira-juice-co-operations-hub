@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Calendar, Trash2 } from "lucide-react";
+import { Calendar, Trash2, Edit2 } from "lucide-react";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import StatusBadge from "../components/shared/StatusBadge";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import SelectMobile from "../components/SelectMobile";
+import BatchEditForm from "../components/production/BatchEditForm";
 import moment from "moment";
 import _ from "lodash";
 
@@ -14,6 +15,7 @@ export default function Production() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
+  const [editingBatch, setEditingBatch] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -25,6 +27,12 @@ export default function Production() {
   }, []);
 
   const handleRefresh = async () => {
+    const data = await base44.entities.ProductionBatch.list("production_date", 100);
+    setBatches(data);
+  };
+
+  const handleSaveEdit = async () => {
+    setEditingBatch(null);
     const data = await base44.entities.ProductionBatch.list("production_date", 100);
     setBatches(data);
   };
@@ -152,7 +160,15 @@ export default function Production() {
                           <h4 className="font-semibold text-foreground">{batch.product_name}</h4>
                           <p className="text-xs text-muted-foreground mt-0.5">{batch.batch_id}</p>
                         </div>
-                        <StatusBadge status={batch.status} />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setEditingBatch(batch)}
+                            className="text-primary hover:text-primary/80"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <StatusBadge status={batch.status} />
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4 mt-4">
                         <div>
@@ -187,5 +203,13 @@ export default function Production() {
       </div>
     </div>
     </PullToRefresh>
-  );
-}
+
+    {editingBatch && (
+      <BatchEditForm
+        batch={editingBatch}
+        onClose={() => setEditingBatch(null)}
+        onSave={handleSaveEdit}
+      />
+    )}
+    );
+    }
