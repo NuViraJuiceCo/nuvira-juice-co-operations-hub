@@ -75,6 +75,24 @@ export default function OperationsCalendar() {
     });
   });
 
+  const handleRefresh = async () => {
+    const [o, b, t, e] = await Promise.all([
+      base44.entities.Order.list("-created_date", 100),
+      base44.entities.ProductionBatch.list("production_date", 100),
+      base44.entities.FulfillmentTask.list("scheduled_date", 100),
+      base44.entities.Event.list("date", 100),
+    ]);
+    setOrders(o);
+    setBatches(b);
+    setTasks(t);
+    setEvents(e);
+  };
+
+  const handleEventCreated = async () => {
+    await handleRefresh();
+    setCreatingEvent(false);
+  };
+
   const totalEvents = calendarEvents.filter((e) => {
     const m = moment(e.date);
     return m.month() === currentMonth.month() && m.year() === currentMonth.year();
@@ -83,13 +101,14 @@ export default function OperationsCalendar() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Operations Calendar</h1>
-          <p className="text-muted-foreground mt-1">
-            {totalEvents} items in {currentMonth.format("MMMM YYYY")} · drag items to reschedule
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+         <div>
+           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Operations Calendar</h1>
+           <p className="text-muted-foreground mt-1">
+             {totalEvents} items in {currentMonth.format("MMMM YYYY")} · drag items to reschedule
+           </p>
+         </div>
+         <div className="flex items-center gap-2">
+           <Button className="gap-2" onClick={() => setCreatingEvent(true)}><Plus className="h-4 w-4" /> Add Event</Button>
           <Button variant="outline" size="sm" onClick={() => setCurrentMonth(moment())}>
             Today
           </Button>
@@ -120,23 +139,12 @@ export default function OperationsCalendar() {
         ))}
       </div>
 
-      <div className="flex items-center gap-2 mb-4">
-        <Button onClick={() => setCreatingEvent(true)} className="gap-2"><Plus className="h-4 w-4" /> Add Event</Button>
-      </div>
-
       <CalendarGrid currentMonth={currentMonth} events={calendarEvents} />
 
       {creatingEvent && (
         <EventCreateForm
           onClose={() => setCreatingEvent(false)}
-          onSave={() => {
-            setCreatingEvent(false);
-            const load = async () => {
-              const e = await base44.entities.Event.list("date", 100);
-              setEvents(e);
-            };
-            load();
-          }}
+          onSave={handleEventCreated}
         />
       )}
     </div>
