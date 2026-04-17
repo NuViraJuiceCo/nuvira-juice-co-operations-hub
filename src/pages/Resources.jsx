@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Users, Wrench, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
+import ResourceAddForm from "../components/resources/ResourceAddForm";
 
 const team = [
   { id: 1, name: "Amar Kahlon", role: "Production Lead", shift: "Mon–Fri, 6am–2pm", status: "Active" },
@@ -24,6 +25,7 @@ export default function Resources() {
   const [selectedTeam, setSelectedTeam] = useState(new Set());
   const [selectedEquip, setSelectedEquip] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const handleDeleteTeam = async (id) => {
     setDeleting(id);
@@ -86,7 +88,7 @@ export default function Resources() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Resources</h1>
           <p className="text-muted-foreground mt-1">Team members and equipment management</p>
         </div>
-        <Button className="gap-2"><Plus className="h-4 w-4" /> Add Resource</Button>
+        <Button className="gap-2" onClick={() => setShowAddForm(true)}><Plus className="h-4 w-4" /> Add Resource</Button>
       </div>
 
       {/* Team */}
@@ -201,6 +203,20 @@ export default function Resources() {
           </table>
         </div>
       </div>
+
+      {showAddForm && (
+        <ResourceAddForm
+          onClose={() => setShowAddForm(false)}
+          onAddTeam={(member) => {
+            setTeamData([...teamData, { ...member, id: Math.max(...teamData.map(m => m.id), 0) + 1 }]);
+            setShowAddForm(false);
+          }}
+          onAddEquipment={(item) => {
+            setEquipmentData([...equipmentData, { ...item, id: Math.max(...equipmentData.map(e => e.id), 0) + 1 }]);
+            setShowAddForm(false);
+          }}
+        />
+      )}
     </div>
   );
 }
