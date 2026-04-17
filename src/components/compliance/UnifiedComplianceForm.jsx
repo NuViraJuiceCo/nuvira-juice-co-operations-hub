@@ -30,6 +30,11 @@ const LOG_TYPES = {
     label: '🔧 Corrective Action',
     fields: ['issue_type', 'issue_description', 'corrective_action_taken', 'verified_by'],
     defaults: { issue_type: 'Temperature Out of Range', issue_description: '', corrective_action_taken: '', verified_by: '' }
+  },
+  daily_checklist: {
+    label: '📋 Daily Checklist',
+    fields: ['shift', 'fridge_logged', 'sanitizer_checked', 'equipment_sanitized', 'areas_cleaned', 'batches_logged'],
+    defaults: { shift: 'Morning', fridge_logged: false, sanitizer_checked: false, equipment_sanitized: false, areas_cleaned: false, batches_logged: false }
   }
 };
 
@@ -113,7 +118,7 @@ export default function UnifiedComplianceForm() {
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={handleLogTypeChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
             {Object.entries(LOG_TYPES).map(([key, val]) => (
               <TabsTrigger key={key} value={key} className="text-xs">{val.label}</TabsTrigger>
             ))}
