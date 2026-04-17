@@ -149,6 +149,7 @@ export default function Resources() {
               <div>
                 <p className="font-medium text-sm text-foreground">{member.title}</p>
                 <p className="text-xs text-muted-foreground">{member.description}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{member.tags?.[0]}</p>
               </div>
               <div className="ml-auto">
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">{member.status}</span>

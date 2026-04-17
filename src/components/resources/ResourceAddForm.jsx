@@ -37,7 +37,8 @@ export default function ResourceAddForm({ onClose, onSave }) {
         await base44.entities.Resource.create({
           title: formData.name,
           category: "Team Member",
-          description: `${formData.role} - ${formData.shift}`,
+          description: formData.role,
+          tags: [formData.shift, formData.status],
           version: formData.status,
           status: "Active",
         });
@@ -49,7 +50,8 @@ export default function ResourceAddForm({ onClose, onSave }) {
         await base44.entities.Resource.create({
           title: formData.name,
           category: "Equipment",
-          description: `Type: ${formData.equipType} | Last Service: ${formData.lastService}`,
+          description: formData.equipType,
+          tags: [`LastService:${formData.lastService}`, formData.equipStatus],
           version: formData.equipStatus,
           status: "Active",
         });
