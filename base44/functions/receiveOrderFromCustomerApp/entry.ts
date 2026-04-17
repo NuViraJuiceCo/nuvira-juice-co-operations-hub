@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
       fulfillment_method: order.fulfillment_type || 'delivery',
       delivery_address: order.delivery_address || '',
       requested_delivery_date: order.estimated_delivery_date || '',
-      payment_status: order.payment_captured ? 'paid' : 'authorized',
+      payment_status: order.payment_captured ? 'paid' : 'pending',
       fulfillment_status: order.status || 'order_received',
       subtotal: order.subtotal || 0,
       total_price: order.total || 0,
@@ -35,17 +35,21 @@ Deno.serve(async (req) => {
       assigned_delivery_date: order.estimated_delivery_date || '',
       tags: order.is_preorder ? ['preorder'] : [],
       internal_notes: order.is_preorder ? `Pre-order — fulfillment: ${order.preorder_fulfillment_date || 'TBD'}` : '',
+      sync_status: 'synced',
+      last_sync_at: new Date().toISOString(),
     };
 
     const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({ base44_order_id: order.id });
     let result;
     if (existing?.length > 0) {
       result = await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, hubPayload);
+      console.log(`[SYNC] Updated ShopifyOrder ${result.id} for customer app order ${order.id}`);
     } else {
       result = await base44.asServiceRole.entities.ShopifyOrder.create(hubPayload);
+      console.log(`[SYNC] Created ShopifyOrder ${result.id} for customer app order ${order.id}`);
     }
 
-    return Response.json({ success: true, id: result.id });
+    return Response.json({ success: true, id: result.id, synced_at: new Date().toISOString() });
   } catch (error) {
     console.error('receiveOrderFromCustomerApp error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });

@@ -67,7 +67,14 @@
       "type": "string"
     },
     "payment_status": {
-      "type": "string"
+      "type": "string",
+      "enum": [
+        "pending",
+        "paid",
+        "authorized",
+        "refunded"
+      ],
+      "description": "Payment status"
     },
     "fulfillment_status": {
       "type": "string"
@@ -112,6 +119,20 @@
     "assigned_delivery_date": {
       "type": "string",
       "format": "date"
+    },
+    "sync_status": {
+      "type": "string",
+      "enum": [
+        "synced",
+        "processing",
+        "failed"
+      ],
+      "default": "synced",
+      "description": "Sync status from customer app"
+    },
+    "last_sync_at": {
+      "type": "string",
+      "description": "Timestamp of last sync from customer app"
     }
   },
   "required": [
