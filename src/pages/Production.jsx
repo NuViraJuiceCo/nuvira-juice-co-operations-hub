@@ -200,16 +200,15 @@ export default function Production() {
               </div>
             );
           })}
+      {editingBatch && (
+        <BatchEditForm
+          batch={editingBatch}
+          onClose={() => setEditingBatch(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
       </div>
-    </div>
-    </PullToRefresh>
-
-    {editingBatch && (
-      <BatchEditForm
-        batch={editingBatch}
-        onClose={() => setEditingBatch(null)}
-        onSave={handleSaveEdit}
-      />
-    )}
-    );
-    }
+      </div>
+      </PullToRefresh>
+      );
+      }
