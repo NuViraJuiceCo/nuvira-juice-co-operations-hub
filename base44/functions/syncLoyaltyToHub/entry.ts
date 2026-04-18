@@ -19,15 +19,17 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Missing customer email' }, { status: 400 });
     }
 
-    // Prepare sync payload
+    // Prepare sync payload - customer app expects array format
     const syncData = {
-      customer_email: data.customer_email,
-      amount: data.amount,
-      type: data.type,
-      description: data.description || null,
-      order_id: data.order_id || null,
-      reward_id: data.reward_id || null,
-      timestamp: new Date().toISOString(),
+      customers: [{
+        customer_email: data.customer_email,
+        amount: data.amount,
+        type: data.type,
+        description: data.description || null,
+        order_id: data.order_id || null,
+        reward_id: data.reward_id || null,
+        timestamp: new Date().toISOString(),
+      }]
     };
 
     if (!CUSTOMER_APP_API) {
