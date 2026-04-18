@@ -50,8 +50,23 @@ Deno.serve(async (req) => {
     // Create all events from customer app
     const results = [];
     for (const eventData of events) {
-      await base44.asServiceRole.entities.Event.create(eventData);
-      results.push({ name: eventData.name, action: 'created' });
+      // Map customer app event fields to hub Event schema
+      const hubEvent = {
+        name: eventData.name || 'Untitled Event',
+        type: eventData.type || 'Other',
+        status: eventData.is_active ? 'Confirmed' : 'Cancelled',
+        date: eventData.date,
+        end_date: eventData.end_date,
+        location: eventData.location || '',
+        expected_attendees: eventData.expected_attendees || 0,
+        products: eventData.products || '',
+        contact_name: eventData.contact_name || '',
+        contact_email: eventData.contact_email || '',
+        revenue: eventData.revenue || 0,
+        notes: eventData.description || eventData.notes || '',
+      };
+      await base44.asServiceRole.entities.Event.create(hubEvent);
+      results.push({ name: hubEvent.name, action: 'created' });
     }
 
     console.log(`[PULL-EVENTS] Replaced all events. Imported ${results.length} from customer app.`);
