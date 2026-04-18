@@ -26,7 +26,7 @@ export default function Orders() {
 
   useEffect(() => {
     async function load() {
-      const data = await base44.entities.Order.list("-created_date", 100);
+      const data = await base44.entities.ShopifyOrder.list("-created_date", 100);
       setOrders(data);
       setLoading(false);
     }
@@ -34,7 +34,7 @@ export default function Orders() {
   }, []);
 
   const handleRefresh = async () => {
-    const data = await base44.entities.Order.list("-created_date", 100);
+    const data = await base44.entities.ShopifyOrder.list("-created_date", 100);
     setOrders(data);
   };
 
@@ -46,10 +46,9 @@ export default function Orders() {
   const filtered = orders.filter((o) => {
     const matchSearch =
       !search ||
-      o.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
-      o.order_id?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "all" || o.status === statusFilter;
-    const matchChannel = channelFilter === "all" || o.channel === channelFilter;
+      o.shopify_order_number?.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === "all" || o.production_status === statusFilter;
+    const matchChannel = channelFilter === "all" || o.source_channel === channelFilter;
     return matchSearch && matchStatus && matchChannel;
   });
 
@@ -120,7 +119,7 @@ export default function Orders() {
     const headers = "Order ID,Customer,Email,Channel,Status,Payment,Fulfillment,Total,Date\n";
     const rows = filtered
       .map((o) =>
-        `${o.order_id},${o.customer_name},${o.customer_email || ""},${o.channel},${o.status},${o.payment_status},${o.fulfillment_type},${o.total},${moment(o.created_date).format("MMM D, h:mm A")}`
+        `${o.shopify_order_number},${o.customer_email || ""},${o.customer_email || ""},${o.source_channel},${o.production_status},${o.payment_status},${o.fulfillment_method},${o.total_price},${moment(o.created_date).format("MMM D, h:mm A")}`
       )
       .join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv" });
@@ -146,7 +145,7 @@ export default function Orders() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Orders</h1>
-          <p className="text-muted-foreground mt-1">{orders.length} total orders</p>
+          <p className="text-muted-foreground mt-1">{orders.length} synced orders</p>
         </div>
         <Button variant="outline" onClick={exportCSV} className="gap-2">
           <Download className="h-4 w-4" /> Export
@@ -169,19 +168,19 @@ export default function Orders() {
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="New">New</SelectItem>
             <SelectItem value="Confirmed">Confirmed</SelectItem>
-            <SelectItem value="Scheduled for Production">Scheduled for Production</SelectItem>
-            <SelectItem value="In Production">In Production</SelectItem>
-            <SelectItem value="Completed">Completed</SelectItem>
+            <SelectItem value="awaiting_production">Awaiting Production</SelectItem>
+            <SelectItem value="in_production">In Production</SelectItem>
+            <SelectItem value="packed">Packed</SelectItem>
           </SelectContent>
         </SelectMobile>
         <SelectMobile value={channelFilter} onValueChange={setChannelFilter} placeholder="All Channels" triggerClassName="w-full sm:w-44">
           <SelectContent>
             <SelectItem value="all">All Channels</SelectItem>
-            <SelectItem value="Shopify Web Store">Shopify Web Store</SelectItem>
-            <SelectItem value="Instagram">Instagram</SelectItem>
-            <SelectItem value="NuVira Juice App">NuVira Juice App</SelectItem>
-            <SelectItem value="Facebook">Facebook</SelectItem>
-            <SelectItem value="Event Order">Event Order</SelectItem>
+            <SelectItem value="online">Online</SelectItem>
+            <SelectItem value="pos">POS</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="subscription">Subscription</SelectItem>
+            <SelectItem value="wholesale">Wholesale</SelectItem>
           </SelectContent>
         </SelectMobile>
       </div>
@@ -218,15 +217,15 @@ export default function Orders() {
                   />
                 </th>
                 {[
-                  { label: "Order ID", col: "order_id" },
-                  { label: "Customer", col: "customer_name" },
-                  { label: "Channel", col: "channel" },
-                  { label: "Status", col: "status" },
-                  { label: "Payment", col: "payment_status" },
-                  { label: "Fulfillment", col: "fulfillment_type" },
-                  { label: "Total", col: "total" },
-                  { label: "Date", col: "created_date" },
-                  ].map((h) => (
+                   { label: "Order ID", col: "shopify_order_number" },
+                   { label: "Customer", col: "customer_email" },
+                   { label: "Channel", col: "source_channel" },
+                   { label: "Status", col: "production_status" },
+                   { label: "Payment", col: "payment_status" },
+                   { label: "Fulfillment", col: "fulfillment_method" },
+                   { label: "Total", col: "total_price" },
+                   { label: "Date", col: "created_date" },
+                   ].map((h) => (
                   <th key={h.col} className={`px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50 ${h.col === "total" ? "text-right" : "text-left"}`} onClick={() => handleSort(h.col)}>
                     <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                   </th>
@@ -246,20 +245,20 @@ export default function Orders() {
                     />
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-sm font-medium text-primary">{order.order_id}</span>
+                    <span className="text-sm font-medium text-primary">{order.shopify_order_number}</span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <p className="text-sm font-medium text-foreground">{order.customer_name}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer_email}</p>
+                    <p className="text-sm font-medium text-foreground">{order.customer_email}</p>
+                    <p className="text-xs text-muted-foreground">{order.customer_phone}</p>
                   </td>
-                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.channel}</td>
-                  <td className="px-5 py-3.5"><StatusBadge status={order.status} /></td>
+                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.source_channel}</td>
+                  <td className="px-5 py-3.5"><StatusBadge status={order.production_status} /></td>
                   <td className="px-5 py-3.5"><StatusBadge status={order.payment_status} /></td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">
-                    {order.fulfillment_type}{order.fulfillment_window ? ` · ${order.fulfillment_window}` : " · -"}
+                    {order.fulfillment_method}{order.delivery_address ? ` · ${order.delivery_address.substring(0, 20)}...` : " · -"}
                   </td>
                   <td className="px-5 py-3.5 text-sm font-semibold text-foreground text-right">
-                    ${order.total?.toFixed(2)}
+                    ${order.total_price?.toFixed(2)}
                   </td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
                     {moment(order.created_date).format("MMM D, h:mm A")}
