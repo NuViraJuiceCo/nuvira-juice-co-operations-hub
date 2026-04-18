@@ -12,18 +12,28 @@ Deno.serve(async (req) => {
     }
 
     // Fetch events from customer app
-    const response = await fetch(`${CUSTOMER_APP_API}/functions/getEventsForSync`, {
+    const url = `${CUSTOMER_APP_API}/functions/getEventsForSync`;
+    console.log('[PULL-EVENTS] Fetching URL:', url);
+    console.log('[PULL-EVENTS] Secret set:', !!SYNC_SECRET);
+
+    const response = await fetch(url, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',
       },
     });
 
+    const rawText = await response.text();
+    console.log('[PULL-EVENTS] Status:', response.status);
+    console.log('[PULL-EVENTS] Raw response (first 500 chars):', rawText.slice(0, 500));
+
     if (!response.ok) {
-      throw new Error(`Customer app responded with ${response.status}`);
+      throw new Error(`Customer app responded with ${response.status}: ${rawText.slice(0, 200)}`);
     }
 
-    const { events } = await response.json();
+    const parsed = JSON.parse(rawText);
+    const events = parsed.events;
 
     if (!Array.isArray(events)) {
       return Response.json({ error: 'Invalid response from customer app' }, { status: 500 });
