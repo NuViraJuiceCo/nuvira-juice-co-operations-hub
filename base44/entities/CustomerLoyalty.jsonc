@@ -41,6 +41,14 @@
           "description": {
             "type": "string"
           },
+          "order_id": {
+            "type": "string",
+            "description": "Related ShopifyOrder ID if applicable"
+          },
+          "reward_id": {
+            "type": "string",
+            "description": "Related Reward ID if redeemed"
+          },
           "timestamp": {
             "type": "string"
           }

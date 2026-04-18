@@ -22,6 +22,7 @@ const navGroups = [
       { path: "/resources", label: "Resources", icon: Wrench },
       { path: "/events", label: "Events", icon: CalendarCheck },
       { path: "/loyalty", label: "Loyalty Rewards", icon: Gift },
+      { path: "/loyalty-admin", label: "Loyalty Dashboard", icon: Gift },
       { path: "/operations-manager", label: "Operations Manager", icon: Activity },
       { path: "/partnerships", label: "Partnerships", icon: Handshake },
       { path: "/reporting", label: "Reporting", icon: BarChart3 },
