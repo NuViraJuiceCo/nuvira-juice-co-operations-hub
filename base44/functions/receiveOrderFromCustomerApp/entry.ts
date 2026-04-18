@@ -11,9 +11,11 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const order = await req.json();
 
+    console.log('[SYNC] Incoming payload:', JSON.stringify(order, null, 2));
+
     const hubPayload = {
-      shopify_order_id: `base44_${order.id}`,
-      shopify_order_number: order.order_number || `#${order.id.slice(-6).toUpperCase()}`,
+      shopify_order_id: `base44_${order.id || 'unknown'}`,
+      shopify_order_number: order.order_number || (order.id ? `#${order.id.slice(-6).toUpperCase()}` : '#UNKNOWN'),
       base44_order_id: order.id,
       source_channel: 'online',
       customer_email: order.customer_email || '',
