@@ -31,13 +31,17 @@ Deno.serve(async (req) => {
 
     const results = [];
     for (const productData of products) {
-      const existing = await base44.asServiceRole.entities.Product.filter({ sku: productData.sku });
+      // Use shopify_product_id as sku, fallback to customer app id
+      const sku = productData.shopify_product_id || productData.id;
+      const hubProduct = { ...productData, sku };
+      
+      const existing = await base44.asServiceRole.entities.Product.filter({ sku });
       if (existing && existing.length > 0) {
-        await base44.asServiceRole.entities.Product.update(existing[0].id, productData);
-        results.push({ sku: productData.sku, action: 'updated' });
+        await base44.asServiceRole.entities.Product.update(existing[0].id, hubProduct);
+        results.push({ sku, action: 'updated' });
       } else {
-        await base44.asServiceRole.entities.Product.create(productData);
-        results.push({ sku: productData.sku, action: 'created' });
+        await base44.asServiceRole.entities.Product.create(hubProduct);
+        results.push({ sku, action: 'created' });
       }
     }
 
