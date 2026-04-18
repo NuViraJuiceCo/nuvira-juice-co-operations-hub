@@ -12,6 +12,8 @@ Deno.serve(async (req) => {
     }
 
     // Fetch events from customer app
+    // CUSTOMER_APP_API should be the app ID, e.g. "69d48d0c39891f7945481152"
+    // OR the full base URL like "https://api.base44.app/api/apps/69d48d0c39891f7945481152"
     const url = `${CUSTOMER_APP_API}/functions/getEventsForSync`;
     console.log('[PULL-EVENTS] Fetching URL:', url);
     console.log('[PULL-EVENTS] Secret set:', !!SYNC_SECRET);
