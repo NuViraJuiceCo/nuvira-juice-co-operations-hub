@@ -2,8 +2,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
   try {
-    // Verify shared secret
-    const secret = req.headers.get('x-sync-secret');
+    // Verify shared secret from Authorization header
+    const authHeader = req.headers.get('authorization');
+    const secret = authHeader?.replace('Bearer ', '');
     if (secret !== Deno.env.get('CUSTOMER_APP_SYNC_SECRET')) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
