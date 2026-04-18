@@ -30,7 +30,6 @@ import Settings from './pages/Settings';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import ComplianceCenter from './pages/ComplianceCenter';
-import LoyaltyRewards from './pages/LoyaltyRewards';
 import LoyaltyAdmin from './pages/LoyaltyAdmin';
 import ComplianceLogs from './pages/ComplianceLogs';
 import OperationsManager from './pages/OperationsManager';
@@ -83,7 +82,6 @@ const AuthenticatedApp = () => {
         <Route path="/settings" element={<PageTransition><Settings /></PageTransition>} />
         <Route path="/compliance" element={<PageTransition><ComplianceLogs /></PageTransition>} />
         <Route path="/compliance-center" element={<PageTransition><ComplianceCenter /></PageTransition>} />
-        <Route path="/loyalty" element={<PageTransition><LoyaltyRewards /></PageTransition>} />
         <Route path="/loyalty-admin" element={<PageTransition><LoyaltyAdmin /></PageTransition>} />
         <Route path="/operations-manager" element={<PageTransition><OperationsManager /></PageTransition>} />
         <Route path="/privacy" element={<Privacy />} />
