@@ -31,8 +31,9 @@ Deno.serve(async (req) => {
     };
 
     if (!CUSTOMER_APP_API) {
-      // Mark as failed if no API configured
-      await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'failed' });
+      if (data.id) {
+        await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'failed' });
+      }
       return Response.json({ status: 'failed', reason: 'Customer app API not configured' });
     }
 
@@ -47,10 +48,14 @@ Deno.serve(async (req) => {
     });
 
     if (response.ok) {
-      await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'synced' });
+      if (data.id) {
+        await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'synced' });
+      }
       return Response.json({ status: 'success', synced: true });
     } else {
-      await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'failed' });
+      if (data.id) {
+        await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'failed' });
+      }
       const text = await response.text();
       console.error(`Sync failed: ${response.status} - ${text}`);
       return Response.json({ status: 'failed', reason: `Customer app error: ${response.status}` });
