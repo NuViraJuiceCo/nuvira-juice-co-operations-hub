@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch products from customer app
-    const response = await fetch(`${CUSTOMER_APP_API}/api/products`, {
+    const response = await fetch(`${CUSTOMER_APP_API}/functions/getProductsForSync`, {
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',

@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
 
     if (eventType === 'delete') {
       // Notify customer app of deletion by hub entity ID
-      response = await fetch(`${CUSTOMER_APP_API}/api/events/sync`, {
+      response = await fetch(`${CUSTOMER_APP_API}/functions/syncEventsFromHub`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${SYNC_SECRET}`,
@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
       });
     } else {
       // Push full event data for create/update
-      response = await fetch(`${CUSTOMER_APP_API}/api/events/sync`, {
+      response = await fetch(`${CUSTOMER_APP_API}/functions/syncEventsFromHub`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${SYNC_SECRET}`,
