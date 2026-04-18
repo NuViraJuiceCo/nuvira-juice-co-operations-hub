@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { AlertTriangle, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StatusBadge from "../components/shared/StatusBadge";
+import BatchCreateForm from "../components/production/BatchCreateForm";
 import moment from "moment";
 
 const RECIPES = {
@@ -19,6 +20,12 @@ export default function ProdScheduler() {
   const [weekStart, setWeekStart] = useState(moment().startOf("isoWeek"));
   const [selected, setSelected] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
+
+  const handleSaveCreate = async () => {
+    const data = await base44.entities.ProductionBatch.list("production_date", 100);
+    setBatches(data);
+    setIsCreating(false);
+  };
 
   useEffect(() => {
     Promise.all([
@@ -163,6 +170,13 @@ export default function ProdScheduler() {
           })}
         </div>
       </div>
+
+      {isCreating && (
+        <BatchCreateForm
+          onClose={() => setIsCreating(false)}
+          onSave={handleSaveCreate}
+        />
+      )}
     </div>
   );
 }

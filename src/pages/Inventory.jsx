@@ -9,6 +9,7 @@ import BulkActionsBar from "../components/shared/BulkActionsBar";
 import ColumnSorter from "../components/shared/ColumnSorter";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import InventoryEditForm from "../components/inventory/InventoryEditForm";
+import InventoryCreateForm from "../components/inventory/InventoryCreateForm";
 
 export default function Inventory() {
   const [items, setItems] = useState([]);
@@ -267,13 +268,17 @@ export default function Inventory() {
       </div>
     </PullToRefresh>
 
-    {(editingItem || isCreating) && (
+    {editingItem && (
       <InventoryEditForm
         item={editingItem}
-        onClose={() => {
-          setEditingItem(null);
-          setIsCreating(false);
-        }}
+        onClose={() => setEditingItem(null)}
+        onSave={handleSaveEdit}
+      />
+    )}
+
+    {isCreating && (
+      <InventoryCreateForm
+        onClose={() => setIsCreating(false)}
         onSave={handleSaveEdit}
       />
     )}

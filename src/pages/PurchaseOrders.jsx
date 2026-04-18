@@ -5,6 +5,135 @@ import { Button } from "@/components/ui/button";
 import moment from "moment";
 import StatCard from "../components/shared/StatCard";
 
+const PurchaseOrderCreateForm = ({ onClose, onSave }) => {
+  const [formData, setFormData] = useState({
+    po_number: '',
+    supplier: '',
+    total_amount: '',
+    status: 'Draft',
+    order_date: moment().format('YYYY-MM-DD'),
+    expected_date: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await base44.entities.PurchaseOrder.create(formData);
+      onSave();
+    } catch (err) {
+      setError(err.message || 'Failed to create PO');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-card rounded-xl shadow-lg max-w-md w-full p-6 my-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Create Purchase Order</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">PO Number</label>
+            <input
+              type="text"
+              value={formData.po_number}
+              onChange={(e) => handleChange('po_number', e.target.value)}
+              className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Supplier</label>
+            <input
+              type="text"
+              value={formData.supplier}
+              onChange={(e) => handleChange('supplier', e.target.value)}
+              className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Amount</label>
+              <input
+                type="number"
+                value={formData.total_amount}
+                onChange={(e) => handleChange('total_amount', e.target.value ? parseFloat(e.target.value) : '')}
+                className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Status</label>
+              <select
+                value={formData.status}
+                onChange={(e) => handleChange('status', e.target.value)}
+                className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              >
+                <option>Draft</option>
+                <option>Ordered</option>
+                <option>In Transit</option>
+                <option>Delivered</option>
+                <option>Cancelled</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Order Date</label>
+              <input
+                type="date"
+                value={formData.order_date}
+                onChange={(e) => handleChange('order_date', e.target.value)}
+                className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">ETA</label>
+              <input
+                type="date"
+                value={formData.expected_date}
+                onChange={(e) => handleChange('expected_date', e.target.value)}
+                className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading} className="flex-1">
+              {loading ? 'Creating...' : 'Create'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const statusStyle = {
   Delivered: "bg-emerald-50 text-emerald-700",
   "In Transit": "bg-blue-50 text-blue-700",
@@ -59,6 +188,12 @@ export default function PurchaseOrders() {
     if (newSelected.has(id)) newSelected.delete(id);
     else newSelected.add(id);
     setSelected(newSelected);
+  };
+
+  const handleSaveCreate = async () => {
+    const data = await base44.entities.PurchaseOrder.list("-order_date", 50);
+    setPos(data);
+    setIsCreating(false);
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;
@@ -152,6 +287,13 @@ export default function PurchaseOrders() {
           </table>
         </div>
       </div>
+
+      {isCreating && (
+        <PurchaseOrderCreateForm
+          onClose={() => setIsCreating(false)}
+          onSave={handleSaveCreate}
+        />
+      )}
     </div>
   );
 }

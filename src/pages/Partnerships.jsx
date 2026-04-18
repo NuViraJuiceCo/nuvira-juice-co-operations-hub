@@ -4,6 +4,7 @@ import { Mail, Phone, Plus, TrendingUp, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StatCard from "../components/shared/StatCard";
 import PartnershipEditForm from "../components/partnerships/PartnershipEditForm";
+import PartnershipCreateForm from "../components/partnerships/PartnershipCreateForm";
 
 const stageStyle = {
   New: "bg-blue-50 text-blue-700",
@@ -168,13 +169,17 @@ export default function Partnerships() {
         })}
       </div>
 
-      {(editingLead || isCreating) && (
+      {editingLead && (
         <PartnershipEditForm
           lead={editingLead}
-          onClose={() => {
-            setEditingLead(null);
-            setIsCreating(false);
-          }}
+          onClose={() => setEditingLead(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
+
+      {isCreating && (
+        <PartnershipCreateForm
+          onClose={() => setIsCreating(false)}
           onSave={handleSaveEdit}
         />
       )}

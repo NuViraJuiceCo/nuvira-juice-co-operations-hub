@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Phone, Mail, MapPin, Plus, Star, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SupplierEditForm from "../components/suppliers/SupplierEditForm";
+import SupplierCreateForm from "../components/suppliers/SupplierCreateForm";
 
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState([]);
@@ -135,13 +136,17 @@ export default function Suppliers() {
         ))}
       </div>
 
-      {(editingSupplier || isCreating) && (
+      {editingSupplier && (
         <SupplierEditForm
           supplier={editingSupplier}
-          onClose={() => {
-            setEditingSupplier(null);
-            setIsCreating(false);
-          }}
+          onClose={() => setEditingSupplier(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
+
+      {isCreating && (
+        <SupplierCreateForm
+          onClose={() => setIsCreating(false)}
           onSave={handleSaveEdit}
         />
       )}
