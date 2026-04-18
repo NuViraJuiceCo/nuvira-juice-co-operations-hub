@@ -9,9 +9,12 @@ Deno.serve(async (req) => {
     }
 
     const base44 = createClientFromRequest(req);
-    const order = await req.json();
+    const body = await req.json();
 
-    console.log('[SYNC] Incoming payload:', JSON.stringify(order, null, 2));
+    console.log('[SYNC] Incoming payload:', JSON.stringify(body, null, 2));
+
+    // Support both wrapped { event, data: {...} } and flat order payloads
+    const order = body.data || body;
 
     const hubPayload = {
       shopify_order_id: `base44_${order.id || 'unknown'}`,
