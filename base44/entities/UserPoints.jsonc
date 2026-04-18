@@ -1,0 +1,54 @@
+{
+  "name": "UserPoints",
+  "type": "object",
+  "properties": {
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email address",
+      "required": true
+    },
+    "amount": {
+      "type": "number",
+      "description": "Points amount (positive for earned, negative for redeemed)",
+      "required": true
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "earned",
+        "redeemed",
+        "bonus",
+        "adjustment"
+      ],
+      "description": "Type of point transaction",
+      "required": true
+    },
+    "description": {
+      "type": "string",
+      "description": "Transaction description"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Related order ID if applicable"
+    },
+    "reward_id": {
+      "type": "string",
+      "description": "Related reward ID if redeemed"
+    },
+    "sync_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "synced",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "Sync status to customer app"
+    }
+  },
+  "required": [
+    "customer_email",
+    "amount",
+    "type"
+  ]
+}
