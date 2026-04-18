@@ -30,6 +30,7 @@ export default function Partnerships() {
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
   const [editingLead, setEditingLead] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     base44.entities.Lead.list("-updated_date", 50).then(data => {
@@ -88,7 +89,7 @@ export default function Partnerships() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Partnerships & Leads</h1>
           <p className="text-muted-foreground mt-1">CRM pipeline for wholesale and corporate accounts</p>
         </div>
-        <Button className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Lead</Button>
+        <Button onClick={() => setIsCreating(true)} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Lead</Button>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -167,10 +168,13 @@ export default function Partnerships() {
         })}
       </div>
 
-      {editingLead && (
+      {(editingLead || isCreating) && (
         <PartnershipEditForm
           lead={editingLead}
-          onClose={() => setEditingLead(null)}
+          onClose={() => {
+            setEditingLead(null);
+            setIsCreating(false);
+          }}
           onSave={handleSaveEdit}
         />
       )}

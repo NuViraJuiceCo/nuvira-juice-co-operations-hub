@@ -28,6 +28,7 @@ export default function Events() {
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     base44.entities.Event.list("date", 50).then(data => {
@@ -80,7 +81,7 @@ export default function Events() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Events</h1>
           <p className="text-muted-foreground mt-1">{events.length} total events</p>
         </div>
-        <Button className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Event</Button>
+        <Button onClick={() => setIsCreating(true)} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Event</Button>
       </div>
 
       {selected.size > 0 && (
@@ -144,10 +145,13 @@ export default function Events() {
         {events.length === 0 && <p className="text-center text-muted-foreground py-12">No events scheduled.</p>}
       </div>
 
-      {editingEvent && (
+      {(editingEvent || isCreating) && (
         <EventEditForm
           event={editingEvent}
-          onClose={() => setEditingEvent(null)}
+          onClose={() => {
+            setEditingEvent(null);
+            setIsCreating(false);
+          }}
           onSave={handleSaveEdit}
         />
       )}

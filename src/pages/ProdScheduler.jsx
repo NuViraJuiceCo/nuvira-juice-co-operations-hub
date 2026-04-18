@@ -18,6 +18,7 @@ export default function ProdScheduler() {
   const [loading, setLoading] = useState(true);
   const [weekStart, setWeekStart] = useState(moment().startOf("isoWeek"));
   const [selected, setSelected] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -61,7 +62,7 @@ export default function ProdScheduler() {
           <Button variant="outline" size="icon" onClick={() => setWeekStart(weekStart.clone().subtract(1, "week"))}><ChevronLeft className="h-4 w-4" /></Button>
           <Button variant="outline" size="sm" onClick={() => setWeekStart(moment().startOf("isoWeek"))}>Today</Button>
           <Button variant="outline" size="icon" onClick={() => setWeekStart(weekStart.clone().add(1, "week"))}><ChevronRight className="h-4 w-4" /></Button>
-          <Button className="gap-2"><Plus className="h-4 w-4" /> Add Batch</Button>
+          <Button onClick={() => setIsCreating(true)} className="gap-2"><Plus className="h-4 w-4" /> Add Batch</Button>
         </div>
       </div>
 

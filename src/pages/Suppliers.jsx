@@ -10,6 +10,7 @@ export default function Suppliers() {
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
   const [editingSupplier, setEditingSupplier] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     base44.entities.Supplier.list("-updated_date", 50).then(data => {
@@ -68,7 +69,7 @@ export default function Suppliers() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Suppliers</h1>
           <p className="text-muted-foreground mt-1">{suppliers.filter(s => s.status === "Active").length} active suppliers</p>
         </div>
-        <Button className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Supplier</Button>
+        <Button onClick={() => setIsCreating(true)} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Supplier</Button>
       </div>
 
       {selected.size > 0 && (
@@ -134,10 +135,13 @@ export default function Suppliers() {
         ))}
       </div>
 
-      {editingSupplier && (
+      {(editingSupplier || isCreating) && (
         <SupplierEditForm
           supplier={editingSupplier}
-          onClose={() => setEditingSupplier(null)}
+          onClose={() => {
+            setEditingSupplier(null);
+            setIsCreating(false);
+          }}
           onSave={handleSaveEdit}
         />
       )}

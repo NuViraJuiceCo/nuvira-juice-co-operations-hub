@@ -19,6 +19,7 @@ export default function PurchaseOrders() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -74,7 +75,7 @@ export default function PurchaseOrders() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Purchase Orders</h1>
           <p className="text-muted-foreground mt-1">{pos.length} orders this month</p>
         </div>
-        <Button className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> New PO</Button>
+        <Button onClick={() => setIsCreating(true)} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> New PO</Button>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

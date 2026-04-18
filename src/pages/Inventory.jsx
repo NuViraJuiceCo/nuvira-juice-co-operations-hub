@@ -20,6 +20,7 @@ export default function Inventory() {
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     base44.entities.InventoryItem.list("-updated_date", 100).then(data => {
@@ -133,7 +134,7 @@ export default function Inventory() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Inventory</h1>
           <p className="text-muted-foreground mt-1">Track ingredient stock levels and reorder points</p>
         </div>
-        <Button className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Item</Button>
+        <Button onClick={() => setIsCreating(true)} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Item</Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -266,10 +267,13 @@ export default function Inventory() {
       </div>
     </PullToRefresh>
 
-    {editingItem && (
+    {(editingItem || isCreating) && (
       <InventoryEditForm
         item={editingItem}
-        onClose={() => setEditingItem(null)}
+        onClose={() => {
+          setEditingItem(null);
+          setIsCreating(false);
+        }}
         onSave={handleSaveEdit}
       />
     )}

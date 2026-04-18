@@ -7,6 +7,7 @@ import moment from "moment";
 export default function RouteOptimizer() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [optimizing, setOptimizing] = useState(false);
 
   useEffect(() => {
     base44.entities.FulfillmentTask.list("scheduled_date", 50).then(data => {
@@ -33,7 +34,7 @@ export default function RouteOptimizer() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Route Optimizer</h1>
           <p className="text-muted-foreground mt-1">{deliveries.length} pending stops · {totalAddresses} with addresses</p>
         </div>
-        <Button className="gap-2"><Route className="h-4 w-4" /> Optimize Route</Button>
+        <Button onClick={() => setOptimizing(true)} className="gap-2"><Route className="h-4 w-4" /> Optimize Route</Button>
       </div>
 
       {/* Stats */}
