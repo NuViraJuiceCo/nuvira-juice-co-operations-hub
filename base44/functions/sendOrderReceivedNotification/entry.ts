@@ -6,13 +6,13 @@ Deno.serve(async (req) => {
     const payload = await req.json();
 
     const shopifyOrder = payload.data;
-    if (!shopifyOrder || !shopifyOrder.customer_email) {
-      return Response.json({ message: 'No customer email, skipping notification' });
+    if (!shopifyOrder || !shopifyOrder.customer_email || shopifyOrder.customer_email.trim() === '') {
+      return Response.json({ message: 'No valid customer email, skipping notification' });
     }
 
     const products = shopifyOrder.line_items?.map(item => `${item.quantity}x ${item.title}`).join(', ') || 'Order';
 
-    await base44.asServiceRole.integrations.Core.SendEmail({
+    await base44.integrations.Core.SendEmail({
       to: shopifyOrder.customer_email,
       subject: `Order Confirmed: ${shopifyOrder.shopify_order_number} 🎉`,
       body: `
