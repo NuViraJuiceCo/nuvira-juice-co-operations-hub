@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
 
     const hubPayload = {
       shopify_order_id: `test_${testOrder.id}`,
-      shopify_order_number: testOrder.order_number,
+      shopify_order_number: testOrder.order_number || `#TEST${Math.floor(Math.random() * 10000)}`,
       base44_order_id: testOrder.id,
       source_channel: 'online',
       customer_email: testOrder.customer_email || '',
