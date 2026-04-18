@@ -190,7 +190,7 @@ export default function LoyaltyAdmin() {
                       </p>
                       <div className="flex flex-wrap gap-2">
                         {availableRewards.map(reward => (
-                          <Badge key={reward.id} className="bg-green-100 text-green-700">
+                          <Badge key={reward.id} className="bg-green-600 text-white">
                             {reward.title} ({reward.points_required} pts)
                           </Badge>
                         ))}
@@ -206,14 +206,14 @@ export default function LoyaltyAdmin() {
                       </p>
                       <div className="space-y-2">
                         {redemptions.map((redemption, idx) => (
-                          <div key={idx} className="text-xs p-2 bg-blue-50 rounded border border-blue-200">
+                          <div key={idx} className="text-xs p-3 bg-primary/10 rounded border border-primary/20">
                             <div className="flex justify-between">
-                              <span className="font-medium">-{redemption.amount} points</span>
-                              <span className="text-muted-foreground">{moment(redemption.timestamp).format('MMM D, h:mm A')}</span>
+                              <span className="font-semibold text-primary">-{redemption.amount} points</span>
+                              <span className="text-muted-foreground text-[11px]">{moment(redemption.timestamp).format('MMM D, h:mm A')}</span>
                             </div>
-                            <p className="text-muted-foreground mt-1">{redemption.description}</p>
+                            <p className="text-foreground/80 mt-1 font-medium">{redemption.description}</p>
                             {redemption.order_id && (
-                              <p className="text-blue-600 mt-1">Order: {redemption.order_id}</p>
+                              <p className="text-primary/70 mt-1.5 text-[11px]">Order ID: {redemption.order_id}</p>
                             )}
                           </div>
                         ))}
