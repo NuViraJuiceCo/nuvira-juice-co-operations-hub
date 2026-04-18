@@ -83,7 +83,8 @@ export default function LoyaltyAdmin() {
     if (selectedCustomers.size === 0) return;
     setProcessingBonus(true);
     try {
-      const emails = Array.from(selectedCustomers);
+      const selectedIds = Array.from(selectedCustomers);
+      const emails = customers.filter(c => selectedIds.includes(c.id)).map(c => c.customer_email);
       const res = await base44.functions.invoke('addSignupBonusToMembers', { customer_emails: emails });
       if (res.data.status === 'success') {
         await loadData();
