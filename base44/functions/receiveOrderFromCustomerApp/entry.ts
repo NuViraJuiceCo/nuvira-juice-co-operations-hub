@@ -13,8 +13,8 @@ Deno.serve(async (req) => {
 
     console.log('[SYNC] Incoming payload:', JSON.stringify(body, null, 2));
 
-    // Support both wrapped { event, data: {...} } and flat order payloads
-    const order = body.data || body;
+    // Support wrapped payloads: { event, order: {...} } or { event, data: {...} } or flat
+    const order = body.order || body.data || body;
 
     const hubPayload = {
       shopify_order_id: `base44_${order.id || 'unknown'}`,
