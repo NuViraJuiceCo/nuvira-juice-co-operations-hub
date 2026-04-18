@@ -32,6 +32,7 @@ import Terms from './pages/Terms';
 import ComplianceCenter from './pages/ComplianceCenter';
 import LoyaltyRewards from './pages/LoyaltyRewards';
 import ComplianceLogs from './pages/ComplianceLogs';
+import OperationsManager from './pages/OperationsManager';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -82,6 +83,7 @@ const AuthenticatedApp = () => {
         <Route path="/compliance" element={<PageTransition><ComplianceLogs /></PageTransition>} />
         <Route path="/compliance-center" element={<PageTransition><ComplianceCenter /></PageTransition>} />
         <Route path="/loyalty" element={<PageTransition><LoyaltyRewards /></PageTransition>} />
+        <Route path="/operations-manager" element={<PageTransition><OperationsManager /></PageTransition>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<PageNotFound />} />

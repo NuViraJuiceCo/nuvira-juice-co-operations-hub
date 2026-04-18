@@ -3,7 +3,7 @@ import {
   LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, LogOut,
   ShoppingCart, Factory, Truck, CalendarDays, Package, Users,
   ShieldCheck, Wrench, CalendarCheck, Handshake, ClipboardList,
-  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings, Gift,
+  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings, Gift, Activity,
 } from "lucide-react";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
@@ -22,6 +22,7 @@ const navGroups = [
       { path: "/resources", label: "Resources", icon: Wrench },
       { path: "/events", label: "Events", icon: CalendarCheck },
       { path: "/loyalty", label: "Loyalty Rewards", icon: Gift },
+      { path: "/operations-manager", label: "Operations Manager", icon: Activity },
       { path: "/partnerships", label: "Partnerships", icon: Handshake },
       { path: "/reporting", label: "Reporting", icon: BarChart3 },
       { path: "/calendar", label: "Calendar", icon: CalendarDays },
