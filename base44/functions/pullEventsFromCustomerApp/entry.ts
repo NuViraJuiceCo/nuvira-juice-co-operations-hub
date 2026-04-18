@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch events from customer app
-    const response = await fetch(`${CUSTOMER_APP_API}/api/events`, {
+    const response = await fetch(`${CUSTOMER_APP_API}/functions/getEventsForSync`, {
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',
