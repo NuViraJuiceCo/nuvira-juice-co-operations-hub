@@ -39,6 +39,20 @@ Deno.serve(async (req) => {
       status: 'active'
     });
 
+    // Also create CustomerLoyalty record for dashboard
+    await base44.asServiceRole.entities.CustomerLoyalty.create({
+      customer_email: email,
+      total_points: 100,
+      lifetime_points: 100,
+      redeemed_points: 0,
+      points_history: [{
+        amount: 100,
+        type: 'bonus',
+        description: 'Welcome bonus - Loyalty signup',
+        timestamp: new Date().toISOString()
+      }]
+    });
+
     console.log(`[LOYALTY-SIGNUP] New member created: ${email}`);
     return Response.json({ 
       status: 'success',
