@@ -56,6 +56,10 @@ export default function LoyaltyAdmin() {
     return customer.points_history?.filter(h => h.type === 'redeemed' && h.order_id) || [];
   };
 
+  const getOrderHistory = (customer) => {
+    return customer.order_history || [];
+  };
+
   const filtered = customers.filter(c =>
     !search || c.customer_email.toLowerCase().includes(search.toLowerCase())
   );
@@ -291,6 +295,40 @@ export default function LoyaltyAdmin() {
 
                   {availableRewards.length === 0 && redemptions.length === 0 && (
                     <p className="text-sm text-muted-foreground italic">No rewards unlocked or redeemed yet</p>
+                  )}
+
+                  {/* Order History */}
+                  {getOrderHistory(customer).length > 0 && (
+                    <div>
+                      <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+                        📦 Order History ({getOrderHistory(customer).length})
+                      </p>
+                      <div className="space-y-2">
+                        {getOrderHistory(customer).map((order, idx) => (
+                          <div key={idx} className="text-xs p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                            <div className="flex justify-between items-start mb-1">
+                              <span className="font-semibold text-blue-700 dark:text-blue-400">{order.order_number}</span>
+                              <span className="text-muted-foreground text-[11px]">{moment(order.order_date).format('MMM D, YYYY')}</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-[11px] mt-2">
+                              <div>
+                                <span className="text-muted-foreground">Total:</span>
+                                <p className="font-semibold">${order.total_price?.toFixed(2)}</p>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Items:</span>
+                                <p className="font-semibold">{order.items_count}</p>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Pts Earned:</span>
+                                <p className="font-semibold text-primary">+{order.points_earned || 0}</p>
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-1.5">Status: {order.status}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </CardContent>
               </Card>

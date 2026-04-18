@@ -55,6 +55,43 @@
         }
       },
       "description": "History of point transactions"
+    },
+    "order_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "description": "Order ID"
+          },
+          "order_number": {
+            "type": "string",
+            "description": "Order display number (e.g., #1001)"
+          },
+          "total_price": {
+            "type": "number",
+            "description": "Order total"
+          },
+          "items_count": {
+            "type": "number",
+            "description": "Number of items in order"
+          },
+          "status": {
+            "type": "string",
+            "description": "Order status"
+          },
+          "order_date": {
+            "type": "string",
+            "description": "When order was placed"
+          },
+          "points_earned": {
+            "type": "number",
+            "description": "Points earned from this order"
+          }
+        }
+      },
+      "description": "History of member orders"
     }
   },
   "required": [
