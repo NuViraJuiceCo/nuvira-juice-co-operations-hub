@@ -1,13 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+const CUSTOMER_APP_API = Deno.env.get('CUSTOMER_APP_API_URL');
+const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
+
 Deno.serve(async (req) => {
   try {
     // Validate authorization
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.replace('Bearer ', '');
-    const secret = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 
-    if (!token || token !== secret) {
+    if (!token || token !== SYNC_SECRET) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -23,7 +25,7 @@ Deno.serve(async (req) => {
     const response = await fetch(`${CUSTOMER_APP_API}/functions/getOrderUpdatesForSync`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${secret}`,
+        'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ since_timestamp, order_ids }),
