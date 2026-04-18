@@ -11,56 +11,54 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse request body
-    const body = await req.json();
-    const { since_timestamp, order_ids, production_status, fulfillment_status } = body;
-
     const base44 = createClientFromRequest(req);
+    const body = await req.json();
+    const { since_timestamp, order_ids } = body;
 
-    // Fetch orders based on filters
-    let orders = [];
-    if (order_ids && order_ids.length > 0) {
-      // Fetch specific orders
-      for (const orderId of order_ids) {
-        const result = await base44.entities.ShopifyOrder.filter({ shopify_order_id: orderId });
-        orders = orders.concat(result);
+    if (!CUSTOMER_APP_API) {
+      return Response.json({ error: 'CUSTOMER_APP_API_URL not set' }, { status: 500 });
+    }
+
+    // Fetch order updates from customer app
+    const response = await fetch(`${CUSTOMER_APP_API}/functions/getOrderUpdatesForSync`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${secret}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ since_timestamp, order_ids }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Customer app responded ${response.status}: ${text}`);
+    }
+
+    const { orders: customerOrders } = await response.json();
+
+    if (!Array.isArray(customerOrders)) {
+      return Response.json({ error: 'Invalid response from customer app' }, { status: 500 });
+    }
+
+    // Sync order updates to hub database
+    for (const orderData of customerOrders) {
+      const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({ base44_order_id: orderData.id });
+      if (existing?.length > 0) {
+        const hubPayload = {
+          production_status: orderData.production_status || 'new',
+          fulfillment_status: orderData.fulfillment_status || 'order_received',
+          assigned_delivery_date: orderData.assigned_delivery_date,
+          sync_status: 'synced',
+          last_sync_at: new Date().toISOString(),
+        };
+        await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, hubPayload);
       }
-    } else {
-      // Fetch all orders with optional timestamp filter
-      const allOrders = await base44.entities.ShopifyOrder.list('-updated_date', 500);
-      if (since_timestamp) {
-        const sinceTime = new Date(since_timestamp);
-        orders = allOrders.filter(o => new Date(o.updated_date) >= sinceTime);
-      } else {
-        orders = allOrders;
-      }
     }
 
-    // Apply status filters (support both single string and array)
-    if (production_status) {
-      const statuses = Array.isArray(production_status) ? production_status : [production_status];
-      orders = orders.filter(o => statuses.includes(o.production_status));
-    }
-    if (fulfillment_status) {
-      const statuses = Array.isArray(fulfillment_status) ? fulfillment_status : [fulfillment_status];
-      orders = orders.filter(o => statuses.includes(o.fulfillment_status));
-    }
-
-    // Format response with only essential sync fields
-    const updates = orders.map(order => ({
-      shopify_order_id: order.shopify_order_id,
-      shopify_order_number: order.shopify_order_number,
-      production_status: order.production_status,
-      fulfillment_status: order.fulfillment_status,
-      assigned_delivery_date: order.assigned_delivery_date,
-      updated_at: order.updated_date,
-      sync_status: order.sync_status,
-    }));
-
+    console.log(`[PULL-ORDER-UPDATES] Synced ${customerOrders.length} order updates from customer app`);
     return Response.json({
       status: 'success',
-      count: updates.length,
-      updates: updates,
+      count: customerOrders.length,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
