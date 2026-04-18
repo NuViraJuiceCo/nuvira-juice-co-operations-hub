@@ -13,6 +13,8 @@ export default function LoyaltyAdmin() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const [selectedCustomers, setSelectedCustomers] = useState(new Set());
+  const [processingBonus, setProcessingBonus] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -73,6 +75,46 @@ export default function LoyaltyAdmin() {
     a.click();
   };
 
+  const addBonusToSelected = async () => {
+    if (selectedCustomers.size === 0) return;
+    setProcessingBonus(true);
+    try {
+      const emails = Array.from(selectedCustomers);
+      const res = await base44.functions.invoke('addSignupBonusToMembers', { customer_emails: emails });
+      if (res.data.status === 'success') {
+        await loadData();
+        setSelectedCustomers(new Set());
+      }
+    } catch (error) {
+      console.error('Bonus error:', error);
+    }
+    setProcessingBonus(false);
+  };
+
+  const deleteSelected = async () => {
+    if (selectedCustomers.size === 0) return;
+    if (!confirm(`Delete ${selectedCustomers.size} member(s)?`)) return;
+    try {
+      for (const customerId of selectedCustomers) {
+        await base44.entities.CustomerLoyalty.delete(customerId);
+      }
+      await loadData();
+      setSelectedCustomers(new Set());
+    } catch (error) {
+      console.error('Delete error:', error);
+    }
+  };
+
+  const toggleCustomer = (customerId) => {
+    const updated = new Set(selectedCustomers);
+    if (updated.has(customerId)) {
+      updated.delete(customerId);
+    } else {
+      updated.add(customerId);
+    }
+    setSelectedCustomers(updated);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -89,6 +131,16 @@ export default function LoyaltyAdmin() {
           <p className="text-muted-foreground mt-1">{customers.length} customers tracked</p>
         </div>
         <div className="flex gap-2">
+          {selectedCustomers.size > 0 && (
+            <>
+              <Button onClick={addBonusToSelected} disabled={processingBonus} className="gap-2 bg-green-600 hover:bg-green-700">
+                +100 pts ({selectedCustomers.size})
+              </Button>
+              <Button onClick={deleteSelected} variant="destructive" className="gap-2">
+                Delete ({selectedCustomers.size})
+              </Button>
+            </>
+          )}
           <Button variant="outline" onClick={syncFromCustomerApp} disabled={syncing} className="gap-2">
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
             Sync Now
@@ -150,15 +202,31 @@ export default function LoyaltyAdmin() {
           filtered.map(customer => {
             const availableRewards = getAvailableRewards(customer);
             const redemptions = getRedemptionsByOrder(customer);
+            const isSelected = selectedCustomers.has(customer.id);
             return (
-              <Card key={customer.id} className="hover:shadow-md transition-shadow">
+              <Card 
+                key={customer.id} 
+                className={`hover:shadow-md transition-shadow cursor-pointer ${isSelected ? 'ring-2 ring-primary' : ''}`}
+                onClick={() => toggleCustomer(customer.id)}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">{customer.customer_email}</CardTitle>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Member since {moment(customer.created_date).format('MMM D, YYYY')}
-                      </p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <input 
+                          type="checkbox" 
+                          checked={isSelected}
+                          onChange={() => {}}
+                          className="w-4 h-4 cursor-pointer"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div>
+                          <CardTitle className="text-lg">{customer.customer_email}</CardTitle>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Member since {moment(customer.created_date).format('MMM D, YYYY')}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                     <Badge variant="outline" className="text-lg font-bold">
                       {customer.total_points} pts
