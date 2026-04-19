@@ -3,19 +3,21 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    
-    // Get the latest order
+
+    // Require admin auth
+    const user = await base44.auth.me();
+    if (!user || user.role !== 'admin') {
+      return Response.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
     const orders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 1);
-    
+
     if (!orders || orders.length === 0) {
-      return Response.json({ 
-        success: false, 
-        message: 'No orders found in the hub' 
-      });
+      return Response.json({ success: false, message: 'No orders found in the hub' });
     }
 
     const latestOrder = orders[0];
-    
+
     return Response.json({
       success: true,
       order: {
@@ -28,15 +30,15 @@ Deno.serve(async (req) => {
         fulfillment_status: latestOrder.fulfillment_status,
         last_sync_at: latestOrder.last_sync_at,
         total: latestOrder.total_price,
-        items_count: latestOrder.line_items?.length || 0
+        items_count: latestOrder.line_items?.length || 0,
       },
       sync_check: {
         was_synced: latestOrder.sync_status === 'synced',
         sync_timestamp: latestOrder.last_sync_at,
-        hours_since_sync: latestOrder.last_sync_at ? 
-          Math.round((Date.now() - new Date(latestOrder.last_sync_at).getTime()) / (1000 * 60 * 60)) : 
-          null
-      }
+        hours_since_sync: latestOrder.last_sync_at
+          ? Math.round((Date.now() - new Date(latestOrder.last_sync_at).getTime()) / (1000 * 60 * 60))
+          : null,
+      },
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

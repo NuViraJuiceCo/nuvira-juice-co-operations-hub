@@ -25,7 +25,7 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       const [orderData, batchData, inventoryData] = await Promise.all([
-        base44.entities.Order.list("-created_date", 50),
+        base44.entities.ShopifyOrder.list("-created_date", 50),
         base44.entities.ProductionBatch.list("-production_date", 50),
         base44.entities.InventoryItem.list("-updated_date", 100),
       ]);
@@ -45,22 +45,22 @@ export default function Dashboard() {
     );
   }
 
-  const newOrders = orders.filter((o) => o.status === "New").length;
-  const inProduction = orders.filter((o) => o.status === "In Production").length;
-  const toFulfill = orders.filter((o) => !["Completed", "Cancelled"].includes(o.status)).length;
+  const newOrders = orders.filter((o) => o.production_status === "new").length;
+  const inProduction = orders.filter((o) => o.production_status === "in_production").length;
+  const toFulfill = orders.filter((o) => !["fulfilled", "canceled", "refunded"].includes(o.production_status)).length;
   const lowStock = batches.filter((b) => b.status === "Awaiting Ingredients").length;
-  const revenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const revenue = orders.reduce((sum, o) => sum + (o.total_price || 0), 0);
 
   const handleRefresh = async () => {
     const [orderData, batchData, inventoryData] = await Promise.all([
-      base44.entities.Order.list("-created_date", 50),
-      base44.entities.ProductionBatch.list("-production_date", 50),
-      base44.entities.InventoryItem.list("-updated_date", 100),
-    ]);
-    setOrders(orderData);
-    setBatches(batchData);
-    setItems(inventoryData);
-  };
+      base44.entities.ShopifyOrder.list("-created_date", 50),
+        base44.entities.ProductionBatch.list("-production_date", 50),
+        base44.entities.InventoryItem.list("-updated_date", 100),
+      ]);
+      setOrders(orderData);
+      setBatches(batchData);
+      setItems(inventoryData);
+      };
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
