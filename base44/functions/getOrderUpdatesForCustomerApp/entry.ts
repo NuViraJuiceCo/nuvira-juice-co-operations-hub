@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
 
     const base44 = createClientFromRequest(req);
 
-    // Fetch all active orders (exclude fully terminal ones with no base44_order_id)
+    // Fetch recently updated orders
     const orders = await base44.asServiceRole.entities.ShopifyOrder.list('-updated_date', 200);
 
     const result = [];
@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       // Skip orders with no base44_order_id (customer app can't match them)
       if (!order.base44_order_id) continue;
 
-      // Skip canceled/refunded — customer app doesn't need updates on these
+      // Skip canceled/refunded
       const customerStatus = STATUS_MAP[order.production_status];
       if (!customerStatus) continue;
 
@@ -65,11 +65,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log(`[ORDERS-UPDATES] Returning ${result.length} order status updates`);
+    console.log(`[GET-ORDER-UPDATES] Returning ${result.length} order status updates`);
     return Response.json({ orders: result });
 
   } catch (error) {
-    console.error('[ORDERS-UPDATES] Error:', error.message);
+    console.error('[GET-ORDER-UPDATES] Error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
