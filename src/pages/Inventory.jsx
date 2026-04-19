@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Package, AlertTriangle, TrendingDown, Plus, Search, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useQueryClient } from "@tanstack/react-query";
+
 import StatCard from "../components/shared/StatCard";
 import BulkActionsBar from "../components/shared/BulkActionsBar";
 import ColumnSorter from "../components/shared/ColumnSorter";

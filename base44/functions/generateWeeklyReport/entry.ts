@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
 
   // Fetch all data in parallel
   const [orders, batches, fulfillment] = await Promise.all([
-    base44.asServiceRole.entities.Order.list('-created_date', 500),
+    base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500),
     base44.asServiceRole.entities.ProductionBatch.list('-production_date', 200),
     base44.asServiceRole.entities.FulfillmentTask.list('-scheduled_date', 200),
   ]);
@@ -36,23 +36,23 @@ Deno.serve(async (req) => {
   const rangeBatches = batches.filter(b => inRange(b.production_date || ''));
 
   // --- Financial Metrics ---
-  const totalRevenue = rangeOrders.reduce((s, o) => s + (o.total || 0), 0);
+  const totalRevenue = rangeOrders.reduce((s, o) => s + (o.total_price || 0), 0);
   const totalOrders = rangeOrders.length;
   const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-  const paidOrders = rangeOrders.filter(o => o.payment_status === 'Paid');
-  const pendingPayments = rangeOrders.filter(o => o.payment_status === 'Pending');
+  const paidOrders = rangeOrders.filter(o => o.payment_status === 'paid');
+  const pendingPayments = rangeOrders.filter(o => o.payment_status === 'pending');
 
   const ordersByChannel = {};
   rangeOrders.forEach(o => {
-    const ch = o.channel || 'Other';
+    const ch = o.source_channel || 'Other';
     if (!ordersByChannel[ch]) ordersByChannel[ch] = { count: 0, revenue: 0 };
     ordersByChannel[ch].count++;
-    ordersByChannel[ch].revenue += o.total || 0;
+    ordersByChannel[ch].revenue += o.total_price || 0;
   });
 
   const ordersByStatus = {};
   rangeOrders.forEach(o => {
-    ordersByStatus[o.status] = (ordersByStatus[o.status] || 0) + 1;
+    ordersByStatus[o.production_status] = (ordersByStatus[o.production_status] || 0) + 1;
   });
 
   // Daily revenue trend
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   rangeOrders.forEach(o => {
     const d = (o.created_date || '').substring(0, 10);
     if (!d) return;
-    dailyRevenue[d] = (dailyRevenue[d] || 0) + (o.total || 0);
+    dailyRevenue[d] = (dailyRevenue[d] || 0) + (o.total_price || 0);
   });
 
   // --- Operational Metrics ---

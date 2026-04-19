@@ -9,7 +9,7 @@ export default function RevenueChart({ orders }) {
 
   const data = Object.entries(grouped).map(([date, dateOrders]) => ({
     date,
-    revenue: _.sumBy(dateOrders, "total"),
+    revenue: _.sumBy(dateOrders, "total_price"),
   }));
 
   return (

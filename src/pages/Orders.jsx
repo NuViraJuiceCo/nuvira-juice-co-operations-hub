@@ -197,10 +197,7 @@ export default function Orders() {
           </button>
         </div>
       )}
-      <BulkActionsBar
-        selectedCount={selected.size}
-        onClearSelection={() => setSelected(new Set())}
-      />
+
 
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">

@@ -45,7 +45,7 @@ export default function DashboardInsights({ orders }) {
   const last7 = Array.from({ length: 7 }, (_, i) => {
     const day = moment().subtract(6 - i, "days");
     const dayOrders = orders.filter(o => moment(o.created_date).isSame(day, "day"));
-    return { label: day.format("ddd"), v: dayOrders.reduce((s, o) => s + (o.total || 0), 0) };
+    return { label: day.format("ddd"), v: dayOrders.reduce((s, o) => s + (o.total_price || 0), 0) };
   });
 
   // Last 7 days vs prior 7 days revenue
@@ -54,7 +54,7 @@ export default function DashboardInsights({ orders }) {
       const d = moment(o.created_date);
       return d.isBefore(moment().subtract(7, "days")) && d.isAfter(moment().subtract(14, "days"));
     })
-    .reduce((s, o) => s + (o.total || 0), 0);
+    .reduce((s, o) => s + (o.total_price || 0), 0);
   const curr7Revenue = last7.reduce((s, d) => s + d.v, 0);
   const revTrend = prev7Revenue > 0 ? ((curr7Revenue - prev7Revenue) / prev7Revenue) * 100 : 0;
 
@@ -67,13 +67,13 @@ export default function DashboardInsights({ orders }) {
   const volTrend = prev7Count > 0 ? ((last7Count - prev7Count) / prev7Count) * 100 : 0;
 
   // Channel breakdown
-  const channelGroups = _.groupBy(orders, "channel");
+  const channelGroups = _.groupBy(orders, "source_channel");
   const topChannel = Object.entries(channelGroups).sort((a, b) => b[1].length - a[1].length)[0];
 
   // Avg order value
-  const completedOrders = orders.filter(o => o.total > 0);
+  const completedOrders = orders.filter(o => o.total_price > 0);
   const avgOrderValue = completedOrders.length > 0
-    ? completedOrders.reduce((s, o) => s + o.total, 0) / completedOrders.length
+    ? completedOrders.reduce((s, o) => s + o.total_price, 0) / completedOrders.length
     : 0;
 
   return (

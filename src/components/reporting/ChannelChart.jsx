@@ -10,11 +10,11 @@ const COLORS = [
 ];
 
 export default function ChannelChart({ orders }) {
-  const grouped = _.groupBy(orders, "channel");
+  const grouped = _.groupBy(orders, "source_channel");
   const data = Object.entries(grouped)
     .map(([channel, channelOrders]) => ({
       name: channel,
-      value: Math.round(_.sumBy(channelOrders, "total")),
+      value: Math.round(_.sumBy(channelOrders, "total_price")),
     }))
     .sort((a, b) => b.value - a.value);
 
