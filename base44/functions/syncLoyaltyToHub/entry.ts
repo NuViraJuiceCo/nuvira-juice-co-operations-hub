@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     }
 
     // Send to customer app
-    const response = await fetch(`${CUSTOMER_APP_API}/functions/receivePointsSync`, {
+    const response = await fetch(`${CUSTOMER_APP_API}/receivePointsSync`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
