@@ -16,9 +16,6 @@ Deno.serve(async (req) => {
     }
 
     const base44 = createClientFromRequest(req);
-
-    // Parse query params
-    const url = new URL(req.url);
     const statusFilter = url.searchParams.get('status');
     const sinceFilter = url.searchParams.get('since');
 
