@@ -33,7 +33,7 @@ export default function ComplianceLogs() {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const response = await base44.functions.invoke('generateComplianceAudit', {
+      const response = await base44.functions.invoke('generateAuditPacket', {
         start_date: startDate,
         end_date: endDate,
         log_types: logTypeFilter === 'all' ? null : [logTypeFilter]

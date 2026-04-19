@@ -96,7 +96,7 @@ export default function Orders() {
   const handleDelete = async (id) => {
     setDeleting(id);
     try {
-      await base44.entities.Order.delete(id);
+      await base44.entities.ShopifyOrder.delete(id);
       setOrders(orders.filter(o => o.id !== id));
     } finally {
       setDeleting(null);
@@ -107,7 +107,7 @@ export default function Orders() {
     if (!window.confirm(`Delete ${selected.size} order(s)?`)) return;
     setDeleting(true);
     try {
-      await Promise.all(Array.from(selected).map(id => base44.entities.Order.delete(id)));
+      await Promise.all(Array.from(selected).map(id => base44.entities.ShopifyOrder.delete(id)));
       setOrders(orders.filter(o => !selected.has(o.id)));
       setSelected(new Set());
     } finally {

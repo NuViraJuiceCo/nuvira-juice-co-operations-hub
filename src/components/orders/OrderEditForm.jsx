@@ -6,11 +6,12 @@ import { Input } from "@/components/ui/input";
 
 export default function OrderEditForm({ order, onClose, onSave }) {
   const [formData, setFormData] = useState({
-    status: order.status,
+    production_status: order.production_status,
     payment_status: order.payment_status,
-    fulfillment_type: order.fulfillment_type,
-    fulfillment_window: order.fulfillment_window || "",
-    notes: order.notes || "",
+    fulfillment_method: order.fulfillment_method,
+    assigned_delivery_date: order.assigned_delivery_date || "",
+    customer_notes: order.customer_notes || "",
+    internal_notes: order.internal_notes || "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -26,7 +27,7 @@ export default function OrderEditForm({ order, onClose, onSave }) {
     setError(null);
 
     try {
-      await base44.entities.Order.update(order.id, formData);
+      await base44.entities.ShopifyOrder.update(order.id, formData);
       await onSave();
     } catch (err) {
       setError(err.message);
@@ -50,28 +51,35 @@ export default function OrderEditForm({ order, onClose, onSave }) {
 
           <div className="space-y-1 text-sm">
             <p className="text-muted-foreground">Order ID</p>
-            <p className="font-semibold text-foreground">{order.order_id}</p>
+            <p className="font-semibold text-foreground">{order.shopify_order_number}</p>
           </div>
 
           <div className="space-y-1 text-sm">
             <p className="text-muted-foreground">Customer</p>
-            <p className="font-semibold text-foreground">{order.customer_name}</p>
+            <p className="font-semibold text-foreground">{order.customer_email}</p>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground">Status</label>
+            <label className="text-sm font-medium text-foreground">Production Status</label>
             <select
-              name="status"
-              value={formData.status}
+              name="production_status"
+              value={formData.production_status}
               onChange={handleChange}
               className="mt-1 w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
             >
-              <option>New</option>
-              <option>Confirmed</option>
-              <option>Scheduled for Production</option>
-              <option>In Production</option>
-              <option>Completed</option>
-              <option>Cancelled</option>
+              <option value="new">New</option>
+              <option value="awaiting_production">Awaiting Production</option>
+              <option value="in_production">In Production</option>
+              <option value="bottled">Bottled</option>
+              <option value="labeled">Labeled</option>
+              <option value="qc_checked">QC Checked</option>
+              <option value="packed">Packed</option>
+              <option value="in_cold_storage">In Cold Storage</option>
+              <option value="assigned_for_pickup">Assigned for Pickup</option>
+              <option value="assigned_for_delivery">Assigned for Delivery</option>
+              <option value="fulfilled">Fulfilled</option>
+              <option value="canceled">Canceled</option>
+              <option value="refunded">Refunded</option>
             </select>
           </div>
 
@@ -83,47 +91,60 @@ export default function OrderEditForm({ order, onClose, onSave }) {
               onChange={handleChange}
               className="mt-1 w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
             >
-              <option>Pending</option>
-              <option>Paid</option>
-              <option>Refunded</option>
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="authorized">Authorized</option>
+              <option value="refunded">Refunded</option>
             </select>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground">Fulfillment Type</label>
+            <label className="text-sm font-medium text-foreground">Fulfillment Method</label>
             <select
-              name="fulfillment_type"
-              value={formData.fulfillment_type}
+              name="fulfillment_method"
+              value={formData.fulfillment_method}
               onChange={handleChange}
               className="mt-1 w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
             >
-              <option>Delivery</option>
-              <option>Pickup</option>
-              <option>Wholesale</option>
-              <option>Event</option>
+              <option value="delivery">Delivery</option>
+              <option value="pickup">Pickup</option>
+              <option value="shipping">Shipping</option>
+              <option value="pos">POS</option>
             </select>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground">Fulfillment Window</label>
+            <label className="text-sm font-medium text-foreground">Assigned Delivery Date</label>
             <Input
-              name="fulfillment_window"
-              value={formData.fulfillment_window}
+              type="date"
+              name="assigned_delivery_date"
+              value={formData.assigned_delivery_date}
               onChange={handleChange}
-              placeholder="e.g. 10am-12pm"
               className="mt-1"
             />
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground">Notes</label>
+            <label className="text-sm font-medium text-foreground">Customer Notes</label>
             <textarea
-              name="notes"
-              value={formData.notes}
+              name="customer_notes"
+              value={formData.customer_notes}
               onChange={handleChange}
-              placeholder="Add any special instructions or notes..."
+              placeholder="Customer-facing notes..."
               className="mt-1 w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
-              rows="3"
+              rows="2"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-foreground">Internal Notes</label>
+            <textarea
+              name="internal_notes"
+              value={formData.internal_notes}
+              onChange={handleChange}
+              placeholder="Internal operations notes..."
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+              rows="2"
             />
           </div>
 

@@ -3,13 +3,13 @@ import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recha
 
 export default function ActiveOrderStatusWidget({ orders }) {
   const statusCounts = {
-    New: orders.filter(o => o.status === "New").length,
-    Confirmed: orders.filter(o => o.status === "Confirmed").length,
-    "In Production": orders.filter(o => o.status === "In Production").length,
-    Completed: orders.filter(o => o.status === "Completed").length,
+    New: orders.filter(o => o.production_status === "new").length,
+    "In Production": orders.filter(o => o.production_status === "in_production").length,
+    Packed: orders.filter(o => o.production_status === "packed").length,
+    Fulfilled: orders.filter(o => o.production_status === "fulfilled").length,
   };
 
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const totalRevenue = orders.reduce((sum, o) => sum + (o.total_price || 0), 0);
   const avgOrderValue = orders.length > 0 ? (totalRevenue / orders.length).toFixed(2) : 0;
 
   const chartData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));

@@ -17,7 +17,7 @@ export default function Reporting() {
 
   useEffect(() => {
     async function load() {
-      const data = await base44.entities.Order.list("-created_date", 500);
+      const data = await base44.entities.ShopifyOrder.list("-created_date", 500);
       setOrders(data);
       setLoading(false);
     }
@@ -25,15 +25,15 @@ export default function Reporting() {
   }, []);
 
   const filtered = orders.filter((o) => {
-    const matchChannel = channelFilter === "all" || o.channel === channelFilter;
+    const matchChannel = channelFilter === "all" || o.source_channel === channelFilter;
     const orderDate = moment(o.created_date).format("YYYY-MM-DD");
     const matchDate = orderDate >= dateFrom && orderDate <= dateTo;
     return matchChannel && matchDate;
   });
 
-  const totalRevenue = filtered.reduce((s, o) => s + (o.total || 0), 0);
-  const totalTax = filtered.reduce((s, o) => s + (o.tax || 0), 0);
-  const totalDiscount = filtered.reduce((s, o) => s + (o.discount || 0), 0);
+  const totalRevenue = filtered.reduce((s, o) => s + (o.total_price || 0), 0);
+  const totalTax = filtered.reduce((s, o) => s + (o.subtotal ? (o.total_price - o.subtotal) : 0), 0);
+  const totalDiscount = filtered.reduce((s, o) => s + 0, 0);
   const avgOrder = filtered.length > 0 ? totalRevenue / filtered.length : 0;
 
   const exportCSV = () => {
@@ -99,11 +99,12 @@ export default function Reporting() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Channels</SelectItem>
-            <SelectItem value="Shopify Web Store">Shopify Web Store</SelectItem>
-            <SelectItem value="Instagram">Instagram</SelectItem>
-            <SelectItem value="NuVira Juice App">NuVira Juice App</SelectItem>
-            <SelectItem value="Facebook">Facebook</SelectItem>
-            <SelectItem value="Event Order">Event Order</SelectItem>
+            <SelectItem value="online">Online</SelectItem>
+            <SelectItem value="pos">POS</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="subscription">Subscription</SelectItem>
+            <SelectItem value="wholesale">Wholesale</SelectItem>
+            <SelectItem value="event">Event</SelectItem>
           </SelectContent>
         </Select>
       </div>

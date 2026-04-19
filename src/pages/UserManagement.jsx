@@ -52,7 +52,7 @@ export default function UserManagement() {
           className="gap-2 self-start sm:self-auto"
           onClick={() => {
             const email = prompt("Enter user email to invite:");
-            if (email) base44.users.inviteUser(email, "admin").then(() => alert("Invite sent!"));
+            if (email) base44.users.inviteUser(email, "user").then(() => alert("Invite sent!"));
           }}
         >
           <UserPlus className="h-4 w-4" /> Invite User

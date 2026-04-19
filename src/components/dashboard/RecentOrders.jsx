@@ -25,13 +25,13 @@ export default function RecentOrders({ orders }) {
             {orders.map((order) => (
               <tr key={order.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                 <td className="px-5 py-3.5">
-                  <span className="text-sm font-medium text-primary">{order.order_id}</span>
+                  <span className="text-sm font-medium text-primary">{order.shopify_order_number}</span>
                 </td>
-                <td className="px-5 py-3.5 text-sm text-foreground">{order.customer_name}</td>
-                <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.channel}</td>
-                <td className="px-5 py-3.5"><StatusBadge status={order.status} /></td>
+                <td className="px-5 py-3.5 text-sm text-foreground">{order.customer_email}</td>
+                <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.source_channel}</td>
+                <td className="px-5 py-3.5"><StatusBadge status={order.production_status} /></td>
                 <td className="px-5 py-3.5 text-sm font-medium text-foreground text-right">
-                  ${order.total?.toFixed(2)}
+                  ${order.total_price?.toFixed(2)}
                 </td>
               </tr>
             ))}
