@@ -1,0 +1,58 @@
+{
+  "name": "NuViraCredit",
+  "type": "object",
+  "properties": {
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email address",
+      "required": true
+    },
+    "balance": {
+      "type": "number",
+      "default": 0,
+      "description": "Current credit balance"
+    },
+    "lifetime_issued": {
+      "type": "number",
+      "default": 0,
+      "description": "Total credit issued lifetime"
+    },
+    "lifetime_used": {
+      "type": "number",
+      "default": 0,
+      "description": "Total credit used lifetime"
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "issued",
+              "used",
+              "adjustment"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Transaction history"
+    }
+  },
+  "required": [
+    "customer_email"
+  ]
+}

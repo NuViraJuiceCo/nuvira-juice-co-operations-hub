@@ -1,0 +1,122 @@
+{
+  "name": "BagReturn",
+  "type": "object",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "Linked Order ID"
+    },
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email address",
+      "required": true
+    },
+    "small_bags_requested": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of small bags requested"
+    },
+    "tote_bags_requested": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of tote bags requested"
+    },
+    "small_bags_accepted": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of small bags accepted"
+    },
+    "tote_bags_accepted": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of tote bags accepted"
+    },
+    "small_bag_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "not_eligible",
+        "not_found"
+      ],
+      "description": "Status of small bags"
+    },
+    "tote_bag_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "not_eligible",
+        "not_found"
+      ],
+      "description": "Status of tote bags"
+    },
+    "rejection_reason": {
+      "type": "string",
+      "enum": [
+        "dirty_stained",
+        "odor",
+        "damaged",
+        "customer_not_home",
+        "other"
+      ],
+      "description": "Reason for rejection if applicable"
+    },
+    "rejection_notes": {
+      "type": "string",
+      "description": "Additional notes on rejection"
+    },
+    "verification_status": {
+      "type": "string",
+      "enum": [
+        "requested",
+        "verified",
+        "partially_verified",
+        "not_found",
+        "not_eligible",
+        "unable_to_collect"
+      ],
+      "default": "requested",
+      "description": "Verification status"
+    },
+    "credit_issued": {
+      "type": "number",
+      "default": 0,
+      "description": "NuVira credit amount issued ($1 per small bag, $2 per tote bag)"
+    },
+    "credit_applied": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether credit has been applied to customer account"
+    },
+    "verified_by": {
+      "type": "string",
+      "description": "Driver email who verified the return"
+    },
+    "verified_at": {
+      "type": "string",
+      "description": "ISO timestamp when verified"
+    },
+    "photo_url": {
+      "type": "string",
+      "description": "URL of verification photo"
+    },
+    "driver_notes": {
+      "type": "string",
+      "description": "Driver notes during verification"
+    },
+    "sync_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "synced",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "Sync status to customer app"
+    }
+  },
+  "required": [
+    "customer_email"
+  ]
+}
