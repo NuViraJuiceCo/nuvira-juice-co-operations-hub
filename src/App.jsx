@@ -22,7 +22,7 @@ import Events from './pages/Events';
 import Partnerships from './pages/Partnerships';
 import ProdScheduler from './pages/ProdScheduler';
 import PurchaseOrders from './pages/PurchaseOrders';
-import RouteOptimizer from './pages/RouteOptimizer';
+
 import UserManagement from './pages/UserManagement';
 import AuditLogs from './pages/AuditLogs';
 import ReportScheduler from './pages/ReportScheduler';
@@ -76,7 +76,7 @@ const AuthenticatedApp = () => {
         <Route path="/partnerships" element={<PageTransition><Partnerships /></PageTransition>} />
         <Route path="/prod-scheduler" element={<PageTransition><ProdScheduler /></PageTransition>} />
         <Route path="/purchase-orders" element={<PageTransition><PurchaseOrders /></PageTransition>} />
-        <Route path="/route-optimizer" element={<PageTransition><RouteOptimizer /></PageTransition>} />
+        <Route path="/route-optimizer" element={<PageTransition><DriverPortal /></PageTransition>} />
         <Route path="/users" element={<PageTransition><UserManagement /></PageTransition>} />
         <Route path="/audit-logs" element={<PageTransition><AuditLogs /></PageTransition>} />
         <Route path="/report-scheduler" element={<PageTransition><ReportScheduler /></PageTransition>} />
@@ -85,7 +85,7 @@ const AuthenticatedApp = () => {
         <Route path="/compliance-center" element={<PageTransition><ComplianceCenter /></PageTransition>} />
         <Route path="/loyalty-admin" element={<PageTransition><LoyaltyAdmin /></PageTransition>} />
         <Route path="/operations-manager" element={<PageTransition><OperationsManager /></PageTransition>} />
-        <Route path="/driver-portal" element={<PageTransition><DriverPortal /></PageTransition>} />
+
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<PageNotFound />} />
