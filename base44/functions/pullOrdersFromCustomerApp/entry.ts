@@ -12,18 +12,14 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
-    const syncDate = date || new Date().toISOString().split('T')[0];
-
-    // Fetch orders from customer app
+    // Fetch orders from customer app (all orders if no date specified)
     const response = await fetch(`${CUSTOMER_APP_API}/functions/getOrdersForSync`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        date: syncDate,
-      }),
+      body: JSON.stringify(date ? { date } : {}),
     });
 
     if (!response.ok) {
