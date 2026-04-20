@@ -95,7 +95,7 @@ export default function DriverPortal() {
     setSyncing(true);
     try {
       await base44.functions.invoke('pullOrdersFromCustomerApp', {});
-      await queryClient.invalidateQueries({ queryKey: ['driver-queued-orders'] });
+      await queryClient.refetchQueries({ queryKey: ['driver-queued-orders'] });
       toast.success('Orders synced from customer app');
     } catch (error) {
       console.error('Sync error:', error);
