@@ -17,23 +17,53 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
-    // Fetch orders from customer app
-    const response = await fetch(`${CUSTOMER_APP_API}/functions/getOrdersForSync`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SYNC_SECRET}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(date ? { date } : {}),
-    });
+    // Fetch orders and bag returns from customer app
+    const [ordersRes, returnsRes] = await Promise.all([
+      fetch(`${CUSTOMER_APP_API}/functions/getOrdersForSync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SYNC_SECRET}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(date ? { date } : {}),
+      }),
+      fetch(`${CUSTOMER_APP_API}/functions/getBagReturnsForSync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SYNC_SECRET}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(date ? { date } : {}),
+      }),
+    ]);
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Customer app error ${response.status}: ${text.slice(0, 200)}`);
+    if (!ordersRes.ok) {
+      const text = await ordersRes.text();
+      throw new Error(`Customer app error ${ordersRes.status}: ${text.slice(0, 200)}`);
     }
 
-    const data = await response.json();
-    const orders = data.orders || [];
+    const ordersData = await ordersRes.json();
+    const orders = ordersData.orders || [];
+
+    // Sync bag returns if available
+    if (returnsRes.ok) {
+      const returnsData = await returnsRes.json();
+      const bagReturns = returnsData.returns || [];
+      
+      for (const ret of bagReturns) {
+        try {
+          const existing = await base44.asServiceRole.entities.BagReturn.filter({
+            customer_email: ret.customer_email,
+            order_id: ret.order_id,
+          });
+          if (!existing || existing.length === 0) {
+            await base44.asServiceRole.entities.BagReturn.create(ret);
+          }
+        } catch (err) {
+          console.warn(`[OPTIMIZE-ROUTE] Failed to sync bag return:`, err.message);
+        }
+      }
+    }
 
     if (!Array.isArray(orders) || orders.length === 0) {
       return Response.json({ status: 'success', orders: [], optimized_orders: [] });
