@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
           channel: ord.channel || 'NuVira Juice App',
           status: ord.status || 'New',
           payment_status: ord.payment_status || 'Pending',
-          fulfillment_type: ord.fulfillment_type || 'Delivery',
+          fulfillment_type: (ord.fulfillment_type || 'delivery').toLowerCase(),
           fulfillment_window: ord.fulfillment_window || '',
           subtotal: ord.subtotal || 0,
           tax: ord.tax || 0,
