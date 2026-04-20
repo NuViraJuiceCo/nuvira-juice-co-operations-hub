@@ -46,23 +46,31 @@ Deno.serve(async (req) => {
     const orders = ordersData.orders || [];
 
     // Sync bag returns if available
-    if (returnsRes.ok) {
-      const returnsData = await returnsRes.json();
-      const bagReturns = returnsData.returns || [];
-      
-      for (const ret of bagReturns) {
-        try {
-          const existing = await base44.asServiceRole.entities.BagReturn.filter({
-            customer_email: ret.customer_email,
-            order_id: ret.order_id,
-          });
-          if (!existing || existing.length === 0) {
-            await base44.asServiceRole.entities.BagReturn.create(ret);
+    try {
+      if (returnsRes.ok) {
+        const returnsData = await returnsRes.json();
+        const bagReturns = returnsData.returns || [];
+        
+        for (const ret of bagReturns) {
+          try {
+            const existing = await base44.asServiceRole.entities.BagReturn.filter({
+              customer_email: ret.customer_email,
+              order_id: ret.order_id,
+            });
+            if (!existing || existing.length === 0) {
+              await base44.asServiceRole.entities.BagReturn.create(ret);
+            } else {
+              // Update existing with latest status
+              await base44.asServiceRole.entities.BagReturn.update(existing[0].id, ret);
+            }
+          } catch (err) {
+            console.warn(`[OPTIMIZE-ROUTE] Failed to sync bag return for ${ret.customer_email}:`, err.message);
           }
-        } catch (err) {
-          console.warn(`[OPTIMIZE-ROUTE] Failed to sync bag return:`, err.message);
         }
+        console.log(`[OPTIMIZE-ROUTE] Synced ${bagReturns.length} bag returns`);
       }
+    } catch (err) {
+      console.warn(`[OPTIMIZE-ROUTE] Bag returns sync failed:`, err.message);
     }
 
     if (!Array.isArray(orders) || orders.length === 0) {
