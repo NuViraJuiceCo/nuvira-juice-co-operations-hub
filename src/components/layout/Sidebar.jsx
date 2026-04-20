@@ -28,7 +28,7 @@ const navGroups = [
       { path: "/calendar", label: "Calendar", icon: CalendarDays },
       { path: "/prod-scheduler", label: "Prod. Scheduler", icon: ClipboardList },
       { path: "/purchase-orders", label: "Purchase Orders", icon: ShoppingBag },
-      { path: "/route-optimizer", label: "Route Optimizer", icon: Route },
+      { path: "/driver-portal", label: "Driver Portal", icon: Route },
     ],
   },
   {

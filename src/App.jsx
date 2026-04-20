@@ -76,7 +76,7 @@ const AuthenticatedApp = () => {
         <Route path="/partnerships" element={<PageTransition><Partnerships /></PageTransition>} />
         <Route path="/prod-scheduler" element={<PageTransition><ProdScheduler /></PageTransition>} />
         <Route path="/purchase-orders" element={<PageTransition><PurchaseOrders /></PageTransition>} />
-        <Route path="/route-optimizer" element={<PageTransition><DriverPortal /></PageTransition>} />
+        <Route path="/driver-portal" element={<PageTransition><DriverPortal /></PageTransition>} />
         <Route path="/users" element={<PageTransition><UserManagement /></PageTransition>} />
         <Route path="/audit-logs" element={<PageTransition><AuditLogs /></PageTransition>} />
         <Route path="/report-scheduler" element={<PageTransition><ReportScheduler /></PageTransition>} />
