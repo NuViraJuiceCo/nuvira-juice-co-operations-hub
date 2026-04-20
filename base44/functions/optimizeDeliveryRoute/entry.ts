@@ -46,10 +46,11 @@ Deno.serve(async (req) => {
     const orders = ordersData.orders || [];
 
     // Sync bag returns if available
-    try {
-      if (returnsRes.ok) {
+    if (returnsRes.ok) {
+      try {
         const returnsData = await returnsRes.json();
         const bagReturns = returnsData.returns || [];
+        console.log(`[OPTIMIZE-ROUTE] Fetched ${bagReturns.length} bag returns from customer app`);
         
         for (const ret of bagReturns) {
           try {
@@ -59,18 +60,20 @@ Deno.serve(async (req) => {
             });
             if (!existing || existing.length === 0) {
               await base44.asServiceRole.entities.BagReturn.create(ret);
+              console.log(`[OPTIMIZE-ROUTE] Created bag return for ${ret.customer_email}`);
             } else {
-              // Update existing with latest status
               await base44.asServiceRole.entities.BagReturn.update(existing[0].id, ret);
+              console.log(`[OPTIMIZE-ROUTE] Updated bag return for ${ret.customer_email}`);
             }
           } catch (err) {
-            console.warn(`[OPTIMIZE-ROUTE] Failed to sync bag return for ${ret.customer_email}:`, err.message);
+            console.error(`[OPTIMIZE-ROUTE] Failed to sync bag return for ${ret.customer_email}:`, err);
           }
         }
-        console.log(`[OPTIMIZE-ROUTE] Synced ${bagReturns.length} bag returns`);
+      } catch (parseErr) {
+        console.error(`[OPTIMIZE-ROUTE] Failed to parse bag returns response:`, parseErr);
       }
-    } catch (err) {
-      console.warn(`[OPTIMIZE-ROUTE] Bag returns sync failed:`, err.message);
+    } else {
+      console.warn(`[OPTIMIZE-ROUTE] Bag returns endpoint returned status ${returnsRes.status}`);
     }
 
     if (!Array.isArray(orders) || orders.length === 0) {
