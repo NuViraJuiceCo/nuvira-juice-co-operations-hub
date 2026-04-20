@@ -64,19 +64,20 @@ Deno.serve(async (req) => {
         };
 
         if (existing && existing.length > 0) {
-          await base44.asServiceRole.entities.Order.update(existing[0].id, hubOrder);
-          results.push({ order_id: ord.order_id, action: 'updated' });
+         await base44.asServiceRole.entities.Order.update(existing[0].id, hubOrder);
+         results.push({ order_id: ord.order_id, action: 'updated' });
         } else {
-          await base44.asServiceRole.entities.Order.create(hubOrder);
-          results.push({ order_id: ord.order_id, action: 'created' });
+         await base44.asServiceRole.entities.Order.create(hubOrder);
+         results.push({ order_id: ord.order_id, action: 'created' });
         }
-      } catch (err) {
+        } catch (err) {
+        console.error(`[PULL-ORDERS] Failed to sync order ${ord.order_id}:`, err.message);
         results.push({
-          order_id: ord.order_id,
-          action: 'failed',
-          error: err.message,
+         order_id: ord.order_id,
+         action: 'failed',
+         error: err.message,
         });
-      }
+        }
     }
 
     console.log(`[PULL-ORDERS] Synced ${results.length} orders from customer app`);
