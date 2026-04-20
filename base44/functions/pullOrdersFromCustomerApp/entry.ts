@@ -6,18 +6,25 @@ const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
+    const { date } = await req.json();
 
     if (!CUSTOMER_APP_API || !SYNC_SECRET) {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
+    const syncDate = date || new Date().toISOString().split('T')[0];
+
     // Fetch orders from customer app
-    const response = await fetch(`${CUSTOMER_APP_API}/functions/getOrdersForSync`, {
-      method: 'GET',
+    const response = await fetch(`${CUSTOMER_APP_API}/functions/optimizeDeliveryRoute`, {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        date: syncDate,
+        optimize: false,
+      }),
     });
 
     if (!response.ok) {
@@ -28,8 +35,9 @@ Deno.serve(async (req) => {
     const data = await response.json();
     const orders = data.orders || [];
 
-    if (!Array.isArray(orders)) {
-      return Response.json({ error: 'Invalid response from customer app' }, { status: 500 });
+    if (!Array.isArray(orders) || orders.length === 0) {
+      console.log(`[PULL-ORDERS] No orders found for date ${syncDate}`);
+      return Response.json({ status: 'success', count: 0, results: [] });
     }
 
     // Upsert orders into hub Order entity
