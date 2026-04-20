@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { format } from 'date-fns';
-import { Recycle, CheckCircle2, Package, AlertCircle } from 'lucide-react';
+import { Recycle, CheckCircle2, Package, AlertCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import PreOptimizeOrderCard from '@/components/driver/PreOptimizeOrderCard';
 
@@ -11,6 +11,7 @@ export default function DriverPortal() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState('route');
+  const [syncing, setSyncing] = useState(false);
 
   const isAuthorized = user?.role === 'driver' || user?.role === 'admin';
 
@@ -90,6 +91,19 @@ export default function DriverPortal() {
     verifyMutation.mutate({ ret, data });
   };
 
+  const handleSyncOrders = async () => {
+    setSyncing(true);
+    try {
+      await base44.functions.invoke('pullOrdersFromCustomerApp', {});
+      queryClient.invalidateQueries({ queryKey: ['driver-queued-orders'] });
+      toast.success('Orders synced from customer app');
+    } catch (error) {
+      console.error('Sync error:', error);
+      toast.error('Failed to sync orders');
+    }
+    setSyncing(false);
+  };
+
   // Map pending returns by customer email for quick lookup
   const pendingReturnsByEmail = {};
   bagReturns.forEach(r => {
@@ -120,7 +134,7 @@ export default function DriverPortal() {
         </div>
 
         {/* Tabs */}
-        <div className="border-t border-border flex">
+        <div className="border-t border-border flex items-center">
           <button
             onClick={() => setTab('route')}
             className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors ${
@@ -140,6 +154,14 @@ export default function DriverPortal() {
             }`}
           >
             Returns ({pendingReturns.length})
+          </button>
+          <button
+            onClick={handleSyncOrders}
+            disabled={syncing}
+            className="px-4 py-3 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            title="Sync orders from customer app"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
