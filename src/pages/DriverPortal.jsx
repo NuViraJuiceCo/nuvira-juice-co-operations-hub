@@ -30,7 +30,7 @@ export default function DriverPortal() {
 
   const { data: orders = [], isLoading: ordersLoading } = useQuery({
     queryKey: ['driver-queued-orders'],
-    queryFn: () => base44.entities.Order.filter({ fulfillment_type: 'delivery', status: { $nin: ['delivered', 'picked_up'] } }),
+    queryFn: () => base44.entities.Order.list('-created_date', 200),
     enabled: isAuthorized,
     refetchInterval: 60000,
   });
