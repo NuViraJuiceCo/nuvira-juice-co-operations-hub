@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
     const syncDate = date || new Date().toISOString().split('T')[0];
 
     // Fetch orders from customer app
-    const response = await fetch(`${CUSTOMER_APP_API}/functions/optimizeDeliveryRoute`, {
+    const response = await fetch(`${CUSTOMER_APP_API}/functions/getOrdersForSync`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
@@ -23,7 +23,6 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         date: syncDate,
-        optimize: false,
       }),
     });
 
