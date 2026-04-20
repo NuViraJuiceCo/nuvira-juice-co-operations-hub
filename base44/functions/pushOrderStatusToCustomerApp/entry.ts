@@ -6,48 +6,44 @@ const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const body = await req.json();
+    const { orderId, orderData } = await req.json();
 
-    const { event, data } = body;
-
-    if (!CUSTOMER_APP_API) {
-      return Response.json({ error: 'CUSTOMER_APP_API_URL not set' }, { status: 500 });
+    if (!CUSTOMER_APP_API || !SYNC_SECRET) {
+      return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
-    // Only push updates, not creates/deletes
-    if (event?.type !== 'update') {
-      return Response.json({ success: true, skipped: 'Only updates are pushed to customer app' });
+    if (!orderId || !orderData) {
+      return Response.json({ error: 'Missing orderId or orderData' }, { status: 400 });
     }
 
-    const orderId = event?.entity_id;
-
-    // Map hub ShopifyOrder fields to customer app order fields
-    const statusUpdate = {
-      hub_order_id: orderId,
-      production_status: data?.production_status,
-      fulfillment_status: data?.fulfillment_status,
-      assigned_delivery_date: data?.assigned_delivery_date,
-      sync_status: data?.sync_status,
-    };
-
-    const response = await fetch(`${CUSTOMER_APP_API}/functions/syncOrderStatusFromHub`, {
+    // Push order update to customer app
+    const response = await fetch(`${CUSTOMER_APP_API}/functions/receiveOrderStatusUpdate`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(statusUpdate),
+      body: JSON.stringify({
+        order_id: orderData.order_id,
+        status: orderData.status,
+        fulfillment_type: orderData.fulfillment_type,
+        delivery_address: orderData.delivery_address,
+        notes: orderData.notes,
+        updated_at: new Date().toISOString(),
+      }),
     });
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Customer app responded ${response.status}: ${text}`);
+      console.error(`[PUSH-STATUS] Customer app error ${response.status}: ${text.slice(0, 200)}`);
+      throw new Error(`Customer app rejected update: ${response.status}`);
     }
 
-    console.log(`[PUSH-ORDER-STATUS] Order ${orderId} status pushed to customer app`);
-    return Response.json({ success: true, order_id: orderId });
+    const result = await response.json();
+    console.log(`[PUSH-STATUS] Order ${orderData.order_id} status synced to customer app`);
+    return Response.json({ status: 'success', result });
   } catch (error) {
-    console.error('[PUSH-ORDER-STATUS] Error:', error.message);
+    console.error('[PUSH-STATUS] Error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
