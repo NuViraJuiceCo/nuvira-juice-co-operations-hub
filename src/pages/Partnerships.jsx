@@ -124,34 +124,34 @@ export default function Partnerships() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {stageLeads.map(lead => (
-                  <div key={lead.id} className="bg-card border border-border rounded-xl p-4 hover:shadow-sm transition-shadow relative">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(lead.id)}
-                      onChange={() => toggleSelect(lead.id)}
-                      className="absolute top-3 left-3"
-                    />
-                    <div className="absolute top-3 right-3 flex gap-1">
-                      <button
-                        onClick={() => setEditingLead(lead)}
-                        className="text-primary hover:text-primary/80"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(lead.id)}
-                        disabled={deleting === lead.id}
-                        className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-start justify-between mb-2 pl-6">
-                      <div>
+                  <div key={lead.id} className="bg-card border border-border rounded-xl p-4 hover:shadow-sm transition-shadow">
+                    <div className="flex items-start gap-3 mb-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(lead.id)}
+                        onChange={() => toggleSelect(lead.id)}
+                        className="mt-1"
+                      />
+                      <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm text-foreground">{lead.business_name}</p>
                         {lead.contact_name && <p className="text-xs text-muted-foreground">{lead.contact_name}</p>}
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeColors[lead.type] || "bg-gray-50 text-gray-700"}`}>{lead.type}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${typeColors[lead.type] || "bg-gray-50 text-gray-700"}`}>{lead.type}</span>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => setEditingLead(lead)}
+                          className="text-primary hover:text-primary/80"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(lead.id)}
+                          disabled={deleting === lead.id}
+                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-1">
                       {lead.email && <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Mail className="h-3 w-3" />{lead.email}</div>}

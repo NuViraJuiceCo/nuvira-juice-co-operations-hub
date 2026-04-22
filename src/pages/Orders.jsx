@@ -219,35 +219,35 @@ export default function Orders() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                <th className="px-5 py-3 text-left">
-                  <input
-                    type="checkbox"
-                    checked={selected.size === sorted.length && sorted.length > 0}
-                    onChange={toggleSelectAll}
-                    className="cursor-pointer"
-                  />
+                <th className="px-5 py-3 text-left w-10">
+                <input
+                 type="checkbox"
+                 checked={selected.size === sorted.length && sorted.length > 0}
+                 onChange={toggleSelectAll}
+                 className="cursor-pointer"
+                />
                 </th>
                 {[
-                   { label: "Order ID", col: "shopify_order_number" },
-                   { label: "Customer", col: "customer_email" },
-                   { label: "Channel", col: "source_channel" },
-                   { label: "Status", col: "production_status" },
-                   { label: "Payment", col: "payment_status" },
-                   { label: "Fulfillment", col: "fulfillment_method" },
-                   { label: "Total", col: "total_price" },
-                   { label: "Date", col: "created_date" },
-                   ].map((h) => (
-                  <th key={h.col} className={`px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50 ${h.col === "total" ? "text-right" : "text-left"}`} onClick={() => handleSort(h.col)}>
-                    <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                  </th>
-                  ))}
-                  <th className="px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
+                { label: "Order ID", col: "shopify_order_number" },
+                { label: "Customer", col: "customer_email" },
+                { label: "Channel", col: "source_channel" },
+                { label: "Status", col: "production_status" },
+                { label: "Payment", col: "payment_status" },
+                { label: "Fulfillment", col: "fulfillment_method" },
+                { label: "Total", col: "total_price" },
+                { label: "Date", col: "created_date" },
+                ].map((h) => (
+                <th key={h.col} className={`px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50 ${h.col === "total" ? "text-right" : "text-left"}`} onClick={() => handleSort(h.col)}>
+                 <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                </th>
+                ))}
+                <th className="px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
                   </tr>
             </thead>
             <tbody>
               {sorted.map((order) => (
                 <tr key={order.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors min-h-touch">
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-3.5 w-10">
                     <input
                       type="checkbox"
                       checked={selected.has(order.id)}
@@ -274,22 +274,22 @@ export default function Orders() {
                   <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
                     {moment(order.created_date).format("MMM D, h:mm A")}
                   </td>
-                  <td className="px-5 py-3.5 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => setEditingOrder(order)}
-                        className="text-primary hover:text-primary/80"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(order.id)}
-                        disabled={deleting === order.id}
-                        className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                  <td className="px-5 py-3.5 text-center w-20">
+                   <div className="flex items-center justify-center gap-2 flex-nowrap">
+                     <button
+                       onClick={() => setEditingOrder(order)}
+                       className="text-primary hover:text-primary/80"
+                     >
+                       <Edit2 className="h-4 w-4" />
+                     </button>
+                     <button
+                       onClick={() => handleDelete(order.id)}
+                       disabled={deleting === order.id}
+                       className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                     >
+                       <Trash2 className="h-4 w-4" />
+                     </button>
+                   </div>
                   </td>
                   </tr>
               ))}

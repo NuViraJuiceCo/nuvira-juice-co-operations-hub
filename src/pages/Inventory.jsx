@@ -206,7 +206,7 @@ export default function Inventory() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="px-4 py-3 text-left">
+                <th className="px-4 py-3 text-left w-10">
                   <input
                     type="checkbox"
                     checked={selected.size === sorted.length && sorted.length > 0}
@@ -228,7 +228,7 @@ export default function Inventory() {
                      <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                    </th>
                  ))}
-                <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -236,7 +236,7 @@ export default function Inventory() {
                 const status = getStatus(item);
                 return (
                   <tr key={item.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-3.5 w-10">
                       <input
                         type="checkbox"
                         checked={selected.has(item.id)}
@@ -254,25 +254,25 @@ export default function Inventory() {
                     </td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.supplier || "—"}</td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.location || "—"}</td>
-                    <td className="px-4 py-3.5 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => setEditingItem(item)}
-                          className="text-primary hover:text-primary/80"
-                          title="Edit ingredient"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          disabled={deleting === item.id}
-                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                          title="Delete ingredient"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+                    <td className="px-4 py-3.5 text-center w-20">
+                       <div className="flex items-center justify-center gap-2 flex-nowrap">
+                         <button
+                           onClick={() => setEditingItem(item)}
+                           className="text-primary hover:text-primary/80"
+                           title="Edit ingredient"
+                         >
+                           <Edit2 className="h-4 w-4" />
+                         </button>
+                         <button
+                           onClick={() => handleDelete(item.id)}
+                           disabled={deleting === item.id}
+                           className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                           title="Delete ingredient"
+                         >
+                           <Trash2 className="h-4 w-4" />
+                         </button>
+                       </div>
+                     </td>
                   </tr>
                 );
               })}
