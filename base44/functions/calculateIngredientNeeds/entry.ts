@@ -104,14 +104,25 @@ Deno.serve(async (req) => {
           }
         };
 
-        // Try to find matching bundle first
+        // Try to find exact match or best match for bundle first
         let matchedBundle = null;
+        let bestBundleMatch = null;
+        let bestBundleScore = 0;
+        
         for (const [key, bnd] of Object.entries(bundleMap)) {
-          if (itemTitle.includes(key) || key.includes(itemTitle)) {
+          if (key === itemTitle) {
             matchedBundle = bnd;
             break;
           }
+          // Score: higher if key is at start of itemTitle
+          const score = itemTitle.startsWith(key) ? 2 : itemTitle.includes(key) ? 1 : 0;
+          if (score > bestBundleScore) {
+            bestBundleScore = score;
+            bestBundleMatch = bnd;
+          }
         }
+        
+        matchedBundle = matchedBundle || (bestBundleScore > 0 ? bestBundleMatch : null);
 
         if (matchedBundle) {
           // Expand bundle into component bottles
@@ -126,14 +137,24 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Try to find matching single recipe
+        // Try to find exact match or best match for single recipe
         let recipe = null;
+        let bestRecipeMatch = null;
+        let bestRecipeScore = 0;
+        
         for (const [key, rec] of Object.entries(recipeMap)) {
-          if (itemTitle.includes(key) || key.includes(itemTitle)) {
+          if (key === itemTitle) {
             recipe = rec;
             break;
           }
+          const score = itemTitle.startsWith(key) ? 2 : itemTitle.includes(key) ? 1 : 0;
+          if (score > bestRecipeScore) {
+            bestRecipeScore = score;
+            bestRecipeMatch = rec;
+          }
         }
+        
+        recipe = recipe || (bestRecipeScore > 0 ? bestRecipeMatch : null);
 
         if (!recipe) {
           unmatchedItems.add(item.title);

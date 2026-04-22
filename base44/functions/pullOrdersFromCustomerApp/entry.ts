@@ -31,49 +31,52 @@ Deno.serve(async (req) => {
     const orders = data.orders || [];
 
     if (!Array.isArray(orders) || orders.length === 0) {
-      console.log(`[PULL-ORDERS] No orders found for date ${syncDate}`);
+      console.log(`[PULL-ORDERS] No orders found`);
       return Response.json({ status: 'success', count: 0, results: [] });
     }
 
-    // Upsert orders into hub Order entity
+    // Upsert orders into hub ShopifyOrder entity
     const results = [];
     for (const ord of orders) {
       try {
-        // Check if exists by order_id
-        const existing = await base44.asServiceRole.entities.Order.filter({
-          order_id: ord.order_id,
+        // Check if exists by shopify_order_id
+        const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({
+          shopify_order_id: ord.shopify_order_id || ord.id,
         });
 
         const hubOrder = {
-          order_id: ord.order_id,
-          customer_name: ord.customer_name || '',
+          shopify_order_id: ord.shopify_order_id || ord.id || '',
+          shopify_order_number: ord.shopify_order_number || ord.order_number || '',
           customer_email: ord.customer_email || '',
-          channel: ord.channel || 'NuVira Juice App',
-          status: ord.status || 'New',
-          payment_status: ord.payment_status || 'Pending',
-          fulfillment_type: (ord.fulfillment_type || 'delivery').toLowerCase(),
-          fulfillment_window: ord.fulfillment_window || '',
-          subtotal: ord.subtotal || 0,
-          tax: ord.tax || 0,
-          discount: ord.discount || 0,
-          total: ord.total || 0,
-          items: ord.items || [],
+          customer_phone: ord.customer_phone || '',
+          source_channel: ord.source_channel || ord.channel || 'online',
+          line_items: ord.line_items || ord.items || [],
+          fulfillment_method: ord.fulfillment_method || ord.fulfillment_type || 'delivery',
           delivery_address: ord.delivery_address || '',
-          notes: ord.notes || '',
+          requested_delivery_date: ord.requested_delivery_date || ord.delivery_date || '',
+          payment_status: ord.payment_status || 'pending',
+          fulfillment_status: ord.fulfillment_status || '',
+          subtotal: ord.subtotal || 0,
+          total_price: ord.total_price || ord.total || 0,
+          customer_notes: ord.customer_notes || ord.notes || '',
+          production_status: ord.production_status || 'new',
+          tags: ord.tags || [],
+          assigned_delivery_date: ord.assigned_delivery_date || '',
           sync_status: 'synced',
+          last_sync_at: new Date().toISOString(),
         };
 
         if (existing && existing.length > 0) {
-         await base44.asServiceRole.entities.Order.update(existing[0].id, hubOrder);
-         results.push({ order_id: ord.order_id, action: 'updated' });
+         await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, hubOrder);
+         results.push({ order_id: ord.shopify_order_id, action: 'updated' });
         } else {
-         await base44.asServiceRole.entities.Order.create(hubOrder);
-         results.push({ order_id: ord.order_id, action: 'created' });
+         await base44.asServiceRole.entities.ShopifyOrder.create(hubOrder);
+         results.push({ order_id: ord.shopify_order_id, action: 'created' });
         }
         } catch (err) {
-        console.error(`[PULL-ORDERS] Failed to sync order ${ord.order_id}:`, err.message);
+        console.error(`[PULL-ORDERS] Failed to sync order ${ord.shopify_order_id}:`, err.message);
         results.push({
-         order_id: ord.order_id,
+         order_id: ord.shopify_order_id,
          action: 'failed',
          error: err.message,
         });
