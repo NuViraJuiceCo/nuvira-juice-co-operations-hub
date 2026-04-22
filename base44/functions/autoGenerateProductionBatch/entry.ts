@@ -9,11 +9,32 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    // Calculate ingredient needs for next 3 days of deliveries
-    // (covers orders with delivery dates in upcoming window)
+    // Determine which delivery date to target based on day of week and automation run time
+    // Monday 6 AM → Tuesday production for Wednesday delivery
+    // Thursday 6 AM → Friday production for Saturday delivery
+    // Friday 6 AM → Saturday production for Sunday delivery
     const today = new Date();
-    const dateFrom = today.toISOString().split('T')[0];
-    const dateTo = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, 5=Friday, 6=Saturday
+    
+    let deliveryDate;
+    if (dayOfWeek === 1) { // Monday
+      // Target Wednesday delivery (Tuesday production)
+      deliveryDate = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
+    } else if (dayOfWeek === 4) { // Thursday
+      // Target Saturday delivery (Friday production)
+      deliveryDate = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
+    } else if (dayOfWeek === 5) { // Friday
+      // Target Sunday delivery (Saturday production)
+      deliveryDate = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
+    } else {
+      // Fallback: shouldn't run on other days, but target next day if it does
+      deliveryDate = new Date(today.getTime() + 1 * 24 * 60 * 60 * 1000);
+    }
+
+    const deliveryDateStr = deliveryDate.toISOString().split('T')[0];
+    // Include a 1-day buffer before target date to catch all relevant orders
+    const dateFrom = new Date(deliveryDate.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const dateTo = deliveryDateStr;
 
     const ingredientRes = await base44.functions.invoke('calculateIngredientNeeds', {
       date_from: dateFrom,
@@ -51,6 +72,7 @@ Deno.serve(async (req) => {
         total_units: summary.bottle_counts ? Object.values(summary.bottle_counts).reduce((a, b) => a + b, 0) : 0,
         items_to_purchase: purchaseNeeded.length,
         items_in_stock: sufficientStock.length,
+        target_delivery_date: deliveryDateStr,
         date_range: { from: dateFrom, to: dateTo }
       },
       shopping_list: purchaseNeeded.map(i => ({
