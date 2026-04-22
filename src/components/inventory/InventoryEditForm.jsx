@@ -36,12 +36,12 @@ export default function InventoryEditForm({ item, onClose, onSave }) {
       // Convert string numbers to actual numbers for numeric fields
       const submitData = {
         ...formData,
-        stock: formData.stock ? parseFloat(formData.stock) : null,
-        reorder_point: formData.reorder_point ? parseFloat(formData.reorder_point) : null,
-        max_stock: formData.max_stock ? parseFloat(formData.max_stock) : null,
-        cost_per_unit: formData.cost_per_unit ? parseFloat(formData.cost_per_unit) : null,
-        weight_per_supplier_unit: formData.weight_per_supplier_unit ? parseFloat(formData.weight_per_supplier_unit) : null,
-        cost_per_supplier_unit: formData.cost_per_supplier_unit ? parseFloat(formData.cost_per_supplier_unit) : null,
+        stock: formData.stock !== '' ? parseFloat(formData.stock) : null,
+        reorder_point: formData.reorder_point !== '' ? parseFloat(formData.reorder_point) : null,
+        max_stock: formData.max_stock !== '' ? parseFloat(formData.max_stock) : null,
+        cost_per_unit: formData.cost_per_unit !== '' ? parseFloat(formData.cost_per_unit) : null,
+        weight_per_supplier_unit: formData.weight_per_supplier_unit !== '' ? parseFloat(formData.weight_per_supplier_unit) : null,
+        cost_per_supplier_unit: formData.cost_per_supplier_unit !== '' ? parseFloat(formData.cost_per_supplier_unit) : null,
       };
       await base44.entities.InventoryItem.update(item.id, submitData);
       onSave();
