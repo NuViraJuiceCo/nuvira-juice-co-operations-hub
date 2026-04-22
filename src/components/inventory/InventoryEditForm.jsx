@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 export default function InventoryEditForm({ item, onClose, onSave }) {
   const [formData, setFormData] = useState({
     ingredient: item.ingredient || '',
-    unit: item.unit || 'kg',
+    unit: item.unit || 'lbs',
     stock: item.stock || '',
     reorder_point: item.reorder_point || '',
     max_stock: item.max_stock || '',
