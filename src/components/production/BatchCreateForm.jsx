@@ -32,7 +32,8 @@ export default function BatchCreateForm({ onClose, onSave }) {
        ...(planned_units && { planned_units: parseInt(planned_units) }),
      };
      await base44.entities.ProductionBatch.create(dataToSubmit);
-     onSave();
+     await onSave();
+     onClose();
    } catch (err) {
      setError(err.message || 'Failed to create batch');
      setLoading(false);

@@ -32,7 +32,8 @@ export default function PartnershipEditForm({ lead, onClose, onSave }) {
        ...(estimated_value && { estimated_value: parseFloat(estimated_value) }),
      };
      await base44.entities.Lead.update(lead.id, dataToSubmit);
-     onSave();
+     await onSave();
+     onClose();
    } catch (err) {
      setError(err.message || 'Failed to save changes');
      setLoading(false);

@@ -32,7 +32,8 @@ export default function PartnershipCreateForm({ onClose, onSave }) {
        ...(estimated_value && { estimated_value: parseFloat(estimated_value) }),
      };
      await base44.entities.Lead.create(dataToSubmit);
-     onSave();
+     await onSave();
+     onClose();
    } catch (err) {
      setError(err.message || 'Failed to create lead');
      setLoading(false);
