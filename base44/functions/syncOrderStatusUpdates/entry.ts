@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
       if (!order || !order.shopify_order_id) continue;
 
       try {
-        const response = await fetch(`${CUSTOMER_APP_API}/functions/receiveOrderStatusUpdate`, {
+        const response = await fetch(`${CUSTOMER_APP_API}/functions/pushOrderStatusToCustomerApp`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${SYNC_SECRET}`,
