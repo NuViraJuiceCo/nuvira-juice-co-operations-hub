@@ -18,7 +18,7 @@ export default function Inventory() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("ingredient");
-  const [sortDir, setSortDir] = useState("asc");
+  const [sortDir, setSortDir] = useState("asc"); // Always asc for category/ingredient sort
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
@@ -47,6 +47,18 @@ export default function Inventory() {
   });
 
   const sorted = [...filtered].sort((a, b) => {
+    // Primary sort: Packaging category first, then by category, then by ingredient
+    if (sortBy === "ingredient") {
+      // Packaging items first
+      if (a.category === "Packaging" && b.category !== "Packaging") return -1;
+      if (a.category !== "Packaging" && b.category === "Packaging") return 1;
+      // Then sort by category, then by ingredient name alphabetically
+      if (a.category !== b.category) {
+        return (a.category || "").localeCompare(b.category || "");
+      }
+      return (a.ingredient || "").localeCompare(b.ingredient || "");
+    }
+    // Standard column sort
     let aVal = a[sortBy];
     let bVal = b[sortBy];
     if (["stock", "reorder_point", "max_stock", "cost_per_unit"].includes(sortBy)) {
