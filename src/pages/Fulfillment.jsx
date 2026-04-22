@@ -15,9 +15,15 @@ export default function Fulfillment() {
 
   useEffect(() => {
     async function load() {
-      const data = await base44.entities.FulfillmentTask.list("-scheduled_date", 100);
-      setTasks(data);
-      setLoading(false);
+      try {
+        const data = await base44.entities.FulfillmentTask.list("-scheduled_date", 100);
+        setTasks(data || []);
+      } catch (error) {
+        console.error('Failed to load fulfillment tasks:', error);
+        setTasks([]);
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
