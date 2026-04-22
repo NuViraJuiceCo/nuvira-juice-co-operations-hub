@@ -30,7 +30,12 @@ export default function SupplierCreateForm({ onClose, onSave }) {
     setError(null);
     setLoading(true);
     try {
-      await base44.entities.Supplier.create(formData);
+      const dataToSubmit = {
+        ...formData,
+        lead_time_days: formData.lead_time_days ? parseFloat(formData.lead_time_days) : null,
+        rating: formData.rating ? parseFloat(formData.rating) : null,
+      };
+      await base44.entities.Supplier.create(dataToSubmit);
       onSave();
     } catch (err) {
       setError(err.message || 'Failed to create supplier');
