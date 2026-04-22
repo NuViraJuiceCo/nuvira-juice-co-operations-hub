@@ -6,16 +6,10 @@ import StatusBadge from "../components/shared/StatusBadge";
 import BatchCreateForm from "../components/production/BatchCreateForm";
 import moment from "moment";
 
-const RECIPES = {
-  "Green Glow Juice": { ingredients: [{ name: "Kale", qty: 3, unit: "kg" }, { name: "Cucumber", qty: 2, unit: "kg" }, { name: "Celery", qty: 1, unit: "kg" }, { name: "Ginger", qty: 0.3, unit: "kg" }], equipment: ["Juicer", "Bottler"], labor: 4 },
-  "Berry Blast Juice": { ingredients: [{ name: "Blueberries", qty: 4, unit: "kg" }, { name: "Apple Juice Base", qty: 5, unit: "L" }], equipment: ["Juicer", "Bottler"], labor: 3 },
-  "Tropical Cleanse": { ingredients: [{ name: "Pineapple", qty: 4, unit: "kg" }, { name: "Mango", qty: 3, unit: "kg" }, { name: "Ginger", qty: 0.5, unit: "kg" }], equipment: ["Juicer", "Bottler"], labor: 3.5 },
-  "Citrus Sunrise": { ingredients: [{ name: "Lemon", qty: 5, unit: "kg" }, { name: "Apple Juice Base", qty: 8, unit: "L" }, { name: "Turmeric", qty: 50, unit: "g" }], equipment: ["Juicer", "Bottler"], labor: 3 },
-};
-
 export default function ProdScheduler() {
   const [batches, setBatches] = useState([]);
   const [inventory, setInventory] = useState([]);
+  const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [weekStart, setWeekStart] = useState(moment().startOf("isoWeek"));
   const [selected, setSelected] = useState(null);
@@ -31,9 +25,11 @@ export default function ProdScheduler() {
     Promise.all([
       base44.entities.ProductionBatch.list("production_date", 100),
       base44.entities.InventoryItem.list("-updated_date", 100),
-    ]).then(([b, inv]) => {
+      base44.entities.Recipe.list("-updated_date", 100),
+    ]).then(([b, inv, rec]) => {
       setBatches(b);
       setInventory(inv);
+      setRecipes(rec.filter(r => r.is_active !== false));
       setLoading(false);
     });
   }, []);
@@ -44,12 +40,12 @@ export default function ProdScheduler() {
   const today = moment().format("YYYY-MM-DD");
 
   const checkInventory = (batch) => {
-    const recipe = RECIPES[batch.product_name];
-    if (!recipe) return [];
+    const recipe = recipes.find(r => r.product_name === batch.product_name);
+    if (!recipe || !recipe.ingredients) return [];
     return recipe.ingredients.filter(req => {
-      const inv = inventory.find(i => i.ingredient === req.name);
+      const inv = inventory.find(i => i.ingredient === req.ingredient_name);
       if (!inv) return true;
-      return inv.stock < req.qty;
+      return inv.stock < req.quantity_oz;
     });
   };
 
@@ -130,17 +126,17 @@ export default function ProdScheduler() {
             <div><p className="text-muted-foreground">Planned Units</p><p className="font-medium">{selected.planned_units}</p></div>
             <div><p className="text-muted-foreground">Assigned To</p><p className="font-medium">{selected.assigned_to || "—"}</p></div>
           </div>
-          {RECIPES[selected.product_name] && (
+          {recipes.find(r => r.product_name === selected.product_name)?.ingredients && (
             <div className="mt-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Ingredient Check</p>
               <div className="space-y-1.5">
-                {RECIPES[selected.product_name].ingredients.map(req => {
-                  const inv = inventory.find(i => i.ingredient === req.name);
-                  const ok = inv && inv.stock >= req.qty;
+                {recipes.find(r => r.product_name === selected.product_name)?.ingredients.map(req => {
+                  const inv = inventory.find(i => i.ingredient === req.ingredient_name);
+                  const ok = inv && inv.stock >= req.quantity_oz;
                   return (
-                    <div key={req.name} className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs ${ok ? "bg-emerald-50" : "bg-red-50"}`}>
-                      <span className={ok ? "text-emerald-800" : "text-red-800"}>{ok ? "✅" : "❌"} {req.name}</span>
-                      <span className={ok ? "text-emerald-600" : "text-red-600"}>Need {req.qty} {req.unit} · Have {inv ? `${inv.stock} ${inv.unit}` : "none"}</span>
+                    <div key={req.ingredient_name} className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs ${ok ? "bg-emerald-50" : "bg-red-50"}`}>
+                      <span className={ok ? "text-emerald-800" : "text-red-800"}>{ok ? "✅" : "❌"} {req.ingredient_name}</span>
+                      <span className={ok ? "text-emerald-600" : "text-red-600"}>Need {req.quantity_oz} {req.unit} · Have {inv ? `${inv.stock} ${inv.unit}` : "none"}</span>
                     </div>
                   );
                 })}

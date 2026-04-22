@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
@@ -16,6 +16,13 @@ export default function BatchCreateForm({ onClose, onSave }) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [recipes, setRecipes] = useState([]);
+
+  useEffect(() => {
+    base44.entities.Recipe.list('-updated_date', 100).then(data => {
+      setRecipes(data.filter(r => r.is_active !== false));
+    });
+  }, []);
 
   const handleChange = (field, value) => {
    setFormData(prev => ({ ...prev, [field]: value }));
@@ -69,20 +76,21 @@ export default function BatchCreateForm({ onClose, onSave }) {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Product Name</label>
-            <select
-              value={formData.product_name}
-              onChange={(e) => handleChange('product_name', e.target.value)}
-              className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
-              required
-            >
-              <option value="">Select product</option>
-              <option>Green Glow Juice</option>
-              <option>Berry Blast Juice</option>
-              <option>Tropical Cleanse</option>
-              <option>Citrus Sunrise</option>
-            </select>
-          </div>
+             <label className="text-sm font-medium">Product Name</label>
+             <select
+               value={formData.product_name}
+               onChange={(e) => handleChange('product_name', e.target.value)}
+               className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+               required
+             >
+               <option value="">Select product</option>
+               {recipes.map(recipe => (
+                 <option key={recipe.id} value={recipe.product_name}>{recipe.product_name}</option>
+               ))}
+               <option value="">— Wellness Shots —</option>
+               <option>Wellness Shot</option>
+             </select>
+           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
