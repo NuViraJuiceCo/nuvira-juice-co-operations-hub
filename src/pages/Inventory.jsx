@@ -227,8 +227,8 @@ export default function Inventory() {
                   />
                 </th>
                 {[
-                   { label: "Ingredient", col: "ingredient" },
                    { label: "Category", col: "category" },
+                   { label: "Ingredient", col: "ingredient" },
                    { label: "Stock", col: "stock" },
                    { label: "Unit", col: "unit" },
                    { label: "Reorder At", col: "reorder_point" },
@@ -256,8 +256,8 @@ export default function Inventory() {
                         className="cursor-pointer"
                       />
                     </td>
-                    <td className="px-4 py-3.5 font-medium text-sm text-foreground">{item.ingredient}</td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.category || "—"}</td>
+                    <td className="px-4 py-3.5 font-medium text-sm text-foreground">{item.ingredient}</td>
                     <td className="px-4 py-3.5 text-sm font-semibold text-foreground">{item.stock}</td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.unit}</td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.reorder_point}</td>
