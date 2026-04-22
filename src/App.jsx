@@ -34,6 +34,7 @@ import LoyaltyAdmin from './pages/LoyaltyAdmin';
 import ComplianceLogs from './pages/ComplianceLogs';
 import OperationsManager from './pages/OperationsManager';
 import DriverPortal from './pages/DriverPortal';
+import ProductionPlanning from './pages/ProductionPlanning';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -77,6 +78,7 @@ const AuthenticatedApp = () => {
         <Route path="/prod-scheduler" element={<PageTransition><ProdScheduler /></PageTransition>} />
         <Route path="/purchase-orders" element={<PageTransition><PurchaseOrders /></PageTransition>} />
         <Route path="/driver-portal" element={<PageTransition><DriverPortal /></PageTransition>} />
+        <Route path="/production-planning" element={<PageTransition><ProductionPlanning /></PageTransition>} />
         <Route path="/users" element={<PageTransition><UserManagement /></PageTransition>} />
         <Route path="/audit-logs" element={<PageTransition><AuditLogs /></PageTransition>} />
         <Route path="/report-scheduler" element={<PageTransition><ReportScheduler /></PageTransition>} />
