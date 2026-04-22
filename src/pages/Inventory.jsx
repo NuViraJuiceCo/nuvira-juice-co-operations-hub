@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import StatCard from "../components/shared/StatCard";
+import AdminGuide from "../components/shared/AdminGuide";
 import BulkActionsBar from "../components/shared/BulkActionsBar";
 import ColumnSorter from "../components/shared/ColumnSorter";
 import PullToRefresh from "../components/shared/PullToRefresh";
@@ -130,6 +131,21 @@ export default function Inventory() {
     <>
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6">
+      <AdminGuide
+        title="Admin Guide — Inventory"
+        steps={[
+          "Click 'Add Item' to add each ingredient or supply you use in production.",
+          "For each item, fill in: name, category, unit (kg/L/units/etc.), current stock, and reorder point.",
+          "The reorder point is the stock level at which you want to be alerted to reorder.",
+          "Update stock levels regularly — especially after production runs or new deliveries arrive.",
+          "Assign a supplier to each item so you know who to contact when stock gets low.",
+        ]}
+        tips={[
+          "Items with stock at or below the reorder point show as 'Low' — keep an eye on these before production runs.",
+          "Use the Location field (e.g. Cold Room, Dry Store) to know where each item is physically stored.",
+          "The Purchase Orders page will flag low-stock items automatically as suggested reorders.",
+        ]}
+      />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Inventory</h1>

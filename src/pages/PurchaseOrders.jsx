@@ -4,6 +4,7 @@ import { ShoppingBag, Plus, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 import StatCard from "../components/shared/StatCard";
+import AdminGuide from "../components/shared/AdminGuide";
 
 const PurchaseOrderCreateForm = ({ onClose, onSave }) => {
   const [formData, setFormData] = useState({
@@ -205,6 +206,20 @@ export default function PurchaseOrders() {
 
   return (
     <div className="space-y-6">
+      <AdminGuide
+        title="Admin Guide — Purchase Orders"
+        steps={[
+          "Click 'New PO' to create a purchase order when you need to reorder ingredients or supplies.",
+          "Fill in the PO number, supplier name, total amount, order date, and expected delivery date.",
+          "Update the status as the order progresses: Draft → Ordered → In Transit → Delivered.",
+          "Low-stock items from Inventory are automatically suggested as reorders at the top of this page.",
+        ]}
+        tips={[
+          "Use a consistent PO numbering format (e.g. PO-2026-001) for easy tracking.",
+          "Mark POs as Delivered when stock arrives and then manually update Inventory stock levels.",
+          "The 'Pending Arrival' stat card shows how many orders are currently Ordered or In Transit.",
+        ]}
+      />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Purchase Orders</h1>

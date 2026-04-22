@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Download, Filter, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
+import AdminGuide from '@/components/shared/AdminGuide';
 import UnifiedComplianceForm from '@/components/compliance/UnifiedComplianceForm';
 import moment from 'moment';
 
@@ -86,6 +87,21 @@ export default function ComplianceLogs() {
 
   return (
     <div className="space-y-6">
+      <AdminGuide
+        title="Admin Guide — Compliance Logs"
+        steps={[
+          "Use the form at the top to log a new compliance entry — select the log type (Temperature, pH, CCP, Sanitation, etc.).",
+          "Each log requires a date, time, staff member name, and relevant measurements or checklist data.",
+          "Logs with a 'Fail' status will be highlighted in red — these require a Corrective Action entry.",
+          "Use the date range and filters to review logs for a specific period.",
+          "Click 'Export Audit PDF' to generate a downloadable audit packet for health inspections or regulatory review.",
+        ]}
+        tips={[
+          "Temperature logs should be entered twice daily (morning and evening) per food safety standards.",
+          "Every failed CCP or temperature log must have a corresponding Corrective Action log.",
+          "The Daily Checklist log type covers multiple tasks in one entry — use it to track shift completions.",
+        ]}
+      />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

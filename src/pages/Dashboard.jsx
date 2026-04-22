@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import { ShoppingCart, Factory, Truck, AlertTriangle, DollarSign, AlertCircle } from "lucide-react";
 import StatCard from "../components/shared/StatCard";
+import AdminGuide from "../components/shared/AdminGuide";
 import HeroBanner from "../components/dashboard/HeroBanner";
 import RecentOrders from "../components/dashboard/RecentOrders";
 import UpcomingProduction from "../components/dashboard/UpcomingProduction";
@@ -65,6 +66,19 @@ export default function Dashboard() {
   return (
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-6">
+      <AdminGuide
+        title="Admin Guide — Dashboard"
+        steps={[
+          "This page gives you a live overview of NuVira operations.",
+          "KPI cards at the top show new orders, in-production batches, fulfillment tasks, low-stock alerts, and revenue.",
+          "Use the widget toggles to show/hide the Production Throughput, Active Order Status, and Inventory Alerts charts.",
+          "Data here updates automatically as you add orders, batches, and inventory across the hub.",
+        ]}
+        tips={[
+          "Check this page at the start of each day for a quick health check.",
+          "Low Stock and Exceptions cards will highlight items needing your attention.",
+        ]}
+      />
       {/* Header */}
       <div>
         <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import AdminGuide from "../components/shared/AdminGuide";
 import { Calendar, Trash2, Edit2 } from "lucide-react";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -87,6 +88,20 @@ export default function Production() {
     <>
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+      <AdminGuide
+        title="Admin Guide — Production Planning"
+        steps={[
+          "Use the Prod Scheduler page to plan and create new production batches.",
+          "Batches are grouped by production date so you can see what's planned for each day.",
+          "Click the edit icon on a batch to update its status (Planned → In Production → Completed) and actual units produced.",
+          "Filter by status using the dropdown in the top right to focus on active or upcoming batches.",
+        ]}
+        tips={[
+          "Always set 'Actual Units' when a batch is completed — this feeds into your reporting.",
+          "Batch IDs follow the format BATCH-YYYY-WXX-A for easy tracking.",
+          "Link batches to orders so production and fulfillment stay in sync.",
+        ]}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>

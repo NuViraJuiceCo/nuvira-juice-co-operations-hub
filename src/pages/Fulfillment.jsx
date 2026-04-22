@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import AdminGuide from "../components/shared/AdminGuide";
 import { Clock, MapPin, User, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import StatusBadge from "../components/shared/StatusBadge";
@@ -68,6 +69,20 @@ export default function Fulfillment() {
 
   return (
     <div className="space-y-6">
+      <AdminGuide
+        title="Admin Guide — Fulfillment Queue"
+        steps={[
+          "Fulfillment tasks represent individual delivery or pickup jobs that need to be completed.",
+          "Tasks are created from confirmed orders and assigned to drivers or pickup slots.",
+          "Update task status through: Unassigned → Scheduled → Packed → In Transit → Completed.",
+          "Assign a driver to each task so the Driver Portal shows the correct delivery queue.",
+        ]}
+        tips={[
+          "Use the status filter to focus on Unassigned tasks that still need a driver.",
+          "The Driver Portal is what drivers use on their phones — tasks need to be assigned and active there.",
+          "Today's task count in the subtitle helps you quickly see today's workload.",
+        ]}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Fulfillment Queue</h1>

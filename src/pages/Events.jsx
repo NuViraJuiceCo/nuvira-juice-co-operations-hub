@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import AdminGuide from "../components/shared/AdminGuide";
 import { CalendarDays, MapPin, Users, Plus, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
@@ -76,6 +77,20 @@ export default function Events() {
 
   return (
     <div className="space-y-6">
+      <AdminGuide
+        title="Admin Guide — Events"
+        steps={[
+          "Click 'Add Event' to log an upcoming pop-up, market, corporate event, tasting, or wholesale meeting.",
+          "Set the event type, status (Confirmed/Pending/Applied), date, and location.",
+          "Use the Products field to note which items and quantities you plan to bring.",
+          "Update the status to Completed after the event and log actual revenue in the Revenue field.",
+        ]}
+        tips={[
+          "Events sync to the customer app so customers can see upcoming appearances.",
+          "Use the Notes field for setup logistics, parking info, or contact instructions.",
+          "Confirmed events appear on the Operations Calendar for team visibility.",
+        ]}
+      />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Events</h1>

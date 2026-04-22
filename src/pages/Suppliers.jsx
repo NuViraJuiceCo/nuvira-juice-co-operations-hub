@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import AdminGuide from "../components/shared/AdminGuide";
 import { Phone, Mail, MapPin, Plus, Star, Trash2, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SupplierEditForm from "../components/suppliers/SupplierEditForm";
@@ -65,6 +66,20 @@ export default function Suppliers() {
 
   return (
     <div className="space-y-6">
+      <AdminGuide
+        title="Admin Guide — Suppliers"
+        steps={[
+          "Click 'Add Supplier' to add each of your ingredient and packaging vendors.",
+          "Fill in the supplier name, category (e.g. Produce, Packaging), contact name, email, and phone.",
+          "Set the Lead Time (days) so you know how far in advance to place orders.",
+          "Rate each supplier (1–5 stars) based on reliability and quality for quick reference.",
+        ]}
+        tips={[
+          "Link inventory items to suppliers so you always know who to call when stock is low.",
+          "Keep the status updated — Active, Negotiating, or Inactive — so your team knows who to contact.",
+          "Purchase Orders reference supplier names, so keep spelling consistent.",
+        ]}
+      />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Suppliers</h1>

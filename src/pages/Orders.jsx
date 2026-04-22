@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import StatusBadge from "../components/shared/StatusBadge";
+import AdminGuide from "../components/shared/AdminGuide";
 import BulkActionsBar from "../components/shared/BulkActionsBar";
 import ColumnSorter from "../components/shared/ColumnSorter";
 import PullToRefresh from "../components/shared/PullToRefresh";
@@ -142,6 +143,19 @@ export default function Orders() {
     <>
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+      <AdminGuide
+        title="Admin Guide — Orders"
+        steps={[
+          "Orders sync automatically from the NuVira customer app via the Pull Orders function.",
+          "Use the search bar to find orders by order number, and filters to narrow by status or channel.",
+          "Click the edit (pencil) icon on any order to update its production status, payment status, or notes.",
+          "Export a CSV of the current filtered view using the Export button in the top right.",
+        ]}
+        tips={[
+          "Orders from the customer app arrive with status 'New' — update them as they move through production.",
+          "Use the production_status field to track an order from New → In Production → Packed → Fulfilled.",
+        ]}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Orders</h1>
