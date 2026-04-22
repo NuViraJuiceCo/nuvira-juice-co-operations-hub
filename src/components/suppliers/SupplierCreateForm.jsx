@@ -30,10 +30,11 @@ export default function SupplierCreateForm({ onClose, onSave }) {
     setError(null);
     setLoading(true);
     try {
+      const { lead_time_days, rating, ...rest } = formData;
       const dataToSubmit = {
-        ...formData,
-        lead_time_days: formData.lead_time_days ? parseFloat(formData.lead_time_days) : null,
-        rating: formData.rating ? parseFloat(formData.rating) : null,
+        ...rest,
+        ...(lead_time_days && { lead_time_days: parseFloat(lead_time_days) }),
+        ...(rating && { rating: parseFloat(rating) }),
       };
       await base44.entities.Supplier.create(dataToSubmit);
       onSave();
