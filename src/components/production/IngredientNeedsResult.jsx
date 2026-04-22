@@ -97,6 +97,8 @@ export default function IngredientNeedsResult({ result }) {
                 <th className="px-5 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Need (lbs)</th>
                 <th className="px-5 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">In Stock (oz)</th>
                 <th className="px-5 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Shortfall (lbs)</th>
+                <th className="px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Cases Needed</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Supplier</th>
                 <th className="px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
               </tr>
             </thead>
@@ -115,6 +117,28 @@ export default function IngredientNeedsResult({ result }) {
                     <td className="px-5 py-3.5 text-right">
                       {ing.shortfall_oz > 0 ? (
                         <span className="text-sm font-bold text-red-600 font-mono">{ing.shortfall_lbs} lbs</span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-center">
+                      {ing.cases_needed_rounded ? (
+                        <div className="text-sm font-bold text-primary">
+                          <p>{ing.cases_needed_rounded} {ing.supplier_packaging_unit}s</p>
+                          <p className="text-xs text-muted-foreground font-normal">({ing.supplier_packaging_qty})</p>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {ing.supplier ? (
+                        <div className="text-sm">
+                          <p className="font-medium text-foreground">{ing.supplier}</p>
+                          {ing.cost_per_supplier_unit && (
+                            <p className="text-xs text-muted-foreground">${ing.cost_per_supplier_unit}/pkg</p>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">—</span>
                       )}

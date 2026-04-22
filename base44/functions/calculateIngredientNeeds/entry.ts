@@ -154,7 +154,14 @@ Deno.serve(async (req) => {
       inventoryMap[(inv.ingredient || '').toLowerCase().trim()] = inv;
     }
 
-    // 5. Build final ingredient needs report
+    // 5. Helper: parse supplier packaging qty string (e.g., "40 lbs" -> 40)
+    const parsePackagingQty = (pkgQty, pkgUnit) => {
+      if (!pkgQty) return null;
+      const match = pkgQty.match(/^\d+/);
+      return match ? parseFloat(match[0]) : null;
+    };
+
+    // 6. Build final ingredient needs report
     const ingredientNeeds = Object.entries(ingredientTotals).map(([name, totals]) => {
       const invItem = inventoryMap[name.toLowerCase().trim()];
       const currentStockOz = invItem
@@ -170,6 +177,28 @@ Deno.serve(async (req) => {
         ? (currentStockOz > neededOz * 1.5 ? 'surplus' : 'sufficient')
         : 'purchase_needed';
 
+      // Calculate supplier cases needed (if packaging info exists)
+      let casesNeeded = null;
+      let casesNeededRounded = null;
+      if (invItem?.supplier_packaging_qty && invItem?.supplier_packaging_unit) {
+        const pkgQty = parsePackagingQty(invItem.supplier_packaging_qty, invItem.supplier_packaging_unit);
+        if (pkgQty) {
+          // Convert shortfall to oz for comparison
+          let shortfallInPkgUnit = shortfallOz;
+          if (invItem.supplier_packaging_unit === 'kg') {
+            shortfallInPkgUnit = shortfallOz / 35.274;
+          } else if (invItem.supplier_packaging_unit === 'g') {
+            shortfallInPkgUnit = shortfallOz * OZ_TO_G;
+          } else if (invItem.supplier_packaging_unit === 'L') {
+            shortfallInPkgUnit = shortfallOz / 33.814;
+          } else if (invItem.supplier_packaging_unit === 'lb') {
+            shortfallInPkgUnit = shortfallOz / 16;
+          }
+          casesNeeded = shortfallInPkgUnit / pkgQty;
+          casesNeededRounded = Math.ceil(casesNeeded);
+        }
+      }
+
       return {
         ingredient: name,
         needed_oz: Math.round(neededOz * 100) / 100,
@@ -180,7 +209,13 @@ Deno.serve(async (req) => {
         shortfall_lbs: Math.round((shortfallOz / 16) * 100) / 100,
         status,
         inventory_unit: invItem?.unit || 'oz',
-        inventory_id: invItem?.id || null
+        inventory_id: invItem?.id || null,
+        supplier: invItem?.supplier || null,
+        supplier_packaging_unit: invItem?.supplier_packaging_unit || null,
+        supplier_packaging_qty: invItem?.supplier_packaging_qty || null,
+        cost_per_supplier_unit: invItem?.cost_per_supplier_unit || null,
+        cases_needed: casesNeeded ? Math.round(casesNeeded * 100) / 100 : null,
+        cases_needed_rounded: casesNeededRounded
       };
     });
 
