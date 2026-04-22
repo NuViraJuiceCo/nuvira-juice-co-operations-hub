@@ -8,7 +8,7 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
-    if (!user?.role === 'admin' && !user) {
+    if (!user || user.role !== 'admin') {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -40,27 +40,36 @@ Deno.serve(async (req) => {
     }
 
     // Send to customer app
-    const response = await fetch(`${CUSTOMER_APP_API}/receivePointsSync`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SYNC_SECRET}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(syncData),
-    });
+    let response;
+    try {
+      response = await fetch(`${CUSTOMER_APP_API}/functions/receivePointsSync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SYNC_SECRET}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(syncData),
+      });
 
-    if (response.ok) {
-      if (data.id) {
-        await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'synced' });
+      if (response.ok) {
+        if (data.id) {
+          await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'synced' });
+        }
+        return Response.json({ status: 'success', synced: true });
+      } else {
+        if (data.id) {
+          await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'failed' });
+        }
+        const text = await response.text();
+        console.error(`Sync failed: ${response.status} - ${text}`);
+        return Response.json({ status: 'failed', reason: `Customer app error: ${response.status}` });
       }
-      return Response.json({ status: 'success', synced: true });
-    } else {
+    } catch (fetchErr) {
       if (data.id) {
         await base44.asServiceRole.entities.UserPoints.update(data.id, { sync_status: 'failed' });
       }
-      const text = await response.text();
-      console.error(`Sync failed: ${response.status} - ${text}`);
-      return Response.json({ status: 'failed', reason: `Customer app error: ${response.status}` });
+      console.error('Sync network error:', fetchErr.message);
+      return Response.json({ status: 'failed', reason: `Network error: ${fetchErr.message}` });
     }
   } catch (error) {
     console.error('Sync error:', error);

@@ -4,15 +4,16 @@ Deno.serve(async (req) => {
   try {
     // Verify shared secret from Authorization header
     const authHeader = req.headers.get('authorization');
-    const secret = authHeader?.replace('Bearer ', '');
+    if (!authHeader) {
+      return Response.json({ error: 'Missing authorization header' }, { status: 401 });
+    }
+    const secret = authHeader.replace('Bearer ', '').trim();
     if (secret !== Deno.env.get('CUSTOMER_APP_SYNC_SECRET')) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json({ error: 'Invalid authorization token' }, { status: 401 });
     }
 
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-
-    console.log('[SYNC] Incoming payload:', JSON.stringify(body, null, 2));
 
     // Support wrapped payloads: { event, order: {...} } or { event, data: {...} } or flat
     const order = body.order || body.data || body;
@@ -49,10 +50,8 @@ Deno.serve(async (req) => {
     let result;
     if (existing?.length > 0) {
       result = await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, hubPayload);
-      console.log(`[SYNC] Updated ShopifyOrder ${result.id} for customer app order ${order.id}`);
     } else {
       result = await base44.asServiceRole.entities.ShopifyOrder.create(hubPayload);
-      console.log(`[SYNC] Created ShopifyOrder ${result.id} for customer app order ${order.id}`);
     }
 
     return Response.json({ success: true, id: result.id, synced_at: new Date().toISOString() });

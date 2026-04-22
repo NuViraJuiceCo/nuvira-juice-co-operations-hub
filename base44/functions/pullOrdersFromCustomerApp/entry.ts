@@ -27,8 +27,15 @@ Deno.serve(async (req) => {
       throw new Error(`Customer app error ${response.status}: ${text.slice(0, 200)}`);
     }
 
-    const data = await response.json();
-    const orders = data.orders || [];
+    let data;
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      console.error('[PULL-ORDERS] JSON parse error:', parseErr.message);
+      return Response.json({ status: 'success', count: 0, results: [], warning: 'Invalid JSON response' });
+    }
+
+    const orders = Array.isArray(data.orders) ? data.orders : (Array.isArray(data) ? data : []);
 
     if (!Array.isArray(orders) || orders.length === 0) {
       console.log(`[PULL-ORDERS] No orders found`);

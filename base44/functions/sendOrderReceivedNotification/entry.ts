@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
     const products = shopifyOrder.line_items?.map(item => `${item.quantity}x ${item.title}`).join(', ') || 'Order';
 
     // Trigger the Customer App to send the confirmation email to its own registered user
-    const response = await fetch(`${CUSTOMER_APP_API}/sendOrderConfirmation`, {
+    const response = await fetch(`${CUSTOMER_APP_API}/functions/sendOrderConfirmation`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,

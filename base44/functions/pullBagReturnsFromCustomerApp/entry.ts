@@ -25,11 +25,22 @@ Deno.serve(async (req) => {
       throw new Error(`Customer app error ${response.status}: ${text.slice(0, 200)}`);
     }
 
-    const data = await response.json();
-    const returns = data.returns || [];
+    const contentType = response.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      throw new Error(`Invalid response content type: ${contentType}`);
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (err) {
+      throw new Error(`Failed to parse JSON response: ${err.message}`);
+    }
+    const returns = Array.isArray(data.returns) ? data.returns : (Array.isArray(data) ? data : []);
 
     if (!Array.isArray(returns)) {
-      return Response.json({ error: 'Invalid response from customer app' }, { status: 500 });
+      console.error('[PULL-BAG-RETURNS] Response was not array or had invalid structure');
+      return Response.json({ status: 'success', count: 0, results: [], warning: 'Invalid response structure, assuming no returns' });
     }
 
     // Upsert returns into hub BagReturn entity
