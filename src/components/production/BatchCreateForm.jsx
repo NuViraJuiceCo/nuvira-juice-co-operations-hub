@@ -87,8 +87,11 @@ export default function BatchCreateForm({ onClose, onSave }) {
                {recipes.map(recipe => (
                  <option key={recipe.id} value={recipe.product_name}>{recipe.product_name}</option>
                ))}
-               <option value="">— Wellness Shots —</option>
-               <option>Wellness Shot</option>
+               <optgroup label="Wellness Shots">
+                 <option>Radiance</option>
+                 <option>Reset</option>
+                 <option>Hydration</option>
+               </optgroup>
              </select>
            </div>
 
