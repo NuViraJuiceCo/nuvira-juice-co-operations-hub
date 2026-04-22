@@ -9,60 +9,87 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch all products
-    const products = await base44.entities.Product.list('name', 100);
-    const inventoryItems = await base44.entities.InventoryItem.list('ingredient', 100);
+    // Fetch all products and recipes
+    const [products, recipes, bundles] = await Promise.all([
+      base44.asServiceRole.entities.Product.list('-updated_date', 100),
+      base44.asServiceRole.entities.Recipe.list('-updated_date', 100),
+      base44.asServiceRole.entities.Bundle.list('-updated_date', 100),
+    ]);
 
-    // Build a map of ingredients to their default settings
-    const ingredientMap = new Map();
-
-    // Extract all unique ingredients from products
-    products.forEach(product => {
-      if (product.ingredients && Array.isArray(product.ingredients)) {
-        product.ingredients.forEach(ingredient => {
-          if (!ingredientMap.has(ingredient)) {
-            ingredientMap.set(ingredient, {
-              ingredient: ingredient,
-              category: 'Produce',
-              stock: 0,
-              unit: 'kg',
-              reorder_point: 10,
-              max_stock: 100,
-              cost_per_unit: 0,
-              supplier: '',
-              location: '',
-              notes: `Auto-synced from products: ${product.name}`
-            });
-          }
-        });
-      }
-    });
-
-    // Update or create inventory items
-    const results = [];
-
-    for (const [ingredientName, defaults] of ingredientMap) {
-      const existing = inventoryItems.find(i => i.ingredient?.toLowerCase() === ingredientName.toLowerCase());
-
-      if (existing) {
-        // Update existing with synced notes
-        await base44.entities.InventoryItem.update(existing.id, {
-          notes: `Ingredient in: ${products.filter(p => p.ingredients?.includes(ingredientName)).map(p => p.name).join(', ')}`
-        });
-        results.push({ action: 'updated', ingredient: ingredientName, id: existing.id });
-      } else {
-        // Create new inventory item
-        const created = await base44.entities.InventoryItem.create(defaults);
-        results.push({ action: 'created', ingredient: ingredientName, id: created.id });
-      }
+    if (!Array.isArray(products) || products.length === 0) {
+      return Response.json({ status: 'success', synced: 0, message: 'No products to sync' });
     }
 
+    // Build product name lookup
+    const productNames = new Set();
+    for (const p of products) {
+      if (p.name) productNames.add(p.name);
+    }
+
+    // Validate recipes reference valid products
+    const recipeResults = [];
+    for (const recipe of (recipes || [])) {
+      if (!recipe.ingredients || !Array.isArray(recipe.ingredients)) continue;
+      
+      let isDirty = false;
+      const validIngredients = recipe.ingredients.filter(ing => {
+        if (!ing.ingredient_name || !productNames.has(ing.ingredient_name)) {
+          return false;
+        }
+        return true;
+      });
+
+      if (validIngredients.length !== recipe.ingredients.length) {
+        isDirty = true;
+        await base44.asServiceRole.entities.Recipe.update(recipe.id, {
+          ...recipe,
+          ingredients: validIngredients,
+        });
+      }
+      recipeResults.push({
+        recipe_id: recipe.id,
+        product_name: recipe.product_name,
+        valid_ingredients: validIngredients.length,
+        total_ingredients: recipe.ingredients.length,
+      });
+    }
+
+    // Validate bundles reference valid recipes
+    const bundleResults = [];
+    for (const bundle of (bundles || [])) {
+      if (!bundle.components || !Array.isArray(bundle.components)) continue;
+
+      let isDirty = false;
+      const validComponents = bundle.components.filter(comp => {
+        if (!comp.product_name) return false;
+        const recipe = recipes.find(r => r.product_name === comp.product_name);
+        return recipe !== undefined;
+      });
+
+      if (validComponents.length !== bundle.components.length) {
+        isDirty = true;
+        await base44.asServiceRole.entities.Bundle.update(bundle.id, {
+          ...bundle,
+          components: validComponents,
+        });
+      }
+      bundleResults.push({
+        bundle_id: bundle.id,
+        bundle_name: bundle.bundle_name,
+        valid_components: validComponents.length,
+        total_components: bundle.components.length,
+      });
+    }
+
+    console.log('[SYNC-PRODUCT-INGREDIENTS] Completed validation');
     return Response.json({
-      success: true,
-      message: `Synced ${results.length} ingredients from ${products.length} products`,
-      results
+      status: 'success',
+      products_count: products.length,
+      recipes: recipeResults,
+      bundles: bundleResults,
     });
   } catch (error) {
+    console.error('[SYNC-PRODUCT-INGREDIENTS] Error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
