@@ -10,11 +10,14 @@ Deno.serve(async (req) => {
     }
 
     const order = await base44.asServiceRole.entities.ShopifyOrder.filter({ id: order_id });
-    if (!order || order.length === 0) {
-      return Response.json({ error: 'Order not found' }, { status: 404 });
-    }
+     if (!Array.isArray(order) || order.length === 0) {
+       return Response.json({ error: 'Order not found' }, { status: 404 });
+     }
 
-    const o = order[0];
+     const o = order[0];
+     if (!o) {
+       return Response.json({ error: 'Order not found' }, { status: 404 });
+     }
 
     // Only create fulfillment task if not already created
     const existing = await base44.asServiceRole.entities.FulfillmentTask.filter({ order_id: o.id });

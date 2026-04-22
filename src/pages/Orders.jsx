@@ -45,9 +45,11 @@ export default function Orders() {
   };
 
   const filtered = orders.filter((o) => {
+    if (!o) return false;
     const matchSearch =
       !search ||
-      o.shopify_order_number?.toLowerCase().includes(search.toLowerCase());
+      (o.shopify_order_number && o.shopify_order_number.toLowerCase().includes(search.toLowerCase())) ||
+      (o.customer_email && o.customer_email.toLowerCase().includes(search.toLowerCase()));
     const matchStatus = statusFilter === "all" || o.production_status === statusFilter;
     const matchChannel = channelFilter === "all" || o.source_channel === channelFilter;
     return matchSearch && matchStatus && matchChannel;
@@ -56,12 +58,15 @@ export default function Orders() {
   const sorted = [...filtered].sort((a, b) => {
     let aVal = a[sortBy];
     let bVal = b[sortBy];
-    if (sortBy === "total") {
+    if (!aVal && !bVal) return 0;
+    if (!aVal) return sortDir === "asc" ? 1 : -1;
+    if (!bVal) return sortDir === "asc" ? -1 : 1;
+    if (sortBy === "total_price") {
       aVal = parseFloat(aVal) || 0;
       bVal = parseFloat(bVal) || 0;
     } else if (sortBy === "created_date") {
-      aVal = new Date(aVal);
-      bVal = new Date(bVal);
+      aVal = new Date(aVal).getTime();
+      bVal = new Date(bVal).getTime();
     }
     const cmp = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
     return sortDir === "asc" ? cmp : -cmp;
@@ -119,9 +124,11 @@ export default function Orders() {
   const exportCSV = () => {
     const headers = "Order ID,Customer,Email,Channel,Status,Payment,Fulfillment,Total,Date\n";
     const rows = filtered
-      .map((o) =>
-        `${o.shopify_order_number},${o.customer_email || ""},${o.customer_email || ""},${o.source_channel},${o.production_status},${o.payment_status},${o.fulfillment_method},${o.total_price},${moment(o.created_date).format("MMM D, h:mm A")}`
-      )
+      .map((o) => {
+        if (!o) return "";
+        return `"${(o.shopify_order_number || "").replace(/"/g, '""')}","${(o.customer_email || "").replace(/"/g, '""')}","${(o.source_channel || "").replace(/"/g, '""')}","${(o.production_status || "").replace(/"/g, '""')}","${(o.payment_status || "").replace(/"/g, '""')}","${(o.fulfillment_method || "").replace(/"/g, '""')}",${(o.total_price || 0).toFixed(2)},"${moment(o.created_date).format("MMM D, h:mm A")}"`;
+      })
+      .filter(r => r)
       .join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);

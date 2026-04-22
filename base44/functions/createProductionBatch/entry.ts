@@ -3,11 +3,22 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const { order_id, product_name, quantity } = await req.json();
+    let body;
+     try {
+       body = await req.json();
+     } catch {
+       return Response.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+     }
 
-    if (!order_id || !product_name || !quantity) {
-      return Response.json({ error: 'Missing required fields' }, { status: 400 });
-    }
+     const { order_id, product_name, quantity } = body;
+
+     if (!order_id || !product_name || !quantity) {
+       return Response.json({ error: 'Missing required fields: order_id, product_name, quantity' }, { status: 400 });
+     }
+
+     if (isNaN(parseInt(quantity)) || parseInt(quantity) <= 0) {
+       return Response.json({ error: 'Quantity must be a positive number' }, { status: 400 });
+     }
 
     // Generate batch ID
     const now = new Date();

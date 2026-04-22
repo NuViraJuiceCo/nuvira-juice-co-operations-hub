@@ -8,13 +8,17 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
-    if (user?.role !== 'admin') {
-      return Response.json({ error: 'Admin access required' }, { status: 403 });
-    }
+    if (!user) {
+       return Response.json({ error: 'Unauthorized' }, { status: 401 });
+     }
 
-    if (!CUSTOMER_APP_API) {
-      return Response.json({ error: 'CUSTOMER_APP_API_URL not set' }, { status: 500 });
-    }
+     if (user.role !== 'admin') {
+       return Response.json({ error: 'Admin access required' }, { status: 403 });
+     }
+
+     if (!CUSTOMER_APP_API || !SYNC_SECRET) {
+       return Response.json({ error: 'Customer app not configured' }, { status: 500 });
+     }
 
     // Fetch loyalty data from customer app
     const response = await fetch(`${CUSTOMER_APP_API}/functions/getLoyaltyDataForSync`, {

@@ -7,10 +7,14 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
+    if (!CUSTOMER_APP_API || !SYNC_SECRET) {
+      return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
+    }
+
     // Fetch all orders with production_status that needs syncing
     const orders = await base44.asServiceRole.entities.ShopifyOrder.list('-updated_date', 100);
-    
-    if (!orders || orders.length === 0) {
+
+    if (!Array.isArray(orders) || orders.length === 0) {
       return Response.json({ status: 'success', synced: 0 });
     }
 
@@ -18,7 +22,7 @@ Deno.serve(async (req) => {
     const errors = [];
 
     for (const order of orders) {
-      if (!CUSTOMER_APP_API || !SYNC_SECRET) continue;
+      if (!order || !order.shopify_order_id) continue;
 
       try {
         const response = await fetch(`${CUSTOMER_APP_API}/functions/receiveOrderStatusUpdate`, {
