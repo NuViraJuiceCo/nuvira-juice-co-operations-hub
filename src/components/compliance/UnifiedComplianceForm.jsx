@@ -71,13 +71,22 @@ export default function UnifiedComplianceForm() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  const { data: products = [] } = useQuery({
+  const { data: products = [], data: recipes = [] } = useQuery({
     queryKey: ['products'],
     queryFn: async () => {
       const recipes = await base44.entities.Recipe.list('product_name', 100);
-      return recipes.filter(r => r.is_active !== false).map(r => ({ id: r.id, name: r.product_name, batch_id: r.product_sku }));
+      return recipes.filter(r => r.is_active !== false);
     },
+    select: (recipes) => recipes.map(r => ({ id: r.id, name: r.product_name, batch_id: r.product_sku, recipe: r }))
   });
+
+  const allRecipes = useQuery({
+    queryKey: ['recipes'],
+    queryFn: async () => {
+      const data = await base44.entities.Recipe.list('product_name', 100);
+      return data.filter(r => r.is_active !== false);
+    },
+  }).data || [];
 
   useEffect(() => {
     base44.auth.me().then(u => setUser(u));
@@ -96,9 +105,14 @@ export default function UnifiedComplianceForm() {
   const handleProductSelect = (productId) => {
     const product = products.find(p => p.id === productId);
     if (product) {
+      const recipe = allRecipes.find(r => r.product_name === product.name);
+      const ingredientsList = recipe?.ingredients?.map(ing => `${ing.ingredient_name} (${ing.quantity_oz}${ing.unit || 'oz'})`).join(', ') || '';
+      
       setFormData(prev => ({
         ...prev,
         product_name: product.name,
+        juice_flavor: product.name,
+        ingredients: ingredientsList,
         batch_id: product.batch_id || prev.batch_id
       }));
     }
