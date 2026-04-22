@@ -18,20 +18,25 @@ export default function BatchCreateForm({ onClose, onSave }) {
   const [error, setError] = useState(null);
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+   setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      await base44.entities.ProductionBatch.create(formData);
-      onSave();
-    } catch (err) {
-      setError(err.message || 'Failed to create batch');
-      setLoading(false);
-    }
+   e.preventDefault();
+   setError(null);
+   setLoading(true);
+   try {
+     const { planned_units, ...rest } = formData;
+     const dataToSubmit = {
+       ...rest,
+       ...(planned_units && { planned_units: parseInt(planned_units) }),
+     };
+     await base44.entities.ProductionBatch.create(dataToSubmit);
+     onSave();
+   } catch (err) {
+     setError(err.message || 'Failed to create batch');
+     setLoading(false);
+   }
   };
 
   return (
@@ -98,7 +103,7 @@ export default function BatchCreateForm({ onClose, onSave }) {
               <input
                 type="number"
                 value={formData.planned_units}
-                onChange={(e) => handleChange('planned_units', e.target.value ? parseInt(e.target.value) : '')}
+                onChange={(e) => handleChange('planned_units', e.target.value)}
                 className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
                 required
               />

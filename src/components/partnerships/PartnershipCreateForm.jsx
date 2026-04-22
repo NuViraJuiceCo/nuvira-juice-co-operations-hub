@@ -18,20 +18,25 @@ export default function PartnershipCreateForm({ onClose, onSave }) {
   const [error, setError] = useState(null);
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+   setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      await base44.entities.Lead.create(formData);
-      onSave();
-    } catch (err) {
-      setError(err.message || 'Failed to create lead');
-      setLoading(false);
-    }
+   e.preventDefault();
+   setError(null);
+   setLoading(true);
+   try {
+     const { estimated_value, ...rest } = formData;
+     const dataToSubmit = {
+       ...rest,
+       ...(estimated_value && { estimated_value: parseFloat(estimated_value) }),
+     };
+     await base44.entities.Lead.create(dataToSubmit);
+     onSave();
+   } catch (err) {
+     setError(err.message || 'Failed to create lead');
+     setLoading(false);
+   }
   };
 
   return (
@@ -132,7 +137,7 @@ export default function PartnershipCreateForm({ onClose, onSave }) {
             <input
               type="number"
               value={formData.estimated_value}
-              onChange={(e) => handleChange('estimated_value', e.target.value ? parseFloat(e.target.value) : '')}
+              onChange={(e) => handleChange('estimated_value', e.target.value)}
               className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               placeholder="0"
             />
