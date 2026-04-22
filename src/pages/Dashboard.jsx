@@ -13,6 +13,7 @@ import ProductionThroughputWidget from "../components/dashboard/ProductionThroug
 import ActiveOrderStatusWidget from "../components/dashboard/ActiveOrderStatusWidget";
 import InventoryAlertsWidget from "../components/dashboard/InventoryAlertsWidget";
 import PullToRefresh from "../components/shared/PullToRefresh";
+import SyncPanel from "../components/dashboard/SyncPanel";
 import moment from "moment";
 
 export default function Dashboard() {
@@ -98,6 +99,9 @@ export default function Dashboard() {
         <StatCard label="Revenue" value={`$${revenue.toFixed(2)}`} icon={DollarSign} />
         <StatCard label="Exceptions" value={0} icon={AlertCircle} />
       </div>
+
+      {/* Sync Panel */}
+      <SyncPanel />
 
       {/* Widget Selector */}
       <DashboardWidgetSelector widgets={visibleWidgets} onToggle={(id) => {
