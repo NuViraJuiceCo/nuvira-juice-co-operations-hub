@@ -14,6 +14,7 @@ export default function InventoryCreateForm({ onClose, onSave }) {
     supplier: '',
     supplier_packaging_unit: 'case',
     supplier_packaging_qty: '',
+    weight_per_supplier_unit: '',
     cost_per_supplier_unit: '',
     location: '',
     category: 'Produce',
@@ -192,6 +193,18 @@ export default function InventoryCreateForm({ onClose, onSave }) {
               onChange={(e) => handleChange('cost_per_supplier_unit', e.target.value ? parseFloat(e.target.value) : '')}
               className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               placeholder="e.g., 12.99"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Weight per Unit (lbs)</label>
+            <input
+              type="number"
+              value={formData.weight_per_supplier_unit}
+              onChange={(e) => handleChange('weight_per_supplier_unit', e.target.value ? parseFloat(e.target.value) : '')}
+              className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              placeholder="e.g., 13 (for watermelon)"
+              step="0.1"
             />
           </div>
 

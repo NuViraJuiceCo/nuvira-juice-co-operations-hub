@@ -57,6 +57,10 @@
       "type": "string",
       "description": "What's in one case/box/bunch (e.g., '40 lbs', '24 bunches', '50 count')"
     },
+    "weight_per_supplier_unit": {
+      "type": "number",
+      "description": "Weight in lbs per individual unit in the package (e.g., 13 for watermelon if 4 melons \u00d7 13 lbs each = 52 lbs per case)"
+    },
     "cost_per_supplier_unit": {
       "type": "number",
       "description": "Cost per case/box/bunch from supplier"

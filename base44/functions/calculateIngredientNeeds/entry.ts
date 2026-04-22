@@ -182,19 +182,12 @@ Deno.serve(async (req) => {
       let casesNeededRounded = null;
       if (invItem?.supplier_packaging_qty && invItem?.supplier_packaging_unit) {
         const pkgQty = parsePackagingQty(invItem.supplier_packaging_qty, invItem.supplier_packaging_unit);
-        if (pkgQty) {
-          // Convert shortfall to oz for comparison
-          let shortfallInPkgUnit = shortfallOz;
-          if (invItem.supplier_packaging_unit === 'kg') {
-            shortfallInPkgUnit = shortfallOz / 35.274;
-          } else if (invItem.supplier_packaging_unit === 'g') {
-            shortfallInPkgUnit = shortfallOz * OZ_TO_G;
-          } else if (invItem.supplier_packaging_unit === 'L') {
-            shortfallInPkgUnit = shortfallOz / 33.814;
-          } else if (invItem.supplier_packaging_unit === 'lb') {
-            shortfallInPkgUnit = shortfallOz / 16;
-          }
-          casesNeeded = shortfallInPkgUnit / pkgQty;
+        if (pkgQty && invItem.weight_per_supplier_unit) {
+          // If we know weight per unit, calculate total case weight
+          // e.g., 4 melons × 13 lbs/melon = 52 lbs per case
+          const totalWeightPerCase = pkgQty * invItem.weight_per_supplier_unit;
+          const shortfallLbs = shortfallOz / 16;
+          casesNeeded = shortfallLbs / totalWeightPerCase;
           casesNeededRounded = Math.ceil(casesNeeded);
         }
       }
