@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, CheckCircle2, Clock, TrendingUp, AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, TrendingUp, AlertTriangle, RefreshCw, CloudDownload } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function OperationsManager() {
@@ -11,6 +11,20 @@ export default function OperationsManager() {
   const [inventory, setInventory] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+
+  const runFullSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await base44.functions.invoke('fullSyncFromCustomerApp', {});
+      setSyncResult(res.data);
+    } catch (error) {
+      setSyncResult({ error: error.message });
+    }
+    setSyncing(false);
+  };
 
   const fetchBriefing = async () => {
     setLoading(true);
@@ -71,20 +85,67 @@ export default function OperationsManager() {
             <h1 className="text-4xl font-bold text-foreground">Operations Manager</h1>
             <p className="text-muted-foreground mt-2">24/7 monitoring of orders, inventory, production, and sync health</p>
           </div>
-          <Button 
-            onClick={fetchBriefing}
-            disabled={loading}
-            variant="outline"
-            size="lg"
-            className="gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={runFullSync}
+              disabled={syncing}
+              size="lg"
+              className="gap-2"
+            >
+              <CloudDownload className={`w-4 h-4 ${syncing ? 'animate-pulse' : ''}`} />
+              {syncing ? 'Syncing...' : 'Full Sync'}
+            </Button>
+            <Button 
+              onClick={fetchBriefing}
+              disabled={loading}
+              variant="outline"
+              size="lg"
+              className="gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {lastUpdated && (
           <p className="text-sm text-muted-foreground">Last updated: {lastUpdated.toLocaleTimeString()}</p>
+        )}
+
+        {/* Full Sync Result */}
+        {syncResult && (
+          <div className={`border rounded-xl p-4 ${syncResult.error ? 'border-red-200 bg-red-50' : syncResult.status === 'partial' ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
+            <div className="flex items-center gap-2 mb-3">
+              {syncResult.error ? <AlertCircle className="w-5 h-5 text-red-600" /> : <CheckCircle2 className="w-5 h-5 text-green-600" />}
+              <p className="font-semibold">
+                {syncResult.error ? 'Sync Failed' : syncResult.status === 'partial' ? 'Sync Partially Complete' : 'Full Sync Complete'}
+              </p>
+              {syncResult.synced_at && <p className="text-xs text-muted-foreground ml-auto">{new Date(syncResult.synced_at).toLocaleTimeString()}</p>}
+            </div>
+            {syncResult.results && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {Object.entries(syncResult.results).map(([key, val]) => (
+                  <div key={key} className="bg-white/70 rounded-lg px-3 py-2">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground capitalize">{key}</p>
+                    <p className="text-sm font-bold mt-0.5">{val.total ?? val.created ?? '—'} records</p>
+                    <p className="text-xs text-muted-foreground">
+                      {val.created != null && `+${val.created} new`}
+                      {val.updated != null && ` · ${val.updated} updated`}
+                      {val.failed > 0 && <span className="text-red-600"> · {val.failed} failed</span>}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {syncResult.errors && (
+              <div className="mt-3 space-y-1">
+                {Object.entries(syncResult.errors).map(([key, msg]) => (
+                  <p key={key} className="text-xs text-red-600">⚠ {key}: {msg}</p>
+                ))}
+              </div>
+            )}
+            {syncResult.error && <p className="text-sm text-red-700">{syncResult.error}</p>}
+          </div>
         )}
 
         {/* Critical Alerts Banner */}
