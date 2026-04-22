@@ -4,18 +4,25 @@ const CUSTOMER_APP_API = Deno.env.get('CUSTOMER_APP_API_URL');
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 
 async function callCustomerApp(path, method = 'POST', body = {}) {
-  const response = await fetch(`${CUSTOMER_APP_API}/functions/${path}`, {
-    method,
-    headers: {
-      'Authorization': `Bearer ${SYNC_SECRET}`,
-      'Content-Type': 'application/json',
-    },
-    body: method !== 'GET' ? JSON.stringify(body) : undefined,
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`${path} failed ${response.status}: ${text.slice(0, 200)}`);
-  return JSON.parse(text);
-}
+   if (!CUSTOMER_APP_API || !SYNC_SECRET) {
+     throw new Error('Customer app API not configured');
+   }
+   const response = await fetch(`${CUSTOMER_APP_API}/functions/${path}`, {
+     method,
+     headers: {
+       'Authorization': `Bearer ${SYNC_SECRET}`,
+       'Content-Type': 'application/json',
+     },
+     body: method !== 'GET' ? JSON.stringify(body) : undefined,
+   });
+   const text = await response.text();
+   if (!response.ok) throw new Error(`${path} failed ${response.status}: ${text.slice(0, 200)}`);
+   try {
+     return JSON.parse(text);
+   } catch {
+     throw new Error(`Invalid JSON from ${path}: ${text.slice(0, 100)}`);
+   }
+ }
 
 async function syncOrders(base44) {
   const data = await callCustomerApp('getOrdersForSync');
@@ -140,12 +147,12 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
-    if (user?.role !== 'admin') {
-      return Response.json({ error: 'Admin access required' }, { status: 403 });
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!CUSTOMER_APP_API || !SYNC_SECRET) {
-      return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
+    if (user.role !== 'admin') {
+      return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
     console.log('[FULL-SYNC] Starting full sync from customer app...');

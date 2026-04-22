@@ -31,12 +31,23 @@ export default function BatchCreateForm({ onClose, onSave }) {
   const handleSubmit = async (e) => {
    e.preventDefault();
    setError(null);
+
+   if (!formData.product_name || !formData.planned_units || !formData.production_date) {
+     setError('Please fill in all required fields');
+     return;
+   }
+
+   if (isNaN(parseInt(formData.planned_units)) || parseInt(formData.planned_units) <= 0) {
+     setError('Planned units must be a positive number');
+     return;
+   }
+
    setLoading(true);
    try {
      const { planned_units, ...rest } = formData;
      const dataToSubmit = {
        ...rest,
-       ...(planned_units && { planned_units: parseInt(planned_units) }),
+       planned_units: parseInt(planned_units),
      };
      await base44.entities.ProductionBatch.create(dataToSubmit);
      await onSave();

@@ -27,10 +27,12 @@ export default function LoyaltyAdmin() {
         base44.entities.CustomerLoyalty.list('-lifetime_points', 100),
         base44.entities.Rewards.list(),
       ]);
-      setCustomers(loyaltyData);
-      setRewards(rewardsData);
+      setCustomers(Array.isArray(loyaltyData) ? loyaltyData : []);
+      setRewards(Array.isArray(rewardsData) ? rewardsData : []);
     } catch (error) {
       console.error('Error loading data:', error);
+      setCustomers([]);
+      setRewards([]);
     }
     setLoading(false);
   };
@@ -49,8 +51,9 @@ export default function LoyaltyAdmin() {
   };
 
   const getAvailableRewards = (customer) => {
-    return rewards.filter(r => r.is_active && customer.total_points >= r.points_required);
-  };
+     if (!customer || !Array.isArray(rewards)) return [];
+     return rewards.filter(r => r && r.is_active && (customer.total_points || 0) >= (r.points_required || 0));
+   };
 
   const getRedemptionsByOrder = (customer) => {
     return customer.points_history?.filter(h => h.type === 'redeemed' && h.order_id) || [];
@@ -61,15 +64,15 @@ export default function LoyaltyAdmin() {
   };
 
   const filtered = customers.filter(c =>
-    !search || c.customer_email.toLowerCase().includes(search.toLowerCase())
+    c && (!search || (c.customer_email && c.customer_email.toLowerCase().includes(search.toLowerCase())))
   );
 
   const exportCSV = () => {
     const headers = 'Email,Current Points,Lifetime Points,Redeemed,Available Rewards,Redemptions\n';
-    const rows = filtered.map(c => {
+    const rows = filtered.filter(c => c).map(c => {
       const available = getAvailableRewards(c).length;
       const redemptions = getRedemptionsByOrder(c).length;
-      return `"${c.customer_email}",${c.total_points},${c.lifetime_points},${c.redeemed_points},${available},${redemptions}`;
+      return `"${(c.customer_email || '').replace(/"/g, '""')}",${c.total_points || 0},${c.lifetime_points || 0},${c.redeemed_points || 0},${available},${redemptions}`;
     }).join('\n');
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -181,19 +184,19 @@ export default function LoyaltyAdmin() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total Points Issued</p>
-            <p className="text-3xl font-bold mt-2">{customers.reduce((sum, c) => sum + c.lifetime_points, 0).toLocaleString()}</p>
+            <p className="text-3xl font-bold mt-2">{customers.reduce((sum, c) => sum + (c?.lifetime_points || 0), 0).toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total Points Redeemed</p>
-            <p className="text-3xl font-bold mt-2">{customers.reduce((sum, c) => sum + c.redeemed_points, 0).toLocaleString()}</p>
+            <p className="text-3xl font-bold mt-2">{customers.reduce((sum, c) => sum + (c?.redeemed_points || 0), 0).toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Avg Points/Customer</p>
-            <p className="text-3xl font-bold mt-2">{customers.length > 0 ? Math.round(customers.reduce((sum, c) => sum + c.total_points, 0) / customers.length) : 0}</p>
+            <p className="text-3xl font-bold mt-2">{customers.length > 0 ? Math.round(customers.reduce((sum, c) => sum + (c?.total_points || 0), 0) / customers.length) : 0}</p>
           </CardContent>
         </Card>
       </div>

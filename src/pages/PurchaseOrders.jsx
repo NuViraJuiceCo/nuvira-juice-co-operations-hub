@@ -192,15 +192,18 @@ export default function PurchaseOrders() {
   };
 
   const handleSaveCreate = async () => {
-    const data = await base44.entities.PurchaseOrder.list("-order_date", 50);
-    setPos(data);
-    setIsCreating(false);
-  };
+     const data = await base44.entities.PurchaseOrder.list("-order_date", 50);
+     setPos(data || []);
+     setIsCreating(false);
+   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;
 
-  const getStatus = (item) => item.stock <= item.reorder_point ? "Low" : "OK";
-  const lowStockItems = inventory.filter(i => getStatus(i) === "Low");
+  const getStatus = (item) => {
+    if (!item || !item.stock || !item.reorder_point) return "OK";
+    return item.stock <= item.reorder_point ? "Low" : "OK";
+  };
+   const lowStockItems = inventory.filter(i => i && getStatus(i) === "Low");
   const totalSpend = pos.filter(p => p.status !== "Draft").reduce((s, p) => s + (p.total_amount || 0), 0);
   const pending = pos.filter(p => ["Ordered", "In Transit"].includes(p.status)).length;
 

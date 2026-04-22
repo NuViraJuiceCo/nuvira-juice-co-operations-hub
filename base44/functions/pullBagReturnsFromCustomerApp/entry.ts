@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
 
     // Fetch bag returns from customer app
     const response = await fetch(`${CUSTOMER_APP_API}/functions/getBagReturnsForSync`, {
-      method: 'GET',
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',
