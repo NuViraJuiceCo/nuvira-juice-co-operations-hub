@@ -73,7 +73,10 @@ export default function UnifiedComplianceForm() {
 
   const { data: products = [] } = useQuery({
     queryKey: ['products'],
-    queryFn: () => base44.entities.Product.list('name', 100),
+    queryFn: async () => {
+      const recipes = await base44.entities.Recipe.list('product_name', 100);
+      return recipes.filter(r => r.is_active !== false).map(r => ({ id: r.id, name: r.product_name, batch_id: r.product_sku }));
+    },
   });
 
   useEffect(() => {
@@ -95,8 +98,7 @@ export default function UnifiedComplianceForm() {
     if (product) {
       setFormData(prev => ({
         ...prev,
-        juice_flavor: product.name,
-        ingredients: product.ingredients?.join(', ') || '',
+        product_name: product.name,
         batch_id: product.batch_id || prev.batch_id
       }));
     }
