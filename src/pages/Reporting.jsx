@@ -32,9 +32,9 @@ export default function Reporting() {
   });
 
   const totalRevenue = filtered.reduce((s, o) => s + (o.total_price || 0), 0);
-  const totalTax = filtered.reduce((s, o) => s + (o.subtotal ? (o.total_price - o.subtotal) : 0), 0);
-  const totalDiscount = filtered.reduce((s, o) => s + 0, 0);
-  const avgOrder = filtered.length > 0 ? totalRevenue / filtered.length : 0;
+   const totalTax = filtered.reduce((s, o) => s + ((o.total_price || 0) - (o.subtotal || 0)), 0);
+   const totalDiscount = filtered.reduce((s, o) => s + 0, 0);
+   const avgOrder = filtered.length > 0 ? totalRevenue / filtered.length : 0;
 
   const exportCSV = () => {
     const headers = "Metric,Value\n";

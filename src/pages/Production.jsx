@@ -71,8 +71,8 @@ export default function Production() {
     (b) => statusFilter === "all" || b.status === statusFilter
   );
 
-  const grouped = _.groupBy(filtered, (b) => b.production_date);
-  const activeBatches = batches.filter((b) => b.status !== "Completed").length;
+  const grouped = _.groupBy(filtered, (b) => b.production_date || '');
+  const activeBatches = filtered.filter((b) => b.status !== "Completed").length;
 
   if (loading) {
     return (

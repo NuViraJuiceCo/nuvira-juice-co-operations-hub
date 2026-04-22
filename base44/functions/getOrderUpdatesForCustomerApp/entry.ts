@@ -16,8 +16,9 @@ Deno.serve(async (req) => {
     }
 
     const base44 = createClientFromRequest(req);
-    const statusFilter = url.searchParams.get('status');
-    const sinceFilter = url.searchParams.get('since');
+     const url = new URL(req.url);
+     const statusFilter = url.searchParams.get('status');
+     const sinceFilter = url.searchParams.get('since');
 
     // Fetch all ShopifyOrder records
     const orders = await base44.asServiceRole.entities.ShopifyOrder.list('-updated_date', 500);

@@ -80,8 +80,8 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'success', orders: [], optimized_orders: [] });
     }
 
-    // Filter to only undelivered orders
-    const queuedOrders = orders.filter(o => o.status !== 'delivered');
+    // Filter to only undelivered orders (check both status and production_status fields)
+     const queuedOrders = orders.filter(o => o.status !== 'delivered' && o.production_status !== 'fulfilled');
 
     if (!optimize) {
       return Response.json({ 

@@ -12,12 +12,18 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await req.json();
-    const { bagReturnId, returnData } = payload;
+    let payload;
+     try {
+       payload = await req.json();
+     } catch {
+       return Response.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+     }
 
-    if (!bagReturnId || !returnData) {
-      return Response.json({ error: 'Missing bagReturnId or returnData' }, { status: 400 });
-    }
+     const { bagReturnId, returnData } = payload;
+
+     if (!bagReturnId || !returnData) {
+       return Response.json({ error: 'Missing bagReturnId or returnData' }, { status: 400 });
+     }
 
     if (!CUSTOMER_APP_API || !SYNC_SECRET) {
       console.warn('[SYNC-BAG-RETURN] Customer app API not configured, skipping sync');
