@@ -17,8 +17,8 @@ export default function Inventory() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("ingredient");
-  const [sortDir, setSortDir] = useState("asc"); // Always asc for category/ingredient sort
+  const [sortBy, setSortBy] = useState("category");
+  const [sortDir, setSortDir] = useState("asc");
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
