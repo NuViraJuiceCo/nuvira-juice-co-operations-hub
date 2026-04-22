@@ -52,9 +52,12 @@ async function syncOrders(base44) {
         await base44.asServiceRole.entities.ShopifyOrder.create(hubOrder);
         created++;
       }
-    } catch { failed++; }
-  }
-  return { total: orders.length, created, updated, failed };
+      } catch (err) { 
+      console.error(`[FULL-SYNC] Order sync error for ${ord.shopify_order_id}:`, err.message);
+      failed++; 
+      }
+      }
+      return { total: orders.length, created, updated, failed };
 }
 
 async function syncProducts(base44) {
@@ -73,9 +76,12 @@ async function syncProducts(base44) {
         await base44.asServiceRole.entities.Product.create(hubProduct);
         created++;
       }
-    } catch { failed++; }
-  }
-  return { total: products.length, created, updated, failed };
+      } catch (err) { 
+      console.error(`[FULL-SYNC] Product sync error for ${p.sku}:`, err.message);
+      failed++; 
+      }
+      }
+      return { total: products.length, created, updated, failed };
 }
 
 async function syncLoyalty(base44) {
@@ -92,9 +98,12 @@ async function syncLoyalty(base44) {
         await base44.asServiceRole.entities.CustomerLoyalty.create(c);
         created++;
       }
-    } catch { failed++; }
-  }
-  return { total: customers.length, created, updated, failed };
+      } catch (err) { 
+      console.error(`[FULL-SYNC] Loyalty sync error for ${c.customer_email}:`, err.message);
+      failed++; 
+      }
+      }
+      return { total: customers.length, created, updated, failed };
 }
 
 async function syncEvents(base44) {

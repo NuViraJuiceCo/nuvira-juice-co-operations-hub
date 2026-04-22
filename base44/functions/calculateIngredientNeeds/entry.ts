@@ -175,6 +175,20 @@ Deno.serve(async (req) => {
       inventoryMap[(inv.ingredient || '').toLowerCase().trim()] = inv;
     }
 
+    // Helper: convert inventory stock to oz for comparison
+    const convertToOz = (stock, unit) => {
+      if (!unit) return stock;
+      switch (unit.toLowerCase()) {
+        case 'oz': return stock;
+        case 'g': return stock / OZ_TO_G;
+        case 'kg': return (stock * 1000) / OZ_TO_G;
+        case 'lbs': return stock * 16;
+        case 'l': return stock * 33.814;
+        case 'ml': return stock / 29.5735;
+        default: return stock;
+      }
+    };
+
     // 5. Helper: parse supplier packaging qty string (e.g., "40 lbs" -> 40)
     const parsePackagingQty = (pkgQty, pkgUnit) => {
       if (!pkgQty) return null;
@@ -185,12 +199,7 @@ Deno.serve(async (req) => {
     // 6. Build final ingredient needs report
     const ingredientNeeds = Object.entries(ingredientTotals).map(([name, totals]) => {
       const invItem = inventoryMap[name.toLowerCase().trim()];
-      const currentStockOz = invItem
-        ? (invItem.unit === 'kg' ? invItem.stock * 35.274
-          : invItem.unit === 'g' ? invItem.stock / OZ_TO_G
-          : invItem.unit === 'L' ? invItem.stock * 33.814
-          : invItem.stock)
-        : 0;
+      const currentStockOz = invItem ? convertToOz(invItem.stock, invItem.unit) : 0;
 
       const neededOz = totals.quantity_oz;
       const shortfallOz = Math.max(0, neededOz - currentStockOz);

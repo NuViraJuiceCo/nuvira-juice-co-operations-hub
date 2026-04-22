@@ -74,7 +74,7 @@ export default function ProdScheduler() {
           <p className="text-sm font-semibold text-red-800 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Ingredient Alerts ({allAlerts.length} batches)</p>
           {allAlerts.map(({ batch, missing }) => (
             <p key={batch.id} className="text-xs text-red-700">
-              <span className="font-medium">{batch.product_name}</span> ({batch.production_date}) — Missing: {missing.map(m => `${m.name}`).join(", ")}
+              <span className="font-medium">{batch.product_name}</span> ({batch.production_date}) — Missing: {missing.map(m => `${m.ingredient_name}`).join(", ")}
             </p>
           ))}
         </div>

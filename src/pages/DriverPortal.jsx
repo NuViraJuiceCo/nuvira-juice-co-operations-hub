@@ -559,14 +559,13 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
       { status: 'delivered', timestamp: deliveredAt, message: `Delivered · ${dropLocation}` },
     ];
     try {
-      await base44.entities.Order.update(order.id, {
-        status: 'delivered',
-        status_history: newHistory,
-        delivery_photo_url: proofPhotoUrl,
-        delivery_drop_location: dropLocation,
-        delivered_by: user?.email,
-        delivered_at: deliveredAt,
-      });
+       await base44.entities.ShopifyOrder.update(order.id, {
+         production_status: 'fulfilled',
+         delivery_photo_url: proofPhotoUrl,
+         delivery_drop_location: dropLocation,
+         delivered_by: user?.email,
+         delivered_at: deliveredAt,
+       });
       const itemsList = order.items?.map(i => `${i.title} ×${i.quantity}`).join(', ') || '';
       const deliveredTime = new Date(deliveredAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' });
       await base44.integrations.Core.SendEmail({
@@ -591,11 +590,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
       { status: 'order_received', timestamp: new Date().toISOString(), message: `Unable to deliver: ${reason}${notes ? ` — ${notes}` : ''}` },
     ];
     try {
-      await base44.entities.Order.update(order.id, {
-        status: 'order_received',
-        status_history: newHistory,
-        notes: `Unable to deliver on ${new Date().toLocaleDateString()} — Reason: ${reason}${notes ? `. ${notes}` : ''}`,
-      });
+       await base44.entities.ShopifyOrder.update(order.id, {
+         production_status: 'new',
+         customer_notes: `Unable to deliver on ${new Date().toLocaleDateString()} — Reason: ${reason}${notes ? `. ${notes}` : ''}`,
+       });
       const linkedReturn = bagReturns.find(r => r.customer_email === order.customer_email && r.verification_status === 'requested');
       if (linkedReturn) {
         await base44.entities.BagReturn.update(linkedReturn.id, {
@@ -620,7 +618,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     setUpdatingId(order.id);
     const newHistory = [...(order.status_history || []), { status: nextStage.key, timestamp: new Date().toISOString(), message: nextStage.label }];
     try {
-      await base44.entities.Order.update(order.id, { status: nextStage.key, status_history: newHistory });
+       await base44.entities.ShopifyOrder.update(order.id, { production_status: nextStage.key });
       if (routeData?.optimized_orders) {
         const updated = routeData.optimized_orders.map(o => 
           o.id === order.id ? { ...o, status: nextStage.key, status_history: newHistory } : o

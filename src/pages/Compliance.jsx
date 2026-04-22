@@ -69,7 +69,7 @@ export default function Compliance() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Compliance</h1>
           <p className="text-muted-foreground mt-1">Certifications, permits and regulatory requirements</p>
         </div>
-        <Button className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Document</Button>
+        <Button onClick={() => {}} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Document</Button>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

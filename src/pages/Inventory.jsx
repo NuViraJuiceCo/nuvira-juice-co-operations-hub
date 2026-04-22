@@ -35,6 +35,7 @@ export default function Inventory() {
 
   const getStatus = (item) => {
     if (item.stock <= 0) return "Out of Stock";
+    if (!item.reorder_point) return "OK";
     if (item.stock <= item.reorder_point * 0.5) return "Critical";
     if (item.stock <= item.reorder_point) return "Low";
     return "OK";
