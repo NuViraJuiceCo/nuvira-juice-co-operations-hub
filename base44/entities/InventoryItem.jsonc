@@ -39,6 +39,28 @@
       "type": "string",
       "description": "Supplier name"
     },
+    "supplier_packaging_unit": {
+      "type": "string",
+      "enum": [
+        "case",
+        "bunch",
+        "lb",
+        "kg",
+        "count",
+        "box",
+        "bag",
+        "other"
+      ],
+      "description": "How the supplier packages this ingredient"
+    },
+    "supplier_packaging_qty": {
+      "type": "string",
+      "description": "What's in one case/box/bunch (e.g., '40 lbs', '24 bunches', '50 count')"
+    },
+    "cost_per_supplier_unit": {
+      "type": "number",
+      "description": "Cost per case/box/bunch from supplier"
+    },
     "location": {
       "type": "string",
       "description": "Storage location (e.g. Cold Room, Dry Store)"

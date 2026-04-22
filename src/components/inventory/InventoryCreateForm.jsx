@@ -12,6 +12,9 @@ export default function InventoryCreateForm({ onClose, onSave }) {
     max_stock: '',
     cost_per_unit: '',
     supplier: '',
+    supplier_packaging_unit: 'case',
+    supplier_packaging_qty: '',
+    cost_per_supplier_unit: '',
     location: '',
     category: 'Produce',
     notes: '',
@@ -149,6 +152,47 @@ export default function InventoryCreateForm({ onClose, onSave }) {
                 className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Packaging Unit</label>
+              <select
+                value={formData.supplier_packaging_unit}
+                onChange={(e) => handleChange('supplier_packaging_unit', e.target.value)}
+                className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              >
+                <option>case</option>
+                <option>bunch</option>
+                <option>lb</option>
+                <option>kg</option>
+                <option>count</option>
+                <option>box</option>
+                <option>bag</option>
+                <option>other</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Per Package</label>
+              <input
+                type="text"
+                placeholder="e.g., 40 lbs"
+                value={formData.supplier_packaging_qty}
+                onChange={(e) => handleChange('supplier_packaging_qty', e.target.value)}
+                className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-xs"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Cost per Package</label>
+            <input
+              type="number"
+              value={formData.cost_per_supplier_unit}
+              onChange={(e) => handleChange('cost_per_supplier_unit', e.target.value ? parseFloat(e.target.value) : '')}
+              className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              placeholder="e.g., 12.99"
+            />
           </div>
 
           <div>
