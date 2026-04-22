@@ -95,7 +95,7 @@ export default function InventoryEditForm({ item, onClose, onSave }) {
                 onChange={(e) => handleChange('unit', e.target.value)}
                 className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               >
-                <option>kg</option>
+                <option>lbs</option>
                 <option>g</option>
                 <option>L</option>
                 <option>mL</option>

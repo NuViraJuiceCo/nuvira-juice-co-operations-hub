@@ -9,7 +9,7 @@
     "unit": {
       "type": "string",
       "enum": [
-        "kg",
+        "lbs",
         "g",
         "L",
         "mL",
