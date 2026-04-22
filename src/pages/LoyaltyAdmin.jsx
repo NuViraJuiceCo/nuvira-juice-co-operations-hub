@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Download, RefreshCw, TrendingUp, Gift } from 'lucide-react';
+import { Search, Download, RefreshCw, TrendingUp, Gift, Trash2 } from 'lucide-react';
 import moment from 'moment';
 
 export default function LoyaltyAdmin() {
@@ -100,13 +100,27 @@ export default function LoyaltyAdmin() {
     if (selectedCustomers.size === 0) return;
     if (!confirm(`Delete ${selectedCustomers.size} member(s)?`)) return;
     try {
-      for (const customerId of selectedCustomers) {
-        await base44.entities.CustomerLoyalty.delete(customerId);
-      }
+      await Promise.all(Array.from(selectedCustomers).map(id => base44.entities.CustomerLoyalty.delete(id)));
       await loadData();
       setSelectedCustomers(new Set());
     } catch (error) {
       console.error('Delete error:', error);
+    }
+  };
+
+  const deleteSingle = async (e, customerId) => {
+    e.stopPropagation();
+    if (!confirm('Delete this loyalty member?')) return;
+    await base44.entities.CustomerLoyalty.delete(customerId);
+    setCustomers(prev => prev.filter(c => c.id !== customerId));
+    setSelectedCustomers(prev => { const s = new Set(prev); s.delete(customerId); return s; });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedCustomers.size === filtered.length) {
+      setSelectedCustomers(new Set());
+    } else {
+      setSelectedCustomers(new Set(filtered.map(c => c.id)));
     }
   };
 
@@ -195,6 +209,24 @@ export default function LoyaltyAdmin() {
         />
       </div>
 
+      {/* Select All + bulk bar */}
+      {filtered.length > 0 && (
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-4 h-4 cursor-pointer"
+              checked={selectedCustomers.size === filtered.length && filtered.length > 0}
+              onChange={toggleSelectAll}
+            />
+            Select all ({filtered.length})
+          </label>
+          {selectedCustomers.size > 0 && (
+            <span className="text-sm font-medium text-primary">{selectedCustomers.size} selected</span>
+          )}
+        </div>
+      )}
+
       {/* Customer List */}
       <div className="space-y-4">
         {filtered.length === 0 ? (
@@ -233,9 +265,18 @@ export default function LoyaltyAdmin() {
                         </div>
                       </div>
                     </div>
-                    <Badge variant="outline" className="text-lg font-bold">
-                      {customer.total_points} pts
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-lg font-bold">
+                        {customer.total_points} pts
+                      </Badge>
+                      <button
+                        onClick={(e) => deleteSingle(e, customer.id)}
+                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                        title="Delete member"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
