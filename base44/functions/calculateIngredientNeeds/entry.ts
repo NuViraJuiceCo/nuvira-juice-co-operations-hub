@@ -15,8 +15,12 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { date_from, date_to, order_ids } = body;
 
-    // 1. Fetch all active recipes
-    const recipes = await base44.asServiceRole.entities.Recipe.list();
+    // 1. Fetch all active recipes and bundles in parallel
+    const [recipes, bundles] = await Promise.all([
+      base44.asServiceRole.entities.Recipe.list(),
+      base44.asServiceRole.entities.Bundle.list(),
+    ]);
+
     if (!recipes || recipes.length === 0) {
       return Response.json({ error: 'No recipes found. Please add recipes first.' }, { status: 400 });
     }
@@ -26,6 +30,14 @@ Deno.serve(async (req) => {
     for (const recipe of recipes) {
       if (recipe.is_active !== false) {
         recipeMap[recipe.product_name.toLowerCase().trim()] = recipe;
+      }
+    }
+
+    // Build bundle lookup map: bundle name (lowercase) -> bundle
+    const bundleMap = {};
+    for (const bundle of (bundles || [])) {
+      if (bundle.is_active !== false) {
+        bundleMap[bundle.bundle_name.toLowerCase().trim()] = bundle;
       }
     }
 
@@ -65,6 +77,7 @@ Deno.serve(async (req) => {
     const ingredientTotals = {}; // { ingredient_name: { quantity_oz, quantity_g, unit } }
     const unmatchedItems = new Set();
     const bottleCounts = {}; // { product_name: total_bottles }
+    const bundleCounts = {}; // { bundle_name: total_bundles }
     let matchedOrders = 0;
 
     for (const order of activeOrders) {
@@ -75,7 +88,45 @@ Deno.serve(async (req) => {
         const itemTitle = (item.title || '').toLowerCase().trim();
         const qty = item.quantity || 1;
 
-        // Try to find matching recipe
+        // Helper: accumulate ingredients for a single recipe + bottle count
+        const addRecipeIngredients = (recipe, bottleQty) => {
+          const yieldFactor = recipe.yield_factor || 1.05;
+          bottleCounts[recipe.product_name] = (bottleCounts[recipe.product_name] || 0) + bottleQty;
+          for (const ing of (recipe.ingredients || [])) {
+            const ingName = ing.ingredient_name;
+            const ingQtyOz = (ing.quantity_oz || 0) * bottleQty * yieldFactor;
+            const ingQtyG = ingQtyOz * OZ_TO_G;
+            if (!ingredientTotals[ingName]) {
+              ingredientTotals[ingName] = { quantity_oz: 0, quantity_g: 0, unit: ing.unit || 'oz' };
+            }
+            ingredientTotals[ingName].quantity_oz += ingQtyOz;
+            ingredientTotals[ingName].quantity_g += ingQtyG;
+          }
+        };
+
+        // Try to find matching bundle first
+        let matchedBundle = null;
+        for (const [key, bnd] of Object.entries(bundleMap)) {
+          if (itemTitle.includes(key) || key.includes(itemTitle)) {
+            matchedBundle = bnd;
+            break;
+          }
+        }
+
+        if (matchedBundle) {
+          // Expand bundle into component bottles
+          orderMatched = true;
+          bundleCounts[matchedBundle.bundle_name] = (bundleCounts[matchedBundle.bundle_name] || 0) + qty;
+          for (const component of (matchedBundle.components || [])) {
+            const componentRecipe = recipeMap[component.product_name.toLowerCase().trim()];
+            if (componentRecipe) {
+              addRecipeIngredients(componentRecipe, component.quantity * qty);
+            }
+          }
+          continue;
+        }
+
+        // Try to find matching single recipe
         let recipe = null;
         for (const [key, rec] of Object.entries(recipeMap)) {
           if (itemTitle.includes(key) || key.includes(itemTitle)) {
@@ -90,20 +141,7 @@ Deno.serve(async (req) => {
         }
 
         orderMatched = true;
-        const yieldFactor = recipe.yield_factor || 1.05;
-        bottleCounts[recipe.product_name] = (bottleCounts[recipe.product_name] || 0) + qty;
-
-        for (const ing of (recipe.ingredients || [])) {
-          const name = ing.ingredient_name;
-          const ingQtyOz = (ing.quantity_oz || 0) * qty * yieldFactor;
-          const ingQtyG = ingQtyOz * OZ_TO_G;
-
-          if (!ingredientTotals[name]) {
-            ingredientTotals[name] = { quantity_oz: 0, quantity_g: 0, unit: ing.unit || 'oz' };
-          }
-          ingredientTotals[name].quantity_oz += ingQtyOz;
-          ingredientTotals[name].quantity_g += ingQtyG;
-        }
+        addRecipeIngredients(recipe, qty);
       }
 
       if (orderMatched) matchedOrders++;
@@ -158,6 +196,7 @@ Deno.serve(async (req) => {
         matched_orders: matchedOrders,
         unmatched_items: Array.from(unmatchedItems),
         bottle_counts: bottleCounts,
+        bundle_counts: bundleCounts,
         date_from: date_from || null,
         date_to: date_to || null
       },

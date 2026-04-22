@@ -1,0 +1,54 @@
+{
+  "name": "Bundle",
+  "type": "object",
+  "properties": {
+    "bundle_name": {
+      "type": "string",
+      "description": "Bundle/program name (must match line_item titles in orders)",
+      "required": true
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the bundle"
+    },
+    "components": {
+      "type": "array",
+      "description": "List of juice products and quantities included in this bundle",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_name": {
+            "type": "string",
+            "description": "Must match product_name in Recipe entity"
+          },
+          "quantity": {
+            "type": "number",
+            "description": "Number of bottles of this product in the bundle"
+          }
+        }
+      }
+    },
+    "includes_wellness_shots": {
+      "type": "boolean",
+      "description": "Whether this bundle can include wellness shot add-ons",
+      "default": false
+    },
+    "max_wellness_shots": {
+      "type": "number",
+      "description": "Maximum number of wellness shots that can be added",
+      "default": 0
+    },
+    "is_active": {
+      "type": "boolean",
+      "description": "Whether this bundle is currently available",
+      "default": true
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  },
+  "required": [
+    "bundle_name"
+  ]
+}
