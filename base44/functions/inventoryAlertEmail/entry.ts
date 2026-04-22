@@ -37,15 +37,11 @@ Deno.serve(async (req) => {
       </div>
     </div>`;
 
-    for (const admin of admins) {
-      if (admin.email) {
-        await base44.asServiceRole.integrations.Core.SendEmail({
-          to: admin.email,
-          subject: `🔴 Low Stock Alert: ${lowStock.length} item${lowStock.length > 1 ? 's' : ''} need reordering`,
-          body,
-        });
-      }
-    }
+    await base44.asServiceRole.integrations.Core.SendEmail({
+      to: 'operations@nuvirajuice.com',
+      subject: `🔴 Low Stock Alert: ${lowStock.length} item${lowStock.length > 1 ? 's' : ''} need reordering`,
+      body,
+    });
 
     return Response.json({ message: `Alert sent for ${lowStock.length} items`, sent: true, items: lowStock.map(i => i.ingredient) });
   } catch (error) {

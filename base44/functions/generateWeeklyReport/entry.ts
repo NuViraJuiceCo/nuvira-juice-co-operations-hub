@@ -223,7 +223,7 @@ Deno.serve(async (req) => {
   const fileUrl = uploadRes.file_url;
 
   // Send email
-  const to = recipient_email || user.email;
+  const to = recipient_email || 'operations@nuvirajuice.com';
   const dateLabel = `${startStr} to ${endStr}`;
   await base44.asServiceRole.integrations.Core.SendEmail({
     to,
