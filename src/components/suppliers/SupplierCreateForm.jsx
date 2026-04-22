@@ -9,6 +9,7 @@ export default function SupplierCreateForm({ onClose, onSave }) {
     contact_name: '',
     email: '',
     phone: '',
+    address: '',
     location: '',
     category: 'Produce',
     status: 'Active',
@@ -126,6 +127,17 @@ export default function SupplierCreateForm({ onClose, onSave }) {
                 <option>Negotiating</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Address</label>
+            <input
+              type="text"
+              value={formData.address}
+              onChange={(e) => handleChange('address', e.target.value)}
+              className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              placeholder="Street address, building, suite"
+            />
           </div>
 
           <div>

@@ -9,6 +9,7 @@ export default function SupplierEditForm({ supplier, onClose, onSave }) {
     contact_name: supplier.contact_name || '',
     email: supplier.email || '',
     phone: supplier.phone || '',
+    address: supplier.address || '',
     location: supplier.location || '',
     category: supplier.category || 'Produce',
     status: supplier.status || 'Active',
@@ -93,6 +94,28 @@ export default function SupplierEditForm({ supplier, onClose, onSave }) {
                 className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Address</label>
+            <input
+              type="text"
+              value={formData.address}
+              onChange={(e) => handleChange('address', e.target.value)}
+              className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              placeholder="Street address, building, suite"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Location</label>
+            <input
+              type="text"
+              value={formData.location}
+              onChange={(e) => handleChange('location', e.target.value)}
+              className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
+              placeholder="City/Province"
+            />
           </div>
 
           <div>

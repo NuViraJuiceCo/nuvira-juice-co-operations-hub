@@ -18,6 +18,10 @@
       "type": "string",
       "description": "Contact phone number"
     },
+    "address": {
+      "type": "string",
+      "description": "Full business address"
+    },
     "location": {
       "type": "string",
       "description": "City/Province"
