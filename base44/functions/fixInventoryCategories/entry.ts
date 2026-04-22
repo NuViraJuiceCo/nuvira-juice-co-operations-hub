@@ -16,8 +16,8 @@ Deno.serve(async (req) => {
       let newCategory = item.category;
       const ingredientLower = (item.ingredient || '').toLowerCase();
 
-      // Change Citrus to Produce
-      if (item.category === 'Citrus') {
+      // Change Citrus and Exotic Produce to Produce
+      if (item.category === 'Citrus' || item.category === 'Exotic Produce') {
         newCategory = 'Produce';
       }
 
