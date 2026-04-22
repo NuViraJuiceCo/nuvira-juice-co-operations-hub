@@ -84,7 +84,7 @@ export default function InventoryEditForm({ item, onClose, onSave }) {
               <input
                 type="number"
                 value={formData.stock}
-                onChange={(e) => handleChange('stock', parseFloat(e.target.value) || '')}
+                onChange={(e) => handleChange('stock', e.target.value)}
                 className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               />
             </div>
@@ -112,7 +112,7 @@ export default function InventoryEditForm({ item, onClose, onSave }) {
               <input
                 type="number"
                 value={formData.reorder_point}
-                onChange={(e) => handleChange('reorder_point', parseFloat(e.target.value) || '')}
+                onChange={(e) => handleChange('reorder_point', e.target.value)}
                 className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               />
             </div>
@@ -121,7 +121,7 @@ export default function InventoryEditForm({ item, onClose, onSave }) {
               <input
                 type="number"
                 value={formData.max_stock}
-                onChange={(e) => handleChange('max_stock', parseFloat(e.target.value) || '')}
+                onChange={(e) => handleChange('max_stock', e.target.value)}
                 className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               />
             </div>
@@ -188,7 +188,7 @@ export default function InventoryEditForm({ item, onClose, onSave }) {
             <input
               type="number"
               value={formData.cost_per_supplier_unit}
-              onChange={(e) => handleChange('cost_per_supplier_unit', parseFloat(e.target.value) || '')}
+              onChange={(e) => handleChange('cost_per_supplier_unit', e.target.value)}
               className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               placeholder="e.g., 12.99"
             />
@@ -199,7 +199,7 @@ export default function InventoryEditForm({ item, onClose, onSave }) {
             <input
               type="number"
               value={formData.weight_per_supplier_unit}
-              onChange={(e) => handleChange('weight_per_supplier_unit', parseFloat(e.target.value) || '')}
+              onChange={(e) => handleChange('weight_per_supplier_unit', e.target.value)}
               className="mt-1 w-full p-2 border border-border rounded-lg bg-background"
               placeholder="e.g., 13 (for watermelon)"
               step="0.1"
