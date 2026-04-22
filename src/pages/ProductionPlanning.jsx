@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Calculator, BookOpen, RefreshCw, Calendar } from "lucide-react";
+import { Calculator, BookOpen, RefreshCw, Calendar, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import IngredientNeedsResult from "../components/production/IngredientNeedsResult";
 import RecipeManager from "../components/production/RecipeManager";
+import PreOrderBatchPlanner from "../components/production/PreOrderBatchPlanner";
 
 const TABS = [
+  { id: "preorders", label: "Pre-Orders", icon: Package },
   { id: "planner", label: "Production Planner", icon: Calculator },
   { id: "recipes", label: "Recipes", icon: BookOpen }
 ];
@@ -80,6 +82,11 @@ export default function ProductionPlanning() {
           );
         })}
       </div>
+
+      {/* Pre-Orders Tab */}
+      {activeTab === "preorders" && (
+        <PreOrderBatchPlanner />
+      )}
 
       {/* Production Planner Tab */}
       {activeTab === "planner" && (
