@@ -57,7 +57,7 @@ export default function ProdScheduler() {
   const getOrdersForBatch = (batch) => {
     return orders.filter(o => 
       o && o.line_items && o.line_items.some(item => 
-        item.title === batch.product_name && o.production_status !== 'fulfilled'
+        item.title === batch.product_name && o.production_status !== 'fulfilled' && o.fulfillment_status !== 'fulfilled'
       )
     );
   };
@@ -184,7 +184,7 @@ export default function ProdScheduler() {
       <div>
         <h2 className="font-semibold text-foreground mb-3">All Scheduled Batches</h2>
         <div className="space-y-2">
-          {batches.map(batch => {
+          {batches.filter(batch => getOrdersForBatch(batch).length > 0).map(batch => {
             const alerts = checkInventory(batch);
             return (
               <div key={batch.id} className="bg-card border border-border rounded-xl px-5 py-3.5 flex items-center gap-4">
