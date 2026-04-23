@@ -25,17 +25,23 @@ export default function ProductionPlanning() {
     setLoading(true);
     setError(null);
     setResult(null);
-    try {
-      const res = await base44.functions.invoke("calculateIngredientNeeds", {
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined
-      });
-      setResult(res.data);
-    } catch (err) {
-      setError(err.message || "Calculation failed.");
-    } finally {
-      setLoading(false);
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await base44.functions.invoke("calculateIngredientNeeds", {
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined
+        });
+        setResult(res.data);
+        setLoading(false);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < 2) await new Promise(r => setTimeout(r, 500));
+      }
     }
+    setError(lastErr?.message || "Calculation failed. Please try again.");
+    setLoading(false);
   };
 
   const setToday = () => {
