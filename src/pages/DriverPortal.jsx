@@ -661,14 +661,17 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   const handleDeleteOrder = async (order) => {
+    console.log('Delete order:', order.id);
     setDeletingId(order.id);
     try {
       await base44.entities.ShopifyOrder.delete(order.id);
+      console.log('Order deleted successfully');
       toast.success('Order deleted');
       loadQueue();
       setRouteData(null);
-    } catch {
-      toast.error('Delete failed');
+    } catch (err) {
+      console.error('Delete error:', err);
+      toast.error('Delete failed: ' + (err.message || 'Unknown error'));
     } finally {
       setDeletingId(null);
     }
