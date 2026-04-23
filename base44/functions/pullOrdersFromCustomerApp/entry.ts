@@ -57,6 +57,17 @@ Deno.serve(async (req) => {
         }
         processedIds.add(orderId);
 
+        // Check for existing duplicates and delete them before upserting
+        const existingDuplicates = await base44.asServiceRole.entities.ShopifyOrder.filter({
+          shopify_order_id: orderId,
+        });
+        if (existingDuplicates && existingDuplicates.length > 1) {
+          const sorted = existingDuplicates.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+          for (let i = 1; i < sorted.length; i++) {
+            await base44.asServiceRole.entities.ShopifyOrder.delete(sorted[i].id);
+          }
+        }
+
         // Check if exists in hub
         const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({
           shopify_order_id: orderId,
