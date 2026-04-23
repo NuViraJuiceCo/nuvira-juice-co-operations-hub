@@ -661,10 +661,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   const handleDeleteOrder = async (order) => {
-    console.log('Delete order:', order.id);
+    console.log('Delete order:', order.id, order);
     setDeletingId(order.id);
     try {
-      await base44.entities.ShopifyOrder.delete(order.id);
+      await base44.asServiceRole.entities.ShopifyOrder.delete(order.id);
       console.log('Order deleted successfully');
       toast.success('Order deleted');
       loadQueue();
