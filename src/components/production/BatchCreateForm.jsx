@@ -17,6 +17,7 @@ export default function BatchCreateForm({ onClose, onSave }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [recipes, setRecipes] = useState([]);
+  const [bundles, setBundles] = useState([]);
 
   useEffect(() => {
     // Set default production date based on schedule (after May 1st, use Tue/Fri/Sat)
@@ -34,8 +35,12 @@ export default function BatchCreateForm({ onClose, onSave }) {
     
     setFormData(prev => ({ ...prev, production_date: defaultDate }));
     
-    base44.entities.Recipe.list('-updated_date', 100).then(data => {
-      setRecipes(data.filter(r => r.is_active !== false));
+    Promise.all([
+      base44.entities.Recipe.list('-updated_date', 100),
+      base44.entities.Bundle.list('-updated_date', 100),
+    ]).then(([recipeData, bundleData]) => {
+      setRecipes(recipeData.filter(r => r.is_active !== false));
+      setBundles(bundleData.filter(b => b.is_active !== false));
     });
   }, []);
 
@@ -113,12 +118,8 @@ export default function BatchCreateForm({ onClose, onSave }) {
                {recipes.map(recipe => (
                  <option key={recipe.id} value={recipe.product_name}>{recipe.product_name}</option>
                ))}
-               <optgroup label="Wellness Shots">
-                 <option>Radiance</option>
-                 <option>Reset</option>
-                 <option>Hydration</option>
-               </optgroup>
              </select>
+             <p className="text-xs text-muted-foreground mt-1">Only base products shown. Bundles auto-decompose in orders.</p>
            </div>
 
           <div className="grid grid-cols-2 gap-3">
