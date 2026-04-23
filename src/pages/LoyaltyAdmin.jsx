@@ -171,6 +171,20 @@ export default function LoyaltyAdmin() {
     }
   };
 
+  const deleteTestUsers = async () => {
+    const testUsers = customers.filter(c => c.email?.toLowerCase().includes('test'));
+    if (testUsers.length === 0) return;
+    if (!confirm(`Delete ${testUsers.length} test user(s)?`)) return;
+    try {
+      await Promise.all(testUsers.map(u => base44.entities.LoyaltyMember.delete(u.id)));
+      await loadData();
+      toast.success(`Deleted ${testUsers.length} test users`);
+    } catch (error) {
+      console.error('Delete test users error:', error);
+      toast.error('Failed to delete test users');
+    }
+  };
+
   const deleteSingle = async (e, customerId) => {
     e.stopPropagation();
     if (!confirm('Delete this loyalty member?')) return;
@@ -222,6 +236,11 @@ export default function LoyaltyAdmin() {
                 Delete ({selectedCustomers.size})
               </Button>
             </>
+          )}
+          {customers.some(c => c.email?.toLowerCase().includes('test')) && (
+            <Button onClick={deleteTestUsers} variant="destructive" className="gap-2">
+              Delete Test Users
+            </Button>
           )}
           <Button variant="outline" onClick={syncFromCustomerApp} disabled={syncing} className="gap-2">
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
