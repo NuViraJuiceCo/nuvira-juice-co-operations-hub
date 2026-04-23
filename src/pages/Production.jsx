@@ -30,6 +30,15 @@ export default function Production() {
       setLoading(false);
     }
     load();
+
+    // Subscribe to order changes for real-time updates
+    const unsubOrders = base44.entities.ShopifyOrder.subscribe((event) => {
+      if (event.type === 'create' || event.type === 'update' || event.type === 'delete') {
+        load();
+      }
+    });
+
+    return () => unsubOrders();
   }, []);
 
   const handleRefresh = async () => {

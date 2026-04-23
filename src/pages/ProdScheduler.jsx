@@ -23,18 +23,30 @@ export default function ProdScheduler() {
   };
 
   useEffect(() => {
-    Promise.all([
-      base44.entities.ProductionBatch.list("production_date", 100),
-      base44.entities.ShopifyOrder.list("-created_date", 100),
-      base44.entities.InventoryItem.list("-updated_date", 100),
-      base44.entities.Recipe.list("-updated_date", 100),
-    ]).then(([b, o, inv, rec]) => {
-      setBatches(b);
-      setOrders(o);
-      setInventory(inv);
-      setRecipes(rec.filter(r => r.is_active !== false));
-      setLoading(false);
-    });
+    async function load() {
+      Promise.all([
+        base44.entities.ProductionBatch.list("production_date", 100),
+        base44.entities.ShopifyOrder.list("-created_date", 100),
+        base44.entities.InventoryItem.list("-updated_date", 100),
+        base44.entities.Recipe.list("-updated_date", 100),
+      ]).then(([b, o, inv, rec]) => {
+        setBatches(b);
+        setOrders(o);
+        setInventory(inv);
+        setRecipes(rec.filter(r => r.is_active !== false));
+        setLoading(false);
+      });
+    }
+    load();
+
+    // Subscribe to order and batch changes for real-time updates
+    const unsubOrders = base44.entities.ShopifyOrder.subscribe(() => load());
+    const unsubBatches = base44.entities.ProductionBatch.subscribe(() => load());
+
+    return () => {
+      unsubOrders();
+      unsubBatches();
+    };
   }, []);
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>;
