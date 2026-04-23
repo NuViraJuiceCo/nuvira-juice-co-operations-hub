@@ -132,7 +132,25 @@ export default function LoyaltyAdmin() {
     try {
       const selectedIds = Array.from(selectedCustomers);
       const emails = customers.filter(c => selectedIds.includes(c.id)).map(c => c.customer_email);
-      const res = await base44.functions.invoke('addSignupBonusToMembers', { customer_emails: emails });
+      const selectedLoyalty = customers.filter(c => selectedIds.includes(c.id));
+      const res = await base44.functions.invoke('createLoyaltySignupBonus', {
+        customer_emails: emails,
+        points_data: selectedLoyalty.map(c => ({
+          customer_email: c.customer_email,
+          total_points: (c.total_points || 0) + 100,
+          lifetime_points: (c.lifetime_points || 0) + 100,
+          redeemed_points: c.redeemed_points || 0,
+          points_history: [
+            ...(c.points_history || []),
+            {
+              amount: 100,
+              type: 'bonus',
+              description: 'Admin bonus',
+              timestamp: new Date().toISOString()
+            }
+          ]
+        }))
+      });
       if (res.data.status === 'success') {
         await loadData();
         setSelectedCustomers(new Set());

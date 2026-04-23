@@ -8,19 +8,15 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
-    if (!user) {
-       return Response.json({ error: 'Unauthorized' }, { status: 401 });
-     }
+    if (!user || user.role !== 'admin') {
+      return Response.json({ error: 'Admin access required' }, { status: 403 });
+    }
 
-     if (user.role !== 'admin') {
-       return Response.json({ error: 'Admin access required' }, { status: 403 });
-     }
+    if (!CUSTOMER_APP_API || !SYNC_SECRET) {
+      return Response.json({ error: 'Customer app not configured' }, { status: 500 });
+    }
 
-     if (!CUSTOMER_APP_API || !SYNC_SECRET) {
-       return Response.json({ error: 'Customer app not configured' }, { status: 500 });
-     }
-
-    // Fetch loyalty data from customer app
+    // Fetch loyalty data from customer app via unified endpoint
     const response = await fetch(`${CUSTOMER_APP_API}/functions/getLoyaltyDataForSync`, {
       method: 'POST',
       headers: {
@@ -36,39 +32,37 @@ Deno.serve(async (req) => {
     }
 
     const { customers } = await response.json();
-
     if (!Array.isArray(customers)) {
       return Response.json({ error: 'Invalid response from customer app' }, { status: 500 });
     }
 
-    // Sync loyalty data to hub database
+    // Sync all customers via unified loyaltySync endpoint
     const results = [];
-    for (const customerData of customers) {
+    for (const customer of customers) {
       try {
-        const existing = await base44.asServiceRole.entities.CustomerLoyalty.filter({ 
-          customer_email: customerData.customer_email 
+        await base44.functions.invoke('loyaltySync', {
+          action: 'enroll',
+          token: SYNC_SECRET,
+          email: customer.customer_email,
+          full_name: customer.full_name || customer.customer_email.split('@')[0],
+          phone: customer.phone || '',
+          signup_date: customer.signup_date || new Date().toISOString().split('T')[0],
+          status: customer.status || 'active',
+          total_points: customer.total_points || 0,
+          lifetime_points: customer.lifetime_points || 0,
+          redeemed_points: customer.redeemed_points || 0,
+          points_history: customer.points_history || []
         });
-
-        if (existing?.length > 0) {
-          await base44.asServiceRole.entities.CustomerLoyalty.update(existing[0].id, customerData);
-          results.push({ email: customerData.customer_email, action: 'updated' });
-        } else {
-          await base44.asServiceRole.entities.CustomerLoyalty.create(customerData);
-          results.push({ email: customerData.customer_email, action: 'created' });
-        }
+        results.push({ email: customer.customer_email, action: 'synced' });
       } catch (err) {
-        results.push({ email: customerData.customer_email, action: 'failed', error: err.message });
+        results.push({ email: customer.customer_email, action: 'failed', error: err.message });
       }
     }
 
-    console.log(`[PULL-LOYALTY] Synced ${customers.length} loyalty records from customer app`);
-    return Response.json({
-      status: 'success',
-      synced: customers.length,
-      results
-    });
+    console.log(`[PULL-LOYALTY] Synced ${customers.length} records from customer app`);
+    return Response.json({ status: 'success', synced: customers.length, results });
   } catch (error) {
-    console.error('Error pulling loyalty data:', error);
+    console.error('Error pulling loyalty:', error);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
