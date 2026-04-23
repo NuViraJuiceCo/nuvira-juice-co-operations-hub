@@ -43,8 +43,8 @@ Deno.serve(async (req) => {
         await base44.functions.invoke('loyaltySync', {
           action: 'enroll',
           token: SYNC_SECRET,
-          email: customer.customer_email,
-          full_name: customer.full_name || customer.customer_email.split('@')[0],
+          email: customer.email || customer.customer_email,
+          full_name: customer.full_name || customer.email?.split('@')[0] || customer.customer_email.split('@')[0],
           phone: customer.phone || '',
           signup_date: customer.signup_date || new Date().toISOString().split('T')[0],
           status: customer.status || 'active',
@@ -53,9 +53,9 @@ Deno.serve(async (req) => {
           redeemed_points: customer.redeemed_points || 0,
           points_history: customer.points_history || []
         });
-        results.push({ email: customer.customer_email, action: 'synced' });
+        results.push({ email: customer.email || customer.customer_email, action: 'synced' });
       } catch (err) {
-        results.push({ email: customer.customer_email, action: 'failed', error: err.message });
+        results.push({ email: customer.email || customer.customer_email, action: 'failed', error: err.message });
       }
     }
 

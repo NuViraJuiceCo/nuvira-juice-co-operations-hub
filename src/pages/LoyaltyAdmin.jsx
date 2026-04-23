@@ -39,7 +39,7 @@ export default function LoyaltyAdmin() {
 
   const updatePointsMutation = useMutation({
     mutationFn: async ({ customerId, newPoints }) => {
-      await base44.entities.CustomerLoyalty.update(customerId, { total_points: parseInt(newPoints) });
+      await base44.entities.Loyalty.update(customerId, { total_points: parseInt(newPoints) });
     },
     onSuccess: () => {
       loadData();
@@ -59,7 +59,7 @@ export default function LoyaltyAdmin() {
     setLoading(true);
     try {
       const [loyaltyData, pointsData, rewardsData] = await Promise.all([
-        base44.entities.CustomerLoyalty.list('-lifetime_points', 100),
+        base44.entities.Loyalty.list('-lifetime_points', 100),
         base44.entities.UserPoints.list('-created_date', 500),
         base44.entities.Rewards.list(),
       ]);
@@ -88,8 +88,8 @@ export default function LoyaltyAdmin() {
     setSyncing(false);
   };
 
-  const getPointHistory = (email) => {
-    return userPoints.filter(p => p.customer_email === email).sort((a, b) => 
+  const getPointHistory = (customerEmail) => {
+    return userPoints.filter(p => p.customer_email === customerEmail).sort((a, b) => 
       new Date(b.created_date) - new Date(a.created_date)
     );
   };
@@ -108,7 +108,7 @@ export default function LoyaltyAdmin() {
   };
 
   const filtered = customers.filter(c =>
-    c && (!search || (c.customer_email && c.customer_email.toLowerCase().includes(search.toLowerCase())))
+    c && (!search || (c.email && c.email.toLowerCase().includes(search.toLowerCase())))
   );
 
   const exportCSV = () => {
@@ -116,7 +116,7 @@ export default function LoyaltyAdmin() {
     const rows = filtered.filter(c => c).map(c => {
       const available = getAvailableRewards(c).length;
       const redemptions = getRedemptionsByOrder(c).length;
-      return `"${(c.customer_email || '').replace(/"/g, '""')}",${c.total_points || 0},${c.lifetime_points || 0},${c.redeemed_points || 0},${available},${redemptions}`;
+      return `"${(c.email || '').replace(/"/g, '""')}",${c.total_points || 0},${c.lifetime_points || 0},${c.redeemed_points || 0},${available},${redemptions}`;
     }).join('\n');
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -131,30 +131,28 @@ export default function LoyaltyAdmin() {
     setProcessingBonus(true);
     try {
       const selectedIds = Array.from(selectedCustomers);
-      const emails = customers.filter(c => selectedIds.includes(c.id)).map(c => c.customer_email);
       const selectedLoyalty = customers.filter(c => selectedIds.includes(c.id));
-      const res = await base44.functions.invoke('createLoyaltySignupBonus', {
-        customer_emails: emails,
-        points_data: selectedLoyalty.map(c => ({
-          customer_email: c.customer_email,
-          total_points: (c.total_points || 0) + 100,
-          lifetime_points: (c.lifetime_points || 0) + 100,
-          redeemed_points: c.redeemed_points || 0,
-          points_history: [
-            ...(c.points_history || []),
-            {
-              amount: 100,
-              type: 'bonus',
-              description: 'Admin bonus',
-              timestamp: new Date().toISOString()
-            }
-          ]
-        }))
-      });
-      if (res.data.status === 'success') {
-        await loadData();
-        setSelectedCustomers(new Set());
-      }
+      await Promise.all(selectedLoyalty.map(c => 
+        base44.functions.invoke('createLoyaltySignupBonus', {
+          customer_email: c.email,
+          points_data: {
+            total_points: (c.total_points || 0) + 100,
+            lifetime_points: (c.lifetime_points || 0) + 100,
+            redeemed_points: c.redeemed_points || 0,
+            points_history: [
+              ...(c.points_history || []),
+              {
+                amount: 100,
+                type: 'bonus',
+                description: 'Admin bonus',
+                timestamp: new Date().toISOString()
+              }
+            ]
+          }
+        })
+      ));
+      await loadData();
+      setSelectedCustomers(new Set());
     } catch (error) {
       console.error('Bonus error:', error);
     }
@@ -165,7 +163,7 @@ export default function LoyaltyAdmin() {
     if (selectedCustomers.size === 0) return;
     if (!confirm(`Delete ${selectedCustomers.size} member(s)?`)) return;
     try {
-      await Promise.all(Array.from(selectedCustomers).map(id => base44.entities.CustomerLoyalty.delete(id)));
+      await Promise.all(Array.from(selectedCustomers).map(id => base44.entities.Loyalty.delete(id)));
       await loadData();
       setSelectedCustomers(new Set());
     } catch (error) {
@@ -176,7 +174,7 @@ export default function LoyaltyAdmin() {
   const deleteSingle = async (e, customerId) => {
     e.stopPropagation();
     if (!confirm('Delete this loyalty member?')) return;
-    await base44.entities.CustomerLoyalty.delete(customerId);
+    await base44.entities.Loyalty.delete(customerId);
     setCustomers(prev => prev.filter(c => c.id !== customerId));
     setSelectedCustomers(prev => { const s = new Set(prev); s.delete(customerId); return s; });
   };
@@ -323,7 +321,7 @@ export default function LoyaltyAdmin() {
                           onClick={(e) => e.stopPropagation()}
                         />
                         <div>
-                          <CardTitle className="text-lg">{customer.customer_email}</CardTitle>
+                          <CardTitle className="text-lg">{customer.email}</CardTitle>
                           <p className="text-sm text-muted-foreground mt-1">
                             Member since {moment(customer.created_date).format('MMM D, YYYY')}
                           </p>
@@ -464,17 +462,17 @@ export default function LoyaltyAdmin() {
                   )}
 
                   {/* Point History */}
-                  {getPointHistory(customer.customer_email).length > 0 && (
+                  {getPointHistory(customer.email).length > 0 && (
                     <div>
                       <button 
                         onClick={() => setExpandedCustomer(expandedCustomer === customer.id ? null : customer.id)}
                         className="text-sm font-semibold mb-2 flex items-center gap-2 text-primary hover:underline"
                       >
-                        {expandedCustomer === customer.id ? '▼' : '▶'} Point Transactions ({getPointHistory(customer.customer_email).length})
+                        {expandedCustomer === customer.id ? '▼' : '▶'} Point Transactions ({getPointHistory(customer.email).length})
                       </button>
                       {expandedCustomer === customer.id && (
                         <div className="space-y-2">
-                          {getPointHistory(customer.customer_email).map((pt, idx) => (
+                          {getPointHistory(customer.email).map((pt, idx) => (
                             <div key={idx} className={`text-xs p-3 rounded border ${pt.type === 'earned' ? 'bg-green-50 border-green-200' : pt.type === 'redeemed' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
                               <div className="flex justify-between">
                                 <span className={`font-semibold ${pt.type === 'earned' ? 'text-green-700' : pt.type === 'redeemed' ? 'text-red-700' : 'text-blue-700'}`}>

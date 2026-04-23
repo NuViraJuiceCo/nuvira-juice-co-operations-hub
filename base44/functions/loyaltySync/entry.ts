@@ -14,28 +14,23 @@ function validateSync(syncSecret) {
 async function enrollMember(base44, memberData) {
   const { email, full_name, phone, signup_date, status, total_points, lifetime_points, redeemed_points, points_history } = memberData;
 
-  if (!email || !full_name) {
-    throw { status: 400, message: 'Email and full_name required' };
+  if (!email) {
+    throw { status: 400, message: 'Email required' };
   }
 
   // Check for duplicate
-  const existing = await base44.asServiceRole.entities.CustomerLoyalty.filter({ customer_email: email });
+  const existing = await base44.asServiceRole.entities.Loyalty.filter({ email });
   if (existing?.length > 0) {
     return { success: true, member_id: existing[0].id, total_points: existing[0].total_points, note: 'Member already enrolled' };
   }
 
-  // Create LoyaltyMember
-  const member = await base44.asServiceRole.entities.LoyaltyMember.create({
+  // Create single Loyalty record with profile + points
+  const loyalty = await base44.asServiceRole.entities.Loyalty.create({
     email,
-    full_name,
+    full_name: full_name || email.split('@')[0],
     phone: phone || '',
     signup_date: signup_date || new Date().toISOString().split('T')[0],
-    status: status || 'active'
-  });
-
-  // Create CustomerLoyalty
-  const loyalty = await base44.asServiceRole.entities.CustomerLoyalty.create({
-    customer_email: email,
+    status: status || 'active',
     total_points: total_points || 0,
     lifetime_points: lifetime_points || 0,
     redeemed_points: redeemed_points || 0,
@@ -59,15 +54,16 @@ async function enrollMember(base44, memberData) {
 
 // Claim: POST /loyaltySync with action=claim
 async function claimReward(base44, claimData) {
-  const { customer_email, reward_id, reward_title, reward_type, claimed_at } = claimData;
+  const { customer_email, email, reward_id, reward_title, reward_type, claimed_at } = claimData;
+  const emailToUse = email || customer_email;
 
-  if (!customer_email || !reward_id) {
-    throw { status: 400, message: 'customer_email and reward_id required' };
+  if (!emailToUse || !reward_id) {
+    throw { status: 400, message: 'email and reward_id required' };
   }
 
-  const existing = await base44.asServiceRole.entities.CustomerLoyalty.filter({ customer_email });
+  const existing = await base44.asServiceRole.entities.Loyalty.filter({ email: emailToUse });
   if (!existing?.length) {
-    throw { status: 404, message: 'Customer not found' };
+    throw { status: 404, message: 'Member not found' };
   }
 
   const loyalty = existing[0];
@@ -80,7 +76,7 @@ async function claimReward(base44, claimData) {
   const newTotal = (loyalty.total_points || 0) - rewardDetails.points_required;
   const newRedeemed = (loyalty.redeemed_points || 0) + rewardDetails.points_required;
 
-  const updatedLoyalty = await base44.asServiceRole.entities.CustomerLoyalty.update(loyalty.id, {
+  const updatedLoyalty = await base44.asServiceRole.entities.Loyalty.update(loyalty.id, {
     total_points: newTotal,
     redeemed_points: newRedeemed,
     points_history: [
@@ -97,7 +93,7 @@ async function claimReward(base44, claimData) {
 
   // Record in UserPoints
   await base44.asServiceRole.entities.UserPoints.create({
-    customer_email,
+    customer_email: emailToUse,
     amount: -rewardDetails.points_required,
     type: 'redeemed',
     description: `Claimed reward: ${reward_title}`,
@@ -111,7 +107,7 @@ async function claimReward(base44, claimData) {
     sync_status: 'synced'
   });
 
-  console.log(`[LOYALTY-CLAIM] ${customer_email} claimed ${reward_title}`);
+  console.log(`[LOYALTY-CLAIM] ${emailToUse} claimed ${reward_title}`);
   return { success: true, claimed_rewards: updatedLoyalty.points_history?.filter(h => h.type === 'redeemed') || [] };
 }
 
@@ -121,7 +117,7 @@ async function queryMember(base44, email) {
     throw { status: 400, message: 'Email required' };
   }
 
-  const loyalty = await base44.asServiceRole.entities.CustomerLoyalty.filter({ customer_email: email });
+  const loyalty = await base44.asServiceRole.entities.Loyalty.filter({ email });
   if (!loyalty?.length) {
     throw { status: 404, message: 'Member not found' };
   }
@@ -130,7 +126,7 @@ async function queryMember(base44, email) {
   const claimed = member.points_history?.filter(h => h.type === 'redeemed') || [];
 
   return {
-    email: member.customer_email,
+    email: member.email,
     full_name: member.full_name || '',
     total_points: member.total_points || 0,
     lifetime_points: member.lifetime_points || 0,
@@ -142,26 +138,27 @@ async function queryMember(base44, email) {
 
 // Update: POST /loyaltySync with action=update (from UserPoints trigger)
 async function updatePoints(base44, updateData) {
-  const { customer_email, total_points, lifetime_points, redeemed_points, points_history, claimed_rewards } = updateData;
+  const { customer_email, email, total_points, lifetime_points, redeemed_points, points_history, claimed_rewards } = updateData;
+  const emailToUse = email || customer_email;
 
-  if (!customer_email) {
-    throw { status: 400, message: 'customer_email required' };
+  if (!emailToUse) {
+    throw { status: 400, message: 'email required' };
   }
 
-  const existing = await base44.asServiceRole.entities.CustomerLoyalty.filter({ customer_email });
+  const existing = await base44.asServiceRole.entities.Loyalty.filter({ email: emailToUse });
   if (!existing?.length) {
-    throw { status: 404, message: 'Customer not found' };
+    throw { status: 404, message: 'Member not found' };
   }
 
-  await base44.asServiceRole.entities.CustomerLoyalty.update(existing[0].id, {
+  await base44.asServiceRole.entities.Loyalty.update(existing[0].id, {
     total_points: total_points !== undefined ? total_points : existing[0].total_points,
     lifetime_points: lifetime_points !== undefined ? lifetime_points : existing[0].lifetime_points,
     redeemed_points: redeemed_points !== undefined ? redeemed_points : existing[0].redeemed_points,
     points_history: points_history || existing[0].points_history
   });
 
-  console.log(`[LOYALTY-UPDATE] Updated points for ${customer_email}`);
-  return { success: true, customer_email };
+  console.log(`[LOYALTY-UPDATE] Updated points for ${emailToUse}`);
+  return { success: true, email: emailToUse };
 }
 
 // Main handler

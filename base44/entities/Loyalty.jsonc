@@ -1,0 +1,114 @@
+{
+  "name": "Loyalty",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "description": "Member email address",
+      "required": true
+    },
+    "full_name": {
+      "type": "string",
+      "description": "Member full name"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Member phone number"
+    },
+    "signup_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date member signed up"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "suspended"
+      ],
+      "default": "active",
+      "description": "Membership status"
+    },
+    "total_points": {
+      "type": "number",
+      "description": "Current available points",
+      "default": 0
+    },
+    "lifetime_points": {
+      "type": "number",
+      "description": "Total points earned lifetime",
+      "default": 0
+    },
+    "redeemed_points": {
+      "type": "number",
+      "description": "Total points redeemed",
+      "default": 0
+    },
+    "points_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "earned",
+              "redeemed",
+              "bonus"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "reward_id": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "History of point transactions"
+    },
+    "order_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string"
+          },
+          "order_number": {
+            "type": "string"
+          },
+          "total_price": {
+            "type": "number"
+          },
+          "items_count": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "order_date": {
+            "type": "string"
+          },
+          "points_earned": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "History of member orders"
+    }
+  },
+  "required": [
+    "email"
+  ]
+}
