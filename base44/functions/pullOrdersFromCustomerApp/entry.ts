@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
         'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(date ? { date } : {}),
+      body: JSON.stringify({ token: SYNC_SECRET }),
     });
 
     if (!response.ok) {
