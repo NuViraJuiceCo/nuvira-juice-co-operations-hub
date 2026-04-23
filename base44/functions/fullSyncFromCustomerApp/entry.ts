@@ -68,27 +68,32 @@ async function syncOrders(base44) {
 }
 
 async function syncProducts(base44) {
-  const data = await callCustomerApp('getProductsForSync', 'POST');
-  const products = data.products || [];
-  let created = 0, updated = 0, failed = 0;
-  for (const p of products) {
-    try {
-      const sku = p.shopify_product_id || p.sku || p.id;
-      const hubProduct = { ...p, sku };
-      const existing = await base44.asServiceRole.entities.Product.filter({ sku });
-      if (existing?.length > 0) {
-        await base44.asServiceRole.entities.Product.update(existing[0].id, hubProduct);
-        updated++;
-      } else {
-        await base44.asServiceRole.entities.Product.create(hubProduct);
-        created++;
-      }
-      } catch (err) { 
-      console.error(`[FULL-SYNC] Product sync error for ${p.sku}:`, err.message);
-      failed++; 
-      }
-      }
-      return { total: products.length, created, updated, failed };
+   try {
+     const data = await callCustomerApp('getProductsForSync', 'POST');
+     const products = data.products || [];
+     let created = 0, updated = 0, failed = 0;
+     for (const p of products) {
+       try {
+         const sku = p.shopify_product_id || p.sku || p.id;
+         const hubProduct = { ...p, sku };
+         const existing = await base44.asServiceRole.entities.Product.filter({ sku });
+         if (existing?.length > 0) {
+           await base44.asServiceRole.entities.Product.update(existing[0].id, hubProduct);
+           updated++;
+         } else {
+           await base44.asServiceRole.entities.Product.create(hubProduct);
+           created++;
+         }
+         } catch (err) { 
+         console.error(`[FULL-SYNC] Product sync error for ${p.sku}:`, err.message);
+         failed++; 
+         }
+         }
+         return { total: products.length, created, updated, failed };
+   } catch (err) {
+     console.warn('[FULL-SYNC] Products endpoint not available, skipping...');
+     return { total: 0, created: 0, updated: 0, failed: 0, skipped: true };
+   }
 }
 
 async function syncLoyalty(base44) {
@@ -114,32 +119,37 @@ async function syncLoyalty(base44) {
 }
 
 async function syncEvents(base44) {
-  const data = await callCustomerApp('getEventsForSync');
-  const events = data.events || [];
-  // Delete all existing hub events then re-create from customer app
-  const existing = await base44.asServiceRole.entities.Event.list('-created_date', 500);
-  for (const e of existing) {
-    await base44.asServiceRole.entities.Event.delete(e.id);
-  }
-  let created = 0;
-  for (const e of events) {
-    await base44.asServiceRole.entities.Event.create({
-      name: e.name || 'Untitled Event',
-      type: e.type || 'Other',
-      status: e.is_active !== false ? 'Confirmed' : 'Cancelled',
-      date: e.date,
-      end_date: e.end_date || null,
-      location: e.location || '',
-      expected_attendees: e.expected_attendees || 0,
-      products: e.products || '',
-      contact_name: e.contact_name || '',
-      contact_email: e.contact_email || '',
-      revenue: e.revenue || 0,
-      notes: e.description || e.notes || '',
-    });
-    created++;
-  }
-  return { total: events.length, created };
+   try {
+     const data = await callCustomerApp('getEventsForSync');
+     const events = data.events || [];
+     // Delete all existing hub events then re-create from customer app
+     const existing = await base44.asServiceRole.entities.Event.list('-created_date', 500);
+     for (const e of existing) {
+       await base44.asServiceRole.entities.Event.delete(e.id);
+     }
+     let created = 0;
+     for (const e of events) {
+       await base44.asServiceRole.entities.Event.create({
+         name: e.name || 'Untitled Event',
+         type: e.type || 'Other',
+         status: e.is_active !== false ? 'Confirmed' : 'Cancelled',
+         date: e.date,
+         end_date: e.end_date || null,
+         location: e.location || '',
+         expected_attendees: e.expected_attendees || 0,
+         products: e.products || '',
+         contact_name: e.contact_name || '',
+         contact_email: e.contact_email || '',
+         revenue: e.revenue || 0,
+         notes: e.description || e.notes || '',
+       });
+       created++;
+     }
+     return { total: events.length, created };
+   } catch (err) {
+     console.warn('[FULL-SYNC] Events endpoint not available, skipping...');
+     return { total: 0, created: 0, skipped: true };
+   }
 }
 
 Deno.serve(async (req) => {
