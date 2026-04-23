@@ -19,6 +19,21 @@ export default function BatchCreateForm({ onClose, onSave }) {
   const [recipes, setRecipes] = useState([]);
 
   useEffect(() => {
+    // Set default production date based on schedule (after May 1st, use Tue/Fri/Sat)
+    const today = moment();
+    let defaultDate = '2026-05-01'; // Before May 1st, use May 1st
+    
+    if (today.isAfter(moment('2026-05-01'))) {
+      const productionDays = [2, 5, 6]; // Tuesday (2), Friday (5), Saturday (6)
+      let checkDate = today.clone();
+      while (!productionDays.includes(checkDate.day())) {
+        checkDate.add(1, 'day');
+      }
+      defaultDate = checkDate.format('YYYY-MM-DD');
+    }
+    
+    setFormData(prev => ({ ...prev, production_date: defaultDate }));
+    
     base44.entities.Recipe.list('-updated_date', 100).then(data => {
       setRecipes(data.filter(r => r.is_active !== false));
     });
