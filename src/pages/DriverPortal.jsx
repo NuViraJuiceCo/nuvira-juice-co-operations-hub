@@ -549,22 +549,6 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const [updatingId, setUpdatingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
 
-  const syncAndLoad = async () => {
-    setLoading(true);
-    setRouteData(null);
-    try {
-      await base44.functions.invoke('fullSyncFromCustomerApp', {});
-      await new Promise(r => setTimeout(r, 500));
-      const res = await base44.functions.invoke('optimizeDeliveryRoute', { date: date || undefined, optimize: false });
-      setQueuedOrders(res.data?.orders || []);
-      toast.success('Synced from customer app');
-    } catch (err) {
-      toast.error('Sync failed: ' + (err.message || 'Unknown error'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const loadQueue = async () => {
     setLoading(true);
     setRouteData(null);
@@ -715,11 +699,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
       <div className="px-4 pt-4 flex gap-2">
         <input type="date" value={date} onChange={e => { setDate(e.target.value); setRouteData(null); }}
           className="flex-1 bg-card border border-border text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary" />
-        <button onClick={syncAndLoad} disabled={loading} title="Sync from customer app"
-          className="w-10 h-10 bg-primary text-primary-foreground rounded-xl flex items-center justify-center shrink-0">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
-        <button onClick={loadQueue} disabled={loading} title="Refresh local queue"
+        <button onClick={loadQueue} disabled={loading}
           className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center shrink-0">
           <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
         </button>
