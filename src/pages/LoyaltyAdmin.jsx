@@ -19,6 +19,8 @@ export default function LoyaltyAdmin() {
   const [selectedCustomers, setSelectedCustomers] = useState(new Set());
   const [processingBonus, setProcessingBonus] = useState(false);
   const [expandedCustomer, setExpandedCustomer] = useState(null);
+  const [editingPointsId, setEditingPointsId] = useState(null);
+  const [editPointsValue, setEditPointsValue] = useState('');
   const queryClient = useQueryClient();
   
   const redeemMutation = useMutation({
@@ -32,6 +34,20 @@ export default function LoyaltyAdmin() {
     },
     onError: (error) => {
       toast.error(error.response?.data?.error || 'Redemption failed');
+    },
+  });
+
+  const updatePointsMutation = useMutation({
+    mutationFn: async ({ customerId, newPoints }) => {
+      await base44.entities.CustomerLoyalty.update(customerId, { total_points: parseInt(newPoints) });
+    },
+    onSuccess: () => {
+      loadData();
+      toast.success('Points updated');
+      setEditingPointsId(null);
+    },
+    onError: () => {
+      toast.error('Update failed');
     },
   });
 
@@ -335,9 +351,42 @@ export default function LoyaltyAdmin() {
                       <p className="text-xs text-muted-foreground">Redeemed</p>
                       <p className="font-bold text-sm">{customer.redeemed_points}</p>
                     </div>
-                    <div>
+                    <div className="relative">
                       <p className="text-xs text-muted-foreground">Remaining</p>
-                      <p className="font-bold text-sm text-primary">{customer.total_points}</p>
+                      {editingPointsId === customer.id ? (
+                        <div className="flex gap-2 mt-2">
+                          <input
+                            type="number"
+                            value={editPointsValue}
+                            onChange={(e) => setEditPointsValue(e.target.value)}
+                            className="flex-1 bg-white border border-primary rounded px-2 py-1 text-sm font-bold"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => updatePointsMutation.mutate({ customerId: customer.id, newPoints: editPointsValue })}
+                            disabled={updatePointsMutation.isPending}
+                            className="px-2 py-1 bg-primary text-white rounded text-xs font-bold"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingPointsId(null)}
+                            className="px-2 py-1 border border-muted-foreground rounded text-xs"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingPointsId(customer.id);
+                            setEditPointsValue(String(customer.total_points));
+                          }}
+                          className="font-bold text-sm text-primary hover:underline"
+                        >
+                          {customer.total_points}
+                        </button>
+                      )}
                     </div>
                   </div>
 
