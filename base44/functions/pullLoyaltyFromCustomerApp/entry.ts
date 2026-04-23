@@ -36,9 +36,14 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Invalid response from customer app' }, { status: 500 });
     }
 
-    // Sync all customers via unified loyaltySync endpoint
+    // Filter out test users and sync
     const results = [];
-    for (const customer of customers) {
+    const productionCustomers = customers.filter(c => {
+      const email = (c.email || c.customer_email || '').toLowerCase();
+      return !email.includes('test');
+    });
+
+    for (const customer of productionCustomers) {
       try {
         await base44.functions.invoke('loyaltySync', {
           action: 'enroll',
