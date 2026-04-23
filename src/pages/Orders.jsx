@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import OrderEditForm from "../components/orders/OrderEditForm";
 import { base44 } from "@/api/base44Client";
-import { Search, Download, Trash2, Edit2 } from "lucide-react";
+import { Search, Download, Trash2, Edit2, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ export default function Orders() {
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -37,6 +38,16 @@ export default function Orders() {
   const handleRefresh = async () => {
     const data = await base44.entities.ShopifyOrder.list("-created_date", 100);
     setOrders(data);
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await base44.functions.invoke('pullOrdersFromCustomerApp', {});
+      await handleRefresh();
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -168,9 +179,15 @@ export default function Orders() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Orders</h1>
           <p className="text-muted-foreground mt-1">{orders.length} synced orders</p>
         </div>
-        <Button variant="outline" onClick={exportCSV} className="gap-2">
-          <Download className="h-4 w-4" /> Export
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleSync} disabled={syncing} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync'}
+          </Button>
+          <Button variant="outline" onClick={exportCSV} className="gap-2">
+            <Download className="h-4 w-4" /> Export
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
