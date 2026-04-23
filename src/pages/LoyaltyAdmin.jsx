@@ -46,9 +46,8 @@ export default function LoyaltyAdmin() {
       // Update hub
       await base44.entities.LoyaltyMember.update(customerId, { total_points: pointsNum });
       
-      // Push to customer app via loyaltySync
-      await base44.functions.invoke('loyaltySync', {
-        action: 'update',
+      // Push updated member data to customer app
+      await base44.functions.invoke('pushLoyaltyMemberUpdate', {
         customer_email: customerEmail,
         total_points: pointsNum,
         lifetime_points: member.lifetime_points,
