@@ -107,7 +107,7 @@ export default function Production() {
   };
 
   const filtered = batches.filter(
-    (b) => statusFilter === "all" || b.status === statusFilter
+    (b) => (statusFilter === "all" || b.status === statusFilter) && getLinkedOrders(b).length > 0
   );
 
   const grouped = _.groupBy(filtered, (b) => b.production_date || '');
