@@ -36,6 +36,12 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Invalid response from customer app' }, { status: 500 });
     }
 
+    console.log(`[PULL-LOYALTY] Received ${customers.length} members from customer app:`);
+    customers.forEach(c => {
+      const email = c.email || c.customer_email;
+      console.log(`  - ${email}: total_points=${c.total_points}, lifetime_points=${c.lifetime_points}, redeemed_points=${c.redeemed_points}`);
+    });
+
     // Filter out test users and sync
     const results = [];
     const productionCustomers = customers.filter(c => {
