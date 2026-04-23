@@ -54,19 +54,30 @@ Deno.serve(async (req) => {
       const invoice = invoices.data[0];
       if (!invoice) continue;
 
-      // Map subscription items to line items
-      const lineItems = subscription.items.data.map(item => ({
-        title: item.plan.nickname || item.plan.product || 'Subscription',
-        quantity: item.quantity || 1,
-        price: (item.plan.amount || 0) / 100,
+      // Map subscription items to line items, fetch product names from Stripe
+      const lineItems = await Promise.all(subscription.items.data.map(async (item) => {
+        let productName = item.plan.nickname || 'Subscription';
+        
+        // If no nickname, fetch the product from Stripe to get the name
+        if (!item.plan.nickname && item.plan.product) {
+          const product = await stripe.products.retrieve(item.plan.product);
+          productName = product.name || 'Subscription';
+        }
+        
+        return {
+          title: productName,
+          quantity: item.quantity || 1,
+          price: (item.plan.amount || 0) / 100,
+        };
       }));
 
-      // Create ShopifyOrder record
+      // Create ShopifyOrder record with customer name included
       const order = await base44.asServiceRole.entities.ShopifyOrder.create({
         shopify_order_id: subscription.id,
         shopify_order_number: `#STRIPE-SUB-${subscription.id.slice(-8).toUpperCase()}`,
         customer_email: customer.email || 'unknown@stripe.local',
         customer_phone: customer.phone || '',
+        customer_name: customer.name || '',
         line_items: lineItems,
         subtotal: (invoice.subtotal || 0) / 100,
         total_price: (invoice.total || 0) / 100,
