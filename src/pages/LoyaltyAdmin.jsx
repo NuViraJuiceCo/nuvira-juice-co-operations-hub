@@ -294,16 +294,16 @@ export default function LoyaltyAdmin() {
                             Member since {moment(customer.created_date).format('MMM D, YYYY')}
                           </p>
                           <div className="flex gap-2 mt-2">
-                            {availableRewards.length > 0 && (
+                            {getAvailableRewards(customer).length > 0 && (
                               <Badge className="bg-green-100 text-green-700 border border-green-300">
                                 <Gift className="w-3 h-3 mr-1" />
-                                {availableRewards.length} Unlocked
+                                {getAvailableRewards(customer).length} Unlocked
                               </Badge>
                             )}
-                            {redemptions.length > 0 && (
+                            {getRedemptionsByOrder(customer).length > 0 && (
                               <Badge className="bg-blue-100 text-blue-700 border border-blue-300">
                                 <CheckCircle className="w-3 h-3 mr-1" />
-                                {redemptions.length} Redeemed
+                                {getRedemptionsByOrder(customer).length} Redeemed
                               </Badge>
                             )}
                           </div>
