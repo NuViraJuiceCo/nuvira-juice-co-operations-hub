@@ -9,12 +9,14 @@ import moment from 'moment';
 
 export default function LoyaltyAdmin() {
   const [customers, setCustomers] = useState([]);
+  const [userPoints, setUserPoints] = useState([]);
   const [rewards, setRewards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [selectedCustomers, setSelectedCustomers] = useState(new Set());
   const [processingBonus, setProcessingBonus] = useState(false);
+  const [expandedCustomer, setExpandedCustomer] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -23,15 +25,18 @@ export default function LoyaltyAdmin() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [loyaltyData, rewardsData] = await Promise.all([
+      const [loyaltyData, pointsData, rewardsData] = await Promise.all([
         base44.entities.CustomerLoyalty.list('-lifetime_points', 100),
+        base44.entities.UserPoints.list('-created_date', 500),
         base44.entities.Rewards.list(),
       ]);
       setCustomers(Array.isArray(loyaltyData) ? loyaltyData : []);
+      setUserPoints(Array.isArray(pointsData) ? pointsData : []);
       setRewards(Array.isArray(rewardsData) ? rewardsData : []);
     } catch (error) {
       console.error('Error loading data:', error);
       setCustomers([]);
+      setUserPoints([]);
       setRewards([]);
     }
     setLoading(false);
@@ -48,6 +53,12 @@ export default function LoyaltyAdmin() {
       console.error('Sync error:', error);
     }
     setSyncing(false);
+  };
+
+  const getPointHistory = (email) => {
+    return userPoints.filter(p => p.customer_email === email).sort((a, b) => 
+      new Date(b.created_date) - new Date(a.created_date)
+    );
   };
 
   const getAvailableRewards = (customer) => {
@@ -340,6 +351,33 @@ export default function LoyaltyAdmin() {
 
                   {availableRewards.length === 0 && redemptions.length === 0 && (
                     <p className="text-sm text-muted-foreground italic">No rewards unlocked or redeemed yet</p>
+                  )}
+
+                  {/* Point History */}
+                  {getPointHistory(customer.customer_email).length > 0 && (
+                    <div>
+                      <button 
+                        onClick={() => setExpandedCustomer(expandedCustomer === customer.id ? null : customer.id)}
+                        className="text-sm font-semibold mb-2 flex items-center gap-2 text-primary hover:underline"
+                      >
+                        {expandedCustomer === customer.id ? '▼' : '▶'} Point Transactions ({getPointHistory(customer.customer_email).length})
+                      </button>
+                      {expandedCustomer === customer.id && (
+                        <div className="space-y-2">
+                          {getPointHistory(customer.customer_email).map((pt, idx) => (
+                            <div key={idx} className={`text-xs p-3 rounded border ${pt.type === 'earned' ? 'bg-green-50 border-green-200' : pt.type === 'redeemed' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
+                              <div className="flex justify-between">
+                                <span className={`font-semibold ${pt.type === 'earned' ? 'text-green-700' : pt.type === 'redeemed' ? 'text-red-700' : 'text-blue-700'}`}>
+                                  {pt.type === 'redeemed' ? '-' : '+'}{Math.abs(pt.amount)} points
+                                </span>
+                                <span className="text-muted-foreground text-[11px]">{moment(pt.created_date).format('MMM D, h:mm A')}</span>
+                              </div>
+                              <p className="text-foreground/80 mt-1">{pt.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {/* Order History */}
