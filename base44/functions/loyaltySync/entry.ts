@@ -190,8 +190,8 @@ Deno.serve(async (req) => {
       const payload = await req.json();
       const { action, token, ...data } = payload;
 
-      // Validate token for external calls
-      if (action !== 'update') {
+      // Validate token for external calls from customer app
+      if (action === 'update') {
         validateSync(token);
       }
 
@@ -210,9 +210,6 @@ Deno.serve(async (req) => {
           result = await claimReward(base44, data);
           break;
         case 'update':
-          if (user?.role !== 'admin') {
-            return Response.json({ error: 'Admin access required' }, { status: 403 });
-          }
           result = await updatePoints(base44, data);
           break;
         default:
