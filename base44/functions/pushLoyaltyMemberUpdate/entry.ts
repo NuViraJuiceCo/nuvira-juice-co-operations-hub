@@ -22,19 +22,22 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Customer app not configured' }, { status: 500 });
     }
 
-    // Send updated member data to customer app
-    const response = await fetch(`${CUSTOMER_APP_API}/functions/receiveLoyaltyMemberUpdate`, {
+    // Send updated member data to customer app via receivePointsSync endpoint
+    const response = await fetch(`${CUSTOMER_APP_API}/functions/receivePointsSync`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        customer_email,
-        total_points: total_points || 0,
-        lifetime_points: lifetime_points || 0,
-        redeemed_points: redeemed_points || 0,
-        points_history: points_history || []
+        customers: [{
+          customer_email,
+          email: customer_email,
+          total_points: total_points || 0,
+          lifetime_points: lifetime_points || 0,
+          redeemed_points: redeemed_points || 0,
+          points_history: points_history || []
+        }]
       }),
     });
 
