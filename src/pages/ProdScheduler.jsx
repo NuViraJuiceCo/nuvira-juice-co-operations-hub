@@ -8,6 +8,7 @@ import moment from "moment";
 
 export default function ProdScheduler() {
   const [batches, setBatches] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,10 +25,12 @@ export default function ProdScheduler() {
   useEffect(() => {
     Promise.all([
       base44.entities.ProductionBatch.list("production_date", 100),
+      base44.entities.ShopifyOrder.list("-created_date", 100),
       base44.entities.InventoryItem.list("-updated_date", 100),
       base44.entities.Recipe.list("-updated_date", 100),
-    ]).then(([b, inv, rec]) => {
+    ]).then(([b, o, inv, rec]) => {
       setBatches(b);
+      setOrders(o);
       setInventory(inv);
       setRecipes(rec.filter(r => r.is_active !== false));
       setLoading(false);
@@ -38,6 +41,24 @@ export default function ProdScheduler() {
 
   const weekDays = Array.from({ length: 7 }, (_, i) => weekStart.clone().add(i, "days"));
   const today = moment().format("YYYY-MM-DD");
+
+  const getOrdersForBatch = (batch) => {
+    return orders.filter(o => 
+      o && o.line_items && o.line_items.some(item => 
+        item.title === batch.product_name && o.production_status !== 'fulfilled'
+      )
+    );
+  };
+
+  const getQuantityFromOrders = (batch) => {
+    const batchOrders = getOrdersForBatch(batch);
+    return batchOrders.reduce((sum, o) => {
+      const qty = o.line_items.reduce((s, item) => 
+        item.title === batch.product_name ? s + (item.quantity || 0) : s, 0
+      );
+      return sum + qty;
+    }, 0);
+  };
 
   const checkInventory = (batch) => {
     const recipe = recipes.find(r => r.product_name === batch.product_name);
@@ -97,15 +118,16 @@ export default function ProdScheduler() {
             return (
               <div key={dateStr} className="border-r border-border last:border-0 p-1.5 space-y-1.5 min-h-[180px]">
                 {dayBatches.map(batch => {
-                  const hasAlert = checkInventory(batch).length > 0;
-                  return (
-                    <button key={batch.id} onClick={() => setSelected(selected?.id === batch.id ? null : batch)}
-                      className={`w-full text-left rounded-lg p-2 text-xs border transition-all ${hasAlert ? "bg-red-50 border-red-200 hover:bg-red-100" : "bg-amber-50 border-amber-200 hover:bg-amber-100"}`}>
-                      <p className={`font-semibold truncate ${hasAlert ? "text-red-800" : "text-amber-900"}`}>{batch.product_name}</p>
-                      <p className={hasAlert ? "text-red-600" : "text-amber-700"}>{batch.planned_units} units {hasAlert && "⚠️"}</p>
-                    </button>
-                  );
-                })}
+                   const hasAlert = checkInventory(batch).length > 0;
+                   const orderQty = getQuantityFromOrders(batch);
+                   return (
+                     <button key={batch.id} onClick={() => setSelected(selected?.id === batch.id ? null : batch)}
+                       className={`w-full text-left rounded-lg p-2 text-xs border transition-all ${hasAlert ? "bg-red-50 border-red-200 hover:bg-red-100" : "bg-amber-50 border-amber-200 hover:bg-amber-100"}`}>
+                       <p className={`font-semibold truncate ${hasAlert ? "text-red-800" : "text-amber-900"}`}>{batch.product_name}</p>
+                       <p className={hasAlert ? "text-red-600" : "text-amber-700"}>{batch.planned_units} planned {orderQty > 0 && `· ${orderQty} orders`} {hasAlert && "⚠️"}</p>
+                     </button>
+                   );
+                 })}
               </div>
             );
           })}

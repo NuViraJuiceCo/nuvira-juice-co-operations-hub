@@ -12,6 +12,7 @@ import _ from "lodash";
 
 export default function Production() {
   const [batches, setBatches] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState(new Set());
@@ -20,22 +21,34 @@ export default function Production() {
 
   useEffect(() => {
     async function load() {
-      const data = await base44.entities.ProductionBatch.list("production_date", 100);
-      setBatches(data);
+      const [batchData, orderData] = await Promise.all([
+        base44.entities.ProductionBatch.list("production_date", 100),
+        base44.entities.ShopifyOrder.list("-created_date", 100),
+      ]);
+      setBatches(batchData);
+      setOrders(orderData);
       setLoading(false);
     }
     load();
   }, []);
 
   const handleRefresh = async () => {
-    const data = await base44.entities.ProductionBatch.list("production_date", 100);
-    setBatches(data);
+    const [batchData, orderData] = await Promise.all([
+      base44.entities.ProductionBatch.list("production_date", 100),
+      base44.entities.ShopifyOrder.list("-created_date", 100),
+    ]);
+    setBatches(batchData);
+    setOrders(orderData);
   };
 
   const handleSaveEdit = async () => {
     setEditingBatch(null);
-    const data = await base44.entities.ProductionBatch.list("production_date", 100);
-    setBatches(data);
+    const [batchData, orderData] = await Promise.all([
+      base44.entities.ProductionBatch.list("production_date", 100),
+      base44.entities.ShopifyOrder.list("-created_date", 100),
+    ]);
+    setBatches(batchData);
+    setOrders(orderData);
   };
 
   const handleDelete = async (id) => {
@@ -65,6 +78,23 @@ export default function Production() {
     if (newSelected.has(id)) newSelected.delete(id);
     else newSelected.add(id);
     setSelected(newSelected);
+  };
+
+  const getLinkedOrders = (batch) => {
+    return orders.filter(o =>
+      o && o.line_items && o.line_items.some(item => 
+        item.title === batch.product_name && o.production_status !== 'fulfilled'
+      )
+    );
+  };
+
+  const getTotalOrderQty = (batch) => {
+    return getLinkedOrders(batch).reduce((sum, o) => {
+      const qty = o.line_items.reduce((s, item) => 
+        item.title === batch.product_name ? s + (item.quantity || 0) : s, 0
+      );
+      return sum + qty;
+    }, 0);
   };
 
   const filtered = batches.filter(
@@ -186,18 +216,34 @@ export default function Production() {
                           <StatusBadge status={batch.status} />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div className="grid grid-cols-3 gap-3 mt-4">
                         <div>
                           <p className="text-xs text-muted-foreground">Planned</p>
-                          <p className="text-lg font-semibold text-foreground">{batch.planned_units} units</p>
+                          <p className="text-lg font-semibold text-foreground">{batch.planned_units}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Actual</p>
+                          <p className="text-xs text-muted-foreground">From Orders</p>
+                          <p className="text-lg font-semibold text-primary">{getTotalOrderQty(batch)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Produced</p>
                           <p className="text-lg font-semibold text-foreground">
                             {batch.actual_units || "—"}
                           </p>
                         </div>
                       </div>
+                      {getLinkedOrders(batch).length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-border">
+                          <p className="text-xs font-semibold text-muted-foreground mb-2">Linked Orders ({getLinkedOrders(batch).length})</p>
+                          <div className="space-y-1">
+                            {getLinkedOrders(batch).map(o => (
+                              <a key={o.id} href="/orders" className="text-xs text-primary hover:underline">
+                                {o.shopify_order_number} · {o.customer_email}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {(batch.assigned_to || batch.notes) && (
                         <div className="mt-3 pt-3 border-t border-border space-y-1">
                           {batch.assigned_to && (

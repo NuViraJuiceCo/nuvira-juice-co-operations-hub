@@ -91,13 +91,15 @@ Deno.serve(async (req) => {
         }
         processedIds.add(orderId);
 
-        // Check for existing duplicates and delete them before upserting
+        // Check for existing duplicates and delete all older versions before upserting
         const existingDuplicates = await base44.asServiceRole.entities.ShopifyOrder.filter({
           shopify_order_id: orderId,
         });
-        if (existingDuplicates && existingDuplicates.length > 1) {
-          const sorted = existingDuplicates.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        if (existingDuplicates && existingDuplicates.length > 0) {
+          const sorted = existingDuplicates.sort((a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date));
+          // Keep the first (newest), delete the rest
           for (let i = 1; i < sorted.length; i++) {
+            console.log(`[PULL-ORDERS] Deleting duplicate ${orderId}: ${sorted[i].id}`);
             await base44.asServiceRole.entities.ShopifyOrder.delete(sorted[i].id);
           }
         }
