@@ -287,7 +287,7 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
                       className="flex-1 py-2 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
                       Cancel
                     </button>
-                    <button onClick={() => { onDelete(order); setShowDeleteConfirm(false); }} disabled={isUpdating}
+                    <button onClick={() => { onDelete(order); }} disabled={isUpdating}
                       className="flex-1 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold disabled:opacity-50">
                       {isUpdating ? 'Deleting...' : 'Delete'}
                     </button>
