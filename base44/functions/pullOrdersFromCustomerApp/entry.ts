@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch orders from customer app (all orders if no date specified)
-    const response = await fetch(`${CUSTOMER_APP_API}/functions/getOrdersForSync`, {
+    const response = await fetch(`${CUSTOMER_APP_API}/functions/getAllOrdersForSync`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SYNC_SECRET}`,
