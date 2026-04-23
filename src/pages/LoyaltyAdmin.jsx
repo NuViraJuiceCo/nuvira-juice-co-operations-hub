@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Download, RefreshCw, TrendingUp, Gift, Trash2 } from 'lucide-react';
+import { Search, Download, RefreshCw, TrendingUp, Gift, Trash2, CheckCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import moment from 'moment';
 
 export default function LoyaltyAdmin() {
@@ -17,6 +19,21 @@ export default function LoyaltyAdmin() {
   const [selectedCustomers, setSelectedCustomers] = useState(new Set());
   const [processingBonus, setProcessingBonus] = useState(false);
   const [expandedCustomer, setExpandedCustomer] = useState(null);
+  const queryClient = useQueryClient();
+  
+  const redeemMutation = useMutation({
+    mutationFn: async (vars) => {
+      const res = await base44.functions.invoke('redeemReward', vars);
+      return res.data;
+    },
+    onSuccess: () => {
+      loadData();
+      toast.success('Reward redeemed');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'Redemption failed');
+    },
+  });
 
   useEffect(() => {
     loadData();
@@ -316,11 +333,23 @@ export default function LoyaltyAdmin() {
                       <p className="text-sm font-semibold mb-2 flex items-center gap-2">
                         <Gift className="w-4 h-4" /> Available Rewards ({availableRewards.length})
                       </p>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="space-y-2">
                         {availableRewards.map(reward => (
-                          <Badge key={reward.id} className="bg-green-600 text-white">
-                            {reward.title} ({reward.points_required} pts)
-                          </Badge>
+                          <div key={reward.id} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                            <div>
+                              <p className="text-sm font-semibold text-green-700">{reward.title}</p>
+                              <p className="text-xs text-green-600">{reward.points_required} pts</p>
+                            </div>
+                            <Button
+                              onClick={() => redeemMutation.mutate({ customer_id: customer.id, reward_id: reward.id })}
+                              disabled={redeemMutation.isPending}
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white gap-1"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              {redeemMutation.isPending ? 'Redeeming...' : 'Claim'}
+                            </Button>
+                          </div>
                         ))}
                       </div>
                     </div>
