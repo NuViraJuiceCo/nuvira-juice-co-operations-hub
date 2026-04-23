@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
 
     let orders = Array.isArray(data.orders) ? data.orders : (Array.isArray(data) ? data : []);
     
-    // Also try to fetch subscription orders if available
+    // Fetch subscription orders if available
     try {
       const subResponse = await fetch(`${CUSTOMER_APP_API}/functions/getSubscriptionOrdersForSync`, {
         method: 'POST',
@@ -50,10 +50,11 @@ Deno.serve(async (req) => {
       if (subResponse.ok) {
         const subData = await subResponse.json();
         const subOrders = Array.isArray(subData.orders) ? subData.orders : (Array.isArray(subData) ? subData : []);
+        console.log(`[PULL-ORDERS] Fetched ${subOrders.length} subscription orders`);
         orders = [...orders, ...subOrders];
       }
     } catch (err) {
-      console.warn('[PULL-ORDERS] Could not fetch subscription orders:', err.message);
+      console.error('[PULL-ORDERS] Subscription fetch error:', err.message);
     }
 
     if (!Array.isArray(orders) || orders.length === 0) {
