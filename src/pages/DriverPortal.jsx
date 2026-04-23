@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import {
   Leaf, MapPin, Navigation, CheckCircle2, ChevronDown, ChevronRight,
   RefreshCw, Clock, Route, XCircle, Recycle, Package, Camera, X,
-  AlertTriangle, Truck, RotateCcw, ArrowLeft
+  AlertTriangle, Truck, RotateCcw, ArrowLeft, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PreOptimizeOrderCard from '@/components/driver/PreOptimizeOrderCard';
@@ -257,7 +257,7 @@ const DROP_LOCATIONS = [
   'With Neighbor', 'Mailroom / Lobby', 'Left on Porch', 'Other',
 ];
 
-function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver, onMarkStage, onReturnVerified, allCredits, user, isUpdating }) {
+function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver, onMarkStage, onReturnVerified, allCredits, user, isUpdating, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const [showDeliverForm, setShowDeliverForm] = useState(false);
   const [showUnableForm, setShowUnableForm] = useState(false);
@@ -266,6 +266,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
   const [proofPhotoUrl, setProofPhotoUrl] = useState('');
   const [dropLocation, setDropLocation] = useState('Front Door');
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const proofFileRef = useRef(null);
 
   const isDelivered = order.status === 'delivered';
@@ -504,6 +505,31 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                   )}
                 </div>
               )}
+
+              {!showDeleteConfirm && (
+                <button onClick={() => setShowDeleteConfirm(true)} disabled={isUpdating}
+                  className="w-full py-2 text-red-600 border border-red-200 rounded-xl text-xs font-semibold hover:bg-red-50 disabled:opacity-50 active:scale-95 transition-all flex items-center justify-center gap-2">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete Order
+                </button>
+              )}
+
+              {showDeleteConfirm && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+                  <p className="text-sm font-semibold text-red-800">Delete this order?</p>
+                  <p className="text-xs text-red-700">This will remove the order and all fulfillment tasks. This cannot be undone.</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowDeleteConfirm(false)} disabled={isUpdating}
+                      className="flex-1 py-2 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
+                      Cancel
+                    </button>
+                    <button onClick={() => { onDelete(order); setShowDeleteConfirm(false); }} disabled={isUpdating}
+                      className="flex-1 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold disabled:opacity-50">
+                      {isUpdating ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -521,6 +547,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const [loading, setLoading] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const loadQueue = async () => {
     setLoading(true);
@@ -630,6 +657,20 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
       toast.error('Update failed');
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const handleDeleteOrder = async (order) => {
+    setDeletingId(order.id);
+    try {
+      await base44.entities.ShopifyOrder.delete(order.id);
+      toast.success('Order deleted');
+      loadQueue();
+      setRouteData(null);
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -743,16 +784,17 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
                 <div className="flex-1 pb-2">
                   {isOptimized ? (
                     <StopCard
-                      order={order}
-                      pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
-                      onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
-                      onMarkUnableToDeliver={handleMarkUnableToDeliver}
-                      onMarkStage={handleMarkStage}
-                      onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
-                      allCredits={allCredits}
-                      user={user}
-                      isUpdating={updatingId === order.id}
-                    />
+                       order={order}
+                       pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
+                       onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
+                       onMarkUnableToDeliver={handleMarkUnableToDeliver}
+                       onMarkStage={handleMarkStage}
+                       onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
+                       allCredits={allCredits}
+                       user={user}
+                       isUpdating={updatingId === order.id || deletingId === order.id}
+                       onDelete={handleDeleteOrder}
+                     />
                   ) : (
                     <PreOptimizeOrderCard
                       order={order}
