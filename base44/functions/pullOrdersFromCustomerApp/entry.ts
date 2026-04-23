@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
-    // Fetch orders from customer app (all orders if no date specified)
+    // Fetch all orders from customer app
     const response = await fetch(`${CUSTOMER_APP_API}/functions/getAllOrdersForSync`, {
       method: 'POST',
       headers: {
@@ -35,7 +35,26 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'success', count: 0, results: [], warning: 'Invalid JSON response' });
     }
 
-    const orders = Array.isArray(data.orders) ? data.orders : (Array.isArray(data) ? data : []);
+    let orders = Array.isArray(data.orders) ? data.orders : (Array.isArray(data) ? data : []);
+    
+    // Also try to fetch subscription orders if available
+    try {
+      const subResponse = await fetch(`${CUSTOMER_APP_API}/functions/getSubscriptionOrdersForSync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SYNC_SECRET}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token: SYNC_SECRET }),
+      });
+      if (subResponse.ok) {
+        const subData = await subResponse.json();
+        const subOrders = Array.isArray(subData.orders) ? subData.orders : (Array.isArray(subData) ? subData : []);
+        orders = [...orders, ...subOrders];
+      }
+    } catch (err) {
+      console.warn('[PULL-ORDERS] Could not fetch subscription orders:', err.message);
+    }
 
     if (!Array.isArray(orders) || orders.length === 0) {
       console.log(`[PULL-ORDERS] No orders found`);
