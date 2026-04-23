@@ -61,6 +61,14 @@ Deno.serve(async (req) => {
       type: 'redeemed',
       description: `Redeemed: ${reward.title}`,
       reward_id: reward_id,
+      claimed_rewards: [
+        {
+          reward_id: reward_id,
+          reward_title: reward.title,
+          points_redeemed: reward.points_required,
+          claimed_at: new Date().toISOString(),
+        }
+      ],
     });
 
     return Response.json({

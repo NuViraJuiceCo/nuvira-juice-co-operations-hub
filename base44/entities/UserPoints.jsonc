@@ -35,6 +35,31 @@
       "type": "string",
       "description": "Related reward ID if redeemed"
     },
+    "claimed_rewards": {
+      "type": "array",
+      "description": "Array of claimed rewards with details",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reward_id": {
+            "type": "string",
+            "description": "ID of the claimed reward"
+          },
+          "reward_title": {
+            "type": "string",
+            "description": "Title of the claimed reward"
+          },
+          "points_redeemed": {
+            "type": "number",
+            "description": "Points used for this redemption"
+          },
+          "claimed_at": {
+            "type": "string",
+            "description": "ISO timestamp when reward was claimed"
+          }
+        }
+      }
+    },
     "sync_status": {
       "type": "string",
       "enum": [
