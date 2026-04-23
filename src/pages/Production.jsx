@@ -93,11 +93,25 @@ export default function Production() {
   };
 
   const getLinkedOrders = (batch) => {
-    return orders.filter(o =>
-      o && o.line_items && o.line_items.some(item => 
-        item.title === batch.product_name && o.production_status !== 'fulfilled'
-      )
-    );
+    // Check if this batch is for a base product (not a bundle)
+    const isBaseProduct = !bundles.some(b => b.bundle_name === batch.product_name);
+    if (!isBaseProduct) return []; // Skip bundle batches
+    
+    return orders.filter(o => {
+      if (!o || !o.line_items || o.production_status === 'fulfilled') return false;
+      
+      return o.line_items.some(item => {
+        // Direct product match
+        if (item.title === batch.product_name) return true;
+        
+        // Check if it's a bundle containing this product
+        const bundle = bundles.find(b => b.bundle_name === item.title);
+        if (bundle && bundle.components) {
+          return bundle.components.some(c => c.product_name === batch.product_name);
+        }
+        return false;
+      });
+    });
   };
 
   const getTotalOrderQty = (batch) => {
