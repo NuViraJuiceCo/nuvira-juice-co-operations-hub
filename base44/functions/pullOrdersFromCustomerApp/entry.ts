@@ -62,6 +62,20 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'success', count: 0, results: [] });
     }
 
+    // Deduplicate incoming orders by keeping the latest version
+    const seenOrderIds = new Map();
+    for (const ord of orders) {
+      const orderId = ord.shopify_order_id || ord.id;
+      if (!orderId) continue;
+      
+      const existing = seenOrderIds.get(orderId);
+      if (!existing || new Date(ord.created_date || 0) > new Date(existing.created_date || 0)) {
+        seenOrderIds.set(orderId, ord);
+      }
+    }
+    orders = Array.from(seenOrderIds.values());
+    console.log(`[PULL-ORDERS] Deduplicated to ${orders.length} unique orders from customer app`);
+
     // Upsert orders into hub ShopifyOrder entity
     const results = [];
     const processedIds = new Set();
