@@ -19,13 +19,13 @@ async function enrollMember(base44, memberData) {
   }
 
   // Check for duplicate
-  const existing = await base44.asServiceRole.entities.Loyalty.filter({ email });
+  const existing = await base44.asServiceRole.entities.LoyaltyMember.filter({ email });
   if (existing?.length > 0) {
     return { success: true, member_id: existing[0].id, total_points: existing[0].total_points, note: 'Member already enrolled' };
   }
 
-  // Create single Loyalty record with profile + points
-  const loyalty = await base44.asServiceRole.entities.Loyalty.create({
+  // Create single LoyaltyMember record with profile + points
+  const loyalty = await base44.asServiceRole.entities.LoyaltyMember.create({
     email,
     full_name: full_name || email.split('@')[0],
     phone: phone || '',
@@ -61,7 +61,7 @@ async function claimReward(base44, claimData) {
     throw { status: 400, message: 'email and reward_id required' };
   }
 
-  const existing = await base44.asServiceRole.entities.Loyalty.filter({ email: emailToUse });
+  const existing = await base44.asServiceRole.entities.LoyaltyMember.filter({ email: emailToUse });
   if (!existing?.length) {
     throw { status: 404, message: 'Member not found' };
   }
@@ -76,7 +76,7 @@ async function claimReward(base44, claimData) {
   const newTotal = (loyalty.total_points || 0) - rewardDetails.points_required;
   const newRedeemed = (loyalty.redeemed_points || 0) + rewardDetails.points_required;
 
-  const updatedLoyalty = await base44.asServiceRole.entities.Loyalty.update(loyalty.id, {
+  const updatedLoyalty = await base44.asServiceRole.entities.LoyaltyMember.update(loyalty.id, {
     total_points: newTotal,
     redeemed_points: newRedeemed,
     points_history: [
@@ -117,7 +117,7 @@ async function queryMember(base44, email) {
     throw { status: 400, message: 'Email required' };
   }
 
-  const loyalty = await base44.asServiceRole.entities.Loyalty.filter({ email });
+  const loyalty = await base44.asServiceRole.entities.LoyaltyMember.filter({ email });
   if (!loyalty?.length) {
     throw { status: 404, message: 'Member not found' };
   }
@@ -145,12 +145,12 @@ async function updatePoints(base44, updateData) {
     throw { status: 400, message: 'email required' };
   }
 
-  const existing = await base44.asServiceRole.entities.Loyalty.filter({ email: emailToUse });
+  const existing = await base44.asServiceRole.entities.LoyaltyMember.filter({ email: emailToUse });
   if (!existing?.length) {
     throw { status: 404, message: 'Member not found' };
   }
 
-  await base44.asServiceRole.entities.Loyalty.update(existing[0].id, {
+  await base44.asServiceRole.entities.LoyaltyMember.update(existing[0].id, {
     total_points: total_points !== undefined ? total_points : existing[0].total_points,
     lifetime_points: lifetime_points !== undefined ? lifetime_points : existing[0].lifetime_points,
     redeemed_points: redeemed_points !== undefined ? redeemed_points : existing[0].redeemed_points,

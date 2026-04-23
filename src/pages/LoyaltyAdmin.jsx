@@ -39,7 +39,7 @@ export default function LoyaltyAdmin() {
 
   const updatePointsMutation = useMutation({
     mutationFn: async ({ customerId, newPoints }) => {
-      await base44.entities.Loyalty.update(customerId, { total_points: parseInt(newPoints) });
+      await base44.entities.LoyaltyMember.update(customerId, { total_points: parseInt(newPoints) });
     },
     onSuccess: () => {
       loadData();
@@ -59,7 +59,7 @@ export default function LoyaltyAdmin() {
     setLoading(true);
     try {
       const [loyaltyData, pointsData, rewardsData] = await Promise.all([
-        base44.entities.Loyalty.list('-lifetime_points', 100),
+        base44.entities.LoyaltyMember.list('-lifetime_points', 100),
         base44.entities.UserPoints.list('-created_date', 500),
         base44.entities.Rewards.list(),
       ]);
@@ -163,7 +163,7 @@ export default function LoyaltyAdmin() {
     if (selectedCustomers.size === 0) return;
     if (!confirm(`Delete ${selectedCustomers.size} member(s)?`)) return;
     try {
-      await Promise.all(Array.from(selectedCustomers).map(id => base44.entities.Loyalty.delete(id)));
+      await Promise.all(Array.from(selectedCustomers).map(id => base44.entities.LoyaltyMember.delete(id)));
       await loadData();
       setSelectedCustomers(new Set());
     } catch (error) {
@@ -174,7 +174,7 @@ export default function LoyaltyAdmin() {
   const deleteSingle = async (e, customerId) => {
     e.stopPropagation();
     if (!confirm('Delete this loyalty member?')) return;
-    await base44.entities.Loyalty.delete(customerId);
+    await base44.entities.LoyaltyMember.delete(customerId);
     setCustomers(prev => prev.filter(c => c.id !== customerId));
     setSelectedCustomers(prev => { const s = new Set(prev); s.delete(customerId); return s; });
   };
