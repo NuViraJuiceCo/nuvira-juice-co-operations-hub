@@ -78,25 +78,38 @@ async function syncProducts(base44) {
 }
 
 async function syncLoyalty(base44) {
-  const data = await callCustomerApp('getLoyaltyDataForSync');
-  const customers = data.customers || [];
-  let created = 0, updated = 0, failed = 0;
-  for (const c of customers) {
-    try {
-      const existing = await base44.asServiceRole.entities.CustomerLoyalty.filter({ customer_email: c.customer_email });
-      if (existing?.length > 0) {
-        await base44.asServiceRole.entities.CustomerLoyalty.update(existing[0].id, c);
-        updated++;
-      } else {
-        await base44.asServiceRole.entities.CustomerLoyalty.create(c);
-        created++;
-      }
-      } catch (err) { 
-      console.error(`[FULL-SYNC] Loyalty sync error for ${c.customer_email}:`, err.message);
-      failed++; 
-      }
-      }
-      return { total: customers.length, created, updated, failed };
+   const data = await callCustomerApp('getLoyaltyDataForSync');
+   const customers = data.customers || [];
+   let created = 0, updated = 0, failed = 0;
+   for (const c of customers) {
+     try {
+       const email = c.email || c.customer_email;
+       const existing = await base44.asServiceRole.entities.LoyaltyMember.filter({ email });
+       const loyaltyData = {
+         email,
+         full_name: c.full_name || c.name || '',
+         phone: c.phone || '',
+         signup_date: c.signup_date,
+         status: c.status || 'active',
+         total_points: c.total_points || 0,
+         lifetime_points: c.lifetime_points || 0,
+         redeemed_points: c.redeemed_points || 0,
+         points_history: c.points_history || [],
+         order_history: c.order_history || [],
+       };
+       if (existing?.length > 0) {
+         await base44.asServiceRole.entities.LoyaltyMember.update(existing[0].id, loyaltyData);
+         updated++;
+       } else {
+         await base44.asServiceRole.entities.LoyaltyMember.create(loyaltyData);
+         created++;
+       }
+       } catch (err) { 
+       console.error(`[FULL-SYNC] Loyalty sync error for ${c.email || c.customer_email}:`, err.message);
+       failed++; 
+       }
+       }
+       return { total: customers.length, created, updated, failed };
 }
 
 async function syncEvents(base44) {
