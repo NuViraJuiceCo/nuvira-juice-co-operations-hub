@@ -38,16 +38,31 @@ export default function LoyaltyAdmin() {
   });
 
   const updatePointsMutation = useMutation({
-    mutationFn: async ({ customerId, newPoints }) => {
-      await base44.entities.LoyaltyMember.update(customerId, { total_points: parseInt(newPoints) });
+    mutationFn: async ({ customerId, customerEmail, newPoints }) => {
+      const pointsNum = parseInt(newPoints);
+      const member = customers.find(c => c.id === customerId);
+      if (!member) throw new Error('Member not found');
+      
+      // Update hub
+      await base44.entities.LoyaltyMember.update(customerId, { total_points: pointsNum });
+      
+      // Push to customer app via loyaltySync
+      await base44.functions.invoke('loyaltySync', {
+        action: 'update',
+        customer_email: customerEmail,
+        total_points: pointsNum,
+        lifetime_points: member.lifetime_points,
+        redeemed_points: member.redeemed_points,
+        points_history: member.points_history
+      });
     },
     onSuccess: () => {
       loadData();
-      toast.success('Points updated');
+      toast.success('Points updated and synced to customer app');
       setEditingPointsId(null);
     },
-    onError: () => {
-      toast.error('Update failed');
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'Update failed');
     },
   });
 
@@ -398,7 +413,7 @@ export default function LoyaltyAdmin() {
                             autoFocus
                           />
                           <button
-                            onClick={() => updatePointsMutation.mutate({ customerId: customer.id, newPoints: editPointsValue })}
+                            onClick={() => updatePointsMutation.mutate({ customerId: customer.id, customerEmail: customer.email, newPoints: editPointsValue })}
                             disabled={updatePointsMutation.isPending}
                             className="px-2 py-1 bg-primary text-white rounded text-xs font-bold"
                           >
