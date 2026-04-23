@@ -13,6 +13,7 @@ import _ from "lodash";
 export default function Production() {
   const [batches, setBatches] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [bundles, setBundles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState(new Set());
@@ -21,12 +22,14 @@ export default function Production() {
 
   useEffect(() => {
     async function load() {
-      const [batchData, orderData] = await Promise.all([
+      const [batchData, orderData, bundleData] = await Promise.all([
         base44.entities.ProductionBatch.list("production_date", 100),
         base44.entities.ShopifyOrder.list("-created_date", 100),
+        base44.entities.Bundle.list("-updated_date", 100),
       ]);
       setBatches(batchData);
       setOrders(orderData);
+      setBundles(bundleData);
       setLoading(false);
     }
     load();
@@ -99,9 +102,21 @@ export default function Production() {
 
   const getTotalOrderQty = (batch) => {
     return getLinkedOrders(batch).reduce((sum, o) => {
-      const qty = o.line_items.reduce((s, item) => 
-        item.title === batch.product_name ? s + (item.quantity || 0) : s, 0
-      );
+      const qty = o.line_items.reduce((s, item) => {
+        // Direct product match
+        if (item.title === batch.product_name) {
+          return s + (item.quantity || 0);
+        }
+        // Check if it's a bundle containing this product
+        const bundle = bundles.find(b => b.bundle_name === item.title);
+        if (bundle && bundle.components) {
+          const componentMatch = bundle.components.find(c => c.product_name === batch.product_name);
+          if (componentMatch) {
+            return s + ((item.quantity || 0) * componentMatch.quantity);
+          }
+        }
+        return s;
+      }, 0);
       return sum + qty;
     }, 0);
   };
