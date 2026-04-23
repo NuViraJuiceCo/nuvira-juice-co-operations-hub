@@ -274,7 +274,7 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
                 <button onClick={() => setShowDeleteConfirm(true)} disabled={isUpdating}
                   className="w-full py-2 text-red-600 border border-red-200 rounded-xl text-xs font-semibold hover:bg-red-50 disabled:opacity-50 active:scale-95 transition-all flex items-center justify-center gap-2">
                   <Trash2 className="w-3.5 h-3.5" />
-                  Delete Order
+                  {isUpdating ? 'Deleting...' : 'Delete Order'}
                 </button>
               )}
 
@@ -287,7 +287,7 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
                       className="flex-1 py-2 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
                       Cancel
                     </button>
-                    <button onClick={() => { onDelete(order); }} disabled={isUpdating}
+                    <button onClick={async () => { await onDelete(order); setShowDeleteConfirm(false); }} disabled={isUpdating}
                       className="flex-1 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold disabled:opacity-50">
                       {isUpdating ? 'Deleting...' : 'Delete'}
                     </button>
