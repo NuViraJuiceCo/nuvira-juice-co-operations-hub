@@ -236,7 +236,7 @@ export default function Production() {
                     ({dateBatches.length} flavors)
                   </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   {dateBatches.map((batch) => (
                     <div
                       key={batch.id}
@@ -286,18 +286,7 @@ export default function Production() {
                           </p>
                         </div>
                       </div>
-                      {getLinkedOrders(batch).length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-border">
-                          <p className="text-xs font-semibold text-muted-foreground mb-2">Linked Orders ({getLinkedOrders(batch).length})</p>
-                          <div className="space-y-1">
-                            {getLinkedOrders(batch).map(o => (
-                              <a key={o.id} href="/orders" className="text-xs text-primary hover:underline">
-                                {o.shopify_order_number} · {o.customer_email}
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+
                       {(batch.assigned_to || batch.notes) && (
                         <div className="mt-3 pt-3 border-t border-border space-y-1">
                           {batch.assigned_to && (
@@ -313,6 +302,35 @@ export default function Production() {
                     </div>
                   ))}
                 </div>
+
+                {/* Orders for this date */}
+                {getLinkedOrders(dateBatches[0]).length > 0 && (
+                  <div className="bg-card border border-border rounded-xl p-5">
+                    <p className="text-sm font-semibold text-foreground mb-4">
+                      Orders for {dateLabel} ({getLinkedOrders(dateBatches[0]).length})
+                    </p>
+                    <div className="space-y-2">
+                      {getLinkedOrders(dateBatches[0]).map(o => (
+                        <a
+                          key={o.id}
+                          href="/orders"
+                          className="block p-3 bg-muted rounded-lg hover:bg-accent transition-colors"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{o.shopify_order_number}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{o.customer_email}</p>
+                              {o.customer_name && (
+                                <p className="text-xs text-muted-foreground">{o.customer_name}</p>
+                              )}
+                            </div>
+                            <span className="text-sm font-semibold text-primary">${o.total_price}</span>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
             })}
