@@ -44,15 +44,26 @@ Deno.serve(async (req) => {
 
     // Upsert orders into hub ShopifyOrder entity
     const results = [];
+    const processedIds = new Set();
+
     for (const ord of orders) {
       try {
-        // Check if exists by shopify_order_id
+        const orderId = ord.shopify_order_id || ord.id;
+
+        // Skip if we've already processed this ID in this sync
+        if (processedIds.has(orderId)) {
+          results.push({ order_id: orderId, action: 'skipped', reason: 'duplicate_in_batch' });
+          continue;
+        }
+        processedIds.add(orderId);
+
+        // Check if exists in hub
         const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({
-          shopify_order_id: ord.shopify_order_id || ord.id,
+          shopify_order_id: orderId,
         });
 
         const hubOrder = {
-          shopify_order_id: ord.shopify_order_id || ord.id || '',
+          shopify_order_id: orderId || '',
           shopify_order_number: ord.shopify_order_number || ord.order_number || '',
           customer_email: ord.customer_email || '',
           customer_phone: ord.customer_phone || '',
@@ -75,10 +86,10 @@ Deno.serve(async (req) => {
 
         if (existing && existing.length > 0) {
          await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, hubOrder);
-         results.push({ order_id: ord.shopify_order_id, action: 'updated' });
+         results.push({ order_id: orderId, action: 'updated', order_number: ord.shopify_order_number });
         } else {
          await base44.asServiceRole.entities.ShopifyOrder.create(hubOrder);
-         results.push({ order_id: ord.shopify_order_id, action: 'created' });
+         results.push({ order_id: orderId, action: 'created', order_number: ord.shopify_order_number });
         }
         } catch (err) {
         console.error(`[PULL-ORDERS] Failed to sync order ${ord.shopify_order_id}:`, err.message);
