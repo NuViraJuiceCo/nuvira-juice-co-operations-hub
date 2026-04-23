@@ -801,7 +801,8 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
                       pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
                       onVerifyReturn={(ret, data) => onBagReturnVerified(ret, data)}
                       user={user}
-                      isUpdating={updatingId === order.id}
+                      isUpdating={updatingId === order.id || deletingId === order.id}
+                      onDelete={handleDeleteOrder}
                     />
                   )}
                 </div>
