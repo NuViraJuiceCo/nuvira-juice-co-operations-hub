@@ -45,20 +45,37 @@ Deno.serve(async (req) => {
 
     for (const customer of productionCustomers) {
       try {
-        await base44.functions.invoke('loyaltySync', {
-          action: 'enroll',
-          token: SYNC_SECRET,
-          email: customer.email || customer.customer_email,
-          full_name: customer.full_name || customer.email?.split('@')[0] || customer.customer_email.split('@')[0],
-          phone: customer.phone || '',
-          signup_date: customer.signup_date || new Date().toISOString().split('T')[0],
-          status: customer.status || 'active',
-          total_points: customer.total_points || 0,
-          lifetime_points: customer.lifetime_points || 0,
-          redeemed_points: customer.redeemed_points || 0,
-          points_history: customer.points_history || []
-        });
-        results.push({ email: customer.email || customer.customer_email, action: 'synced' });
+        const email = customer.email || customer.customer_email;
+        
+        // Check if member exists
+        const existing = await base44.asServiceRole.entities.LoyaltyMember.filter({ email });
+        
+        if (existing?.length > 0) {
+          // Update existing member
+          await base44.asServiceRole.entities.LoyaltyMember.update(existing[0].id, {
+            full_name: customer.full_name || email.split('@')[0],
+            phone: customer.phone || '',
+            status: customer.status || 'active',
+            total_points: customer.total_points || 0,
+            lifetime_points: customer.lifetime_points || 0,
+            redeemed_points: customer.redeemed_points || 0,
+            points_history: customer.points_history || []
+          });
+        } else {
+          // Create new member
+          await base44.asServiceRole.entities.LoyaltyMember.create({
+            email,
+            full_name: customer.full_name || email.split('@')[0],
+            phone: customer.phone || '',
+            signup_date: customer.signup_date || new Date().toISOString().split('T')[0],
+            status: customer.status || 'active',
+            total_points: customer.total_points || 0,
+            lifetime_points: customer.lifetime_points || 0,
+            redeemed_points: customer.redeemed_points || 0,
+            points_history: customer.points_history || []
+          });
+        }
+        results.push({ email, action: 'synced' });
       } catch (err) {
         results.push({ email: customer.email || customer.customer_email, action: 'failed', error: err.message });
       }
