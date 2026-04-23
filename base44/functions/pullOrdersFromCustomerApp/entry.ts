@@ -77,11 +77,13 @@ Deno.serve(async (req) => {
           subtotal: ord.subtotal || 0,
           total_price: ord.total_price || ord.total || 0,
           customer_notes: ord.customer_notes || ord.notes || '',
+          internal_notes: ord.internal_notes || '',
           production_status: ord.production_status || 'new',
           tags: ord.tags || [],
           assigned_delivery_date: ord.assigned_delivery_date || '',
           sync_status: 'synced',
           last_sync_at: new Date().toISOString(),
+          customer_order_date: ord.created_date || ord.order_date || new Date().toISOString(),
         };
 
         if (existing && existing.length > 0) {
