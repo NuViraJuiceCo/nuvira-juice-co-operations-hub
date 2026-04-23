@@ -107,10 +107,26 @@ export default function Production() {
   };
 
   const filtered = batches.filter(
-    (b) => (statusFilter === "all" || b.status === statusFilter) && getLinkedOrders(b).length > 0
+    (b) => getLinkedOrders(b).length > 0
   );
 
+  // Group by production_date and product_name to consolidate batches by flavor
   const grouped = _.groupBy(filtered, (b) => b.production_date || '');
+  
+  // For each date, consolidate batches by product and sum order quantities
+  const consolidatedByDate = Object.entries(grouped).reduce((acc, [date, dateBatches]) => {
+    const productMap = {};
+    dateBatches.forEach(batch => {
+      const key = batch.product_name;
+      if (!productMap[key]) {
+        productMap[key] = { ...batch, total_order_qty: 0 };
+      }
+      productMap[key].total_order_qty += getTotalOrderQty(batch);
+    });
+    acc[date] = Object.values(productMap);
+    return acc;
+  }, {});
+
   const activeBatches = filtered.filter((b) => b.status !== "Completed").length;
 
   if (loading) {
@@ -174,7 +190,7 @@ export default function Production() {
 
         {/* Grouped by Date */}
       <div className="space-y-8">
-        {Object.entries(grouped)
+        {Object.entries(consolidatedByDate)
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([date, dateBatches]) => {
             const isToday = date === today;
@@ -188,7 +204,7 @@ export default function Production() {
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <h3 className="text-sm font-semibold text-foreground">{dateLabel}</h3>
                   <span className="text-xs text-muted-foreground">
-                    ({dateBatches.length} batches)
+                    ({dateBatches.length} flavors)
                   </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -227,12 +243,12 @@ export default function Production() {
                       </div>
                       <div className="grid grid-cols-3 gap-3 mt-4">
                         <div>
-                          <p className="text-xs text-muted-foreground">Planned</p>
-                          <p className="text-lg font-semibold text-foreground">{batch.planned_units}</p>
+                          <p className="text-xs text-muted-foreground">Total Orders</p>
+                          <p className="text-lg font-semibold text-primary">{batch.total_order_qty}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">From Orders</p>
-                          <p className="text-lg font-semibold text-primary">{getTotalOrderQty(batch)}</p>
+                          <p className="text-xs text-muted-foreground">Planned</p>
+                          <p className="text-lg font-semibold text-foreground">{batch.planned_units}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Produced</p>
