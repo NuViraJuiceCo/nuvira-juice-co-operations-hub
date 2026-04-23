@@ -271,7 +271,7 @@ export default function Orders() {
             </thead>
             <tbody>
               {sorted.map((order) => (
-                <> 
+                <tbody key={order.id}>
                   <tr className="border-b border-border/50 hover:bg-muted/30 transition-colors min-h-touch cursor-pointer" onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}>
                     <td className="px-5 py-3.5 w-10">
                       <input
@@ -340,8 +340,8 @@ export default function Orders() {
                       </td>
                     </tr>
                   )}
-                  </>
-                  ))}
+                </tbody>
+              ))}
             </tbody>
           </table>
         </div>
