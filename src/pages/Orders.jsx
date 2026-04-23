@@ -25,6 +25,7 @@ export default function Orders() {
   const [deleting, setDeleting] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -270,53 +271,77 @@ export default function Orders() {
             </thead>
             <tbody>
               {sorted.map((order) => (
-                <tr key={order.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors min-h-touch">
-                  <td className="px-5 py-3.5 w-10">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(order.id)}
-                      onChange={() => toggleSelect(order.id)}
-                      className="cursor-pointer"
-                    />
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <span className="text-sm font-medium text-primary">{order.shopify_order_number}</span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <p className="text-sm font-medium text-foreground">{order.customer_email}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer_phone}</p>
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.source_channel}</td>
-                  <td className="px-5 py-3.5"><StatusBadge status={order.production_status} /></td>
-                  <td className="px-5 py-3.5"><StatusBadge status={order.payment_status} /></td>
-                  <td className="px-5 py-3.5 text-sm text-muted-foreground">
-                    {order.fulfillment_method}{order.delivery_address ? ` · ${order.delivery_address.substring(0, 20)}...` : " · -"}
-                  </td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-foreground text-right">
-                    ${order.total_price?.toFixed(2)}
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
-                    {moment(order.created_date).format("MMM D, h:mm A")}
-                  </td>
-                  <td className="px-5 py-3.5 text-center w-20">
-                   <div className="flex items-center justify-center gap-2 flex-nowrap">
-                     <button
-                       onClick={() => setEditingOrder(order)}
-                       className="text-primary hover:text-primary/80"
-                     >
-                       <Edit2 className="h-4 w-4" />
-                     </button>
-                     <button
-                       onClick={() => handleDelete(order.id)}
-                       disabled={deleting === order.id}
-                       className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                     >
-                       <Trash2 className="h-4 w-4" />
-                     </button>
-                   </div>
-                  </td>
+                <> 
+                  <tr className="border-b border-border/50 hover:bg-muted/30 transition-colors min-h-touch cursor-pointer" onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}>
+                    <td className="px-5 py-3.5 w-10">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(order.id)}
+                        onChange={(e) => { e.stopPropagation(); toggleSelect(order.id); }}
+                        className="cursor-pointer"
+                      />
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="text-sm font-medium text-primary">{order.shopify_order_number}</span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <p className="text-sm font-medium text-foreground">{order.customer_email}</p>
+                      <p className="text-xs text-muted-foreground">{order.customer_phone}</p>
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.source_channel}</td>
+                    <td className="px-5 py-3.5"><StatusBadge status={order.production_status} /></td>
+                    <td className="px-5 py-3.5"><StatusBadge status={order.payment_status} /></td>
+                    <td className="px-5 py-3.5 text-sm text-muted-foreground">
+                      {order.fulfillment_method}{order.delivery_address ? ` · ${order.delivery_address.substring(0, 20)}...` : " · -"}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm font-semibold text-foreground text-right">
+                      ${order.total_price?.toFixed(2)}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
+                      {moment(order.created_date).format("MMM D, h:mm A")}
+                    </td>
+                    <td className="px-5 py-3.5 text-center w-20">
+                     <div className="flex items-center justify-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
+                       <button
+                         onClick={() => setEditingOrder(order)}
+                         className="text-primary hover:text-primary/80"
+                       >
+                         <Edit2 className="h-4 w-4" />
+                       </button>
+                       <button
+                         onClick={() => handleDelete(order.id)}
+                         disabled={deleting === order.id}
+                         className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                       >
+                         <Trash2 className="h-4 w-4" />
+                       </button>
+                     </div>
+                    </td>
                   </tr>
-              ))}
+                  {expandedOrderId === order.id && order.line_items && order.line_items.length > 0 && (
+                    <tr className="border-b border-border/50 last:border-0 bg-muted/20">
+                      <td colSpan="10" className="px-5 py-4">
+                        <div className="space-y-2">
+                          <p className="text-sm font-semibold text-foreground mb-3">Products in this order:</p>
+                          <div className="space-y-2">
+                            {order.line_items.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-2.5">
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-foreground">{item.title}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">Qty: {item.quantity} @ ${item.price?.toFixed(2) || '0.00'} each</p>
+                                </div>
+                                <div className="text-sm font-semibold text-foreground text-right">
+                                  ${(item.quantity * (item.price || 0)).toFixed(2)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </>
+                  ))}
             </tbody>
           </table>
         </div>
