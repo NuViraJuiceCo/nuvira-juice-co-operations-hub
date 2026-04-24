@@ -155,14 +155,19 @@ function IngredientRow({ ingredient, expanded, onToggleExpanded }) {
                   Sources ({ingredient.sources.length})
                 </p>
                 <div className="space-y-2">
-                  {ingredient.sources.map((src, i) => (
-                    <div key={i} className="bg-gray-100 rounded p-2.5 text-sm">
-                      <p className="font-semibold text-gray-900">{src.product_name}</p>
-                      <p className="text-xs text-gray-700 mt-0.5">
-                        {src.batch_units} unit{src.batch_units !== 1 ? 's' : ''} × {Math.round(src.ingredient_oz * 10) / 10} oz = <strong>{Math.round(src.ingredient_oz * src.batch_units * 10) / 10} oz</strong>
-                      </p>
-                    </div>
-                  ))}
+                  {ingredient.sources.map((src, i) => {
+                    const perBottleOz = src.batch_units > 0 ? src.ingredient_oz / src.batch_units : 0;
+                    const totalOz = Math.round(src.ingredient_oz * 10) / 10;
+                    const perBottleRounded = Math.round(perBottleOz * 10) / 10;
+                    return (
+                      <div key={i} className="bg-gray-100 rounded p-2.5 text-sm">
+                        <p className="font-semibold text-gray-900">{src.product_name}</p>
+                        <p className="text-xs text-gray-700 mt-0.5">
+                          {src.batch_units} bottle{src.batch_units !== 1 ? 's' : ''} × {perBottleRounded} oz/bottle = <strong>{totalOz} oz</strong>
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
