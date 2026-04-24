@@ -801,22 +801,25 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
       {/* Date Navigation */}
       <div className="px-4 pt-4 space-y-3">
         {/* Quick Date Tabs */}
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 sm:gap-2 items-center">
           <button onClick={() => handleQuickDate('yesterday')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors ${date === quickDates.yesterday ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground'}`}>
-            ← Previous
+            className={`flex-1 py-2 sm:py-2.5 px-2 sm:px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap ${date === quickDates.yesterday ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground'}`}>
+            <span className="hidden sm:inline">← Previous</span>
+            <span className="sm:hidden">Prev</span>
           </button>
           <button onClick={() => handleQuickDate('today')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors ${date === quickDates.today ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground'}`}>
-            📅 Today
+            className={`flex-1 py-2 sm:py-2.5 px-2 sm:px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap ${date === quickDates.today ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground'}`}>
+            <span className="hidden sm:inline">📅 Today</span>
+            <span className="sm:hidden">Today</span>
           </button>
           <button onClick={() => handleQuickDate('tomorrow')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors ${date === quickDates.tomorrow ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground'}`}>
-            Tomorrow →
+            className={`flex-1 py-2 sm:py-2.5 px-2 sm:px-3 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap ${date === quickDates.tomorrow ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground'}`}>
+            <span className="hidden sm:inline">Tomorrow →</span>
+            <span className="sm:hidden">Next</span>
           </button>
           <button onClick={() => setShowCalendar(!showCalendar)}
-            className="w-10 h-10 bg-card border border-border rounded-xl flex items-center justify-center hover:bg-secondary transition-colors">
-            <Clock className="w-4 h-4 text-muted-foreground" />
+            className="w-9 h-9 sm:w-10 sm:h-10 bg-card border border-border rounded-lg sm:rounded-xl flex items-center justify-center hover:bg-secondary transition-colors shrink-0">
+            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
           </button>
         </div>
 
