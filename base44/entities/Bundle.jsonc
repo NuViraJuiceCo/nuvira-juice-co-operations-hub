@@ -13,7 +13,7 @@
     },
     "components": {
       "type": "array",
-      "description": "List of juice products and quantities included in this bundle",
+      "description": "List of juice products and quantities included in this bundle (total across all fulfillments for subscriptions)",
       "items": {
         "type": "object",
         "properties": {
@@ -23,10 +23,15 @@
           },
           "quantity": {
             "type": "number",
-            "description": "Number of bottles of this product in the bundle"
+            "description": "Total number of bottles of this product across all fulfillments"
           }
         }
       }
+    },
+    "fulfillment_count": {
+      "type": "number",
+      "description": "For subscription bundles: number of separate fulfillments (e.g. 4 for monthly weekly delivery). Leave blank or 1 for one-time bundles.",
+      "default": 1
     },
     "includes_wellness_shots": {
       "type": "boolean",
