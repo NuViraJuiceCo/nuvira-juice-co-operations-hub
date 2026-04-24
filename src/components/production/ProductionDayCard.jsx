@@ -38,6 +38,7 @@ function SourceBreakdown({ sources }) {
           {subs.map((s, i) => (
             <p key={i} className="text-xs text-muted-foreground pl-2">
               · {s.order_number} — {s.customer_name || s.customer_email} × {s.quantity}
+              {s.fulfillment_index && s.fulfillment_total ? ` (fulfillment ${s.fulfillment_index} of ${s.fulfillment_total})` : ''}
             </p>
           ))}
         </div>

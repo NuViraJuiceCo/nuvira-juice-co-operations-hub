@@ -86,6 +86,38 @@ function findBundleComponents(bundleMap, itemTitle) {
   );
 }
 
+/**
+ * For subscription orders, the line item quantity is the TOTAL for the subscription period.
+ * We need to split this into per-fulfillment quantities spread across consecutive production dates.
+ *
+ * Detects fulfillment count from customer_notes (e.g. "4 weeks", "4 times").
+ * Returns fulfillment count (default 1 if not a subscription or not detectable).
+ */
+function detectFulfillmentCount(order) {
+  if (order.source_channel !== 'subscription') return 1;
+  const notes = (order.customer_notes || '').toLowerCase();
+  // Match patterns like "4 weeks", "4 times", "4 deliveries", "every week for 4 weeks"
+  const match = notes.match(/(\d+)\s*(week|time|deliver|fulfillment)/);
+  if (match) return parseInt(match[1], 10);
+  return 1; // fallback: treat as single fulfillment
+}
+
+/**
+ * Returns an array of N consecutive valid production dates starting from the given date.
+ * Each date is 7 days apart (weekly fulfillments).
+ */
+function getSubscriptionProductionDates(firstDate, count) {
+  const dates = [firstDate];
+  if (count <= 1) return dates;
+  const base = new Date(firstDate + 'T00:00:00');
+  for (let i = 1; i < count; i++) {
+    const next = new Date(base);
+    next.setDate(base.getDate() + 7 * i);
+    dates.push(next.toISOString().split('T')[0]);
+  }
+  return dates;
+}
+
 function inferProductCategory(productName) {
   const name = (productName || '').toLowerCase();
   if (name.includes('shot') || name.includes('ginger') || name.includes('turmeric') || name.includes('wheatgrass') || name.includes('spirulina')) {
@@ -159,60 +191,75 @@ Deno.serve(async (req) => {
         productionDate = getNextProductionDate(orderDate);
       }
 
-      // Skip past production dates
-      const prodDateObj = new Date(productionDate + 'T00:00:00');
-      if (prodDateObj < today) continue;
+      // For subscriptions, detect how many fulfillments are in this order
+      // and split the total quantity evenly across that many weekly production dates.
+      const fulfillmentCount = detectFulfillmentCount(order);
+      const fulfillmentDates = getSubscriptionProductionDates(productionDate, fulfillmentCount);
 
       for (const item of order.line_items) {
         const itemTitle = (item.title || '').trim();
-        const itemQty = Number(item.quantity) || 0;
-        if (itemQty <= 0 || !itemTitle) continue;
+        const totalQty = Number(item.quantity) || 0;
+        if (totalQty <= 0 || !itemTitle) continue;
+
+        // Per-fulfillment quantity (divide total evenly across fulfillments)
+        const perFulfillmentQty = Math.round(totalQty / fulfillmentCount);
 
         // Check if this line item is a bundle (try multiple name variations)
         const bundleComponents = findBundleComponents(bundleMap, itemTitle);
 
-        if (bundleComponents && bundleComponents.length > 0) {
-          // Decompose bundle into individual products
-          for (const component of bundleComponents) {
-            const productName = normalizeProductName(component.product_name);
-            const componentQty = (Number(component.quantity) || 1) * itemQty;
-            const key = `${productionDate}__${productName}`;
+        for (let fi = 0; fi < fulfillmentDates.length; fi++) {
+          const fDate = fulfillmentDates[fi];
+          const fDateObj = new Date(fDate + 'T00:00:00');
+          if (fDateObj < today) continue; // skip past dates
 
+          if (bundleComponents && bundleComponents.length > 0) {
+            // Decompose bundle into individual products, per fulfillment
+            for (const component of bundleComponents) {
+              const productName = normalizeProductName(component.product_name);
+              // component.quantity = total across all fulfillments; divide evenly
+              const qty = Math.round((Number(component.quantity) || 1) / fulfillmentCount) || 1;
+              const key = `${fDate}__${productName}`;
+
+              if (lockedKeys.has(key)) continue;
+
+              if (!planMap[key]) {
+                planMap[key] = { productionDate: fDate, productName, units: 0, sources: [] };
+              }
+              planMap[key].units += qty;
+              planMap[key].sources.push({
+                order_id: order.id,
+                order_number: order.shopify_order_number,
+                customer_email: order.customer_email,
+                customer_name: order.customer_name || '',
+                quantity: qty,
+                source_type: order.source_channel === 'subscription' ? 'subscription' : 'bundle',
+                source_item: itemTitle,
+                fulfillment_index: fulfillmentCount > 1 ? fi + 1 : undefined,
+                fulfillment_total: fulfillmentCount > 1 ? fulfillmentCount : undefined,
+              });
+            }
+          } else {
+            // Direct product line item, per fulfillment
+            const normalizedTitle = normalizeProductName(itemTitle);
+            const key = `${fDate}__${normalizedTitle}`;
             if (lockedKeys.has(key)) continue;
 
             if (!planMap[key]) {
-              planMap[key] = { productionDate, productName, units: 0, sources: [] };
+              planMap[key] = { productionDate: fDate, productName: normalizedTitle, units: 0, sources: [] };
             }
-            planMap[key].units += componentQty;
+            planMap[key].units += perFulfillmentQty;
             planMap[key].sources.push({
               order_id: order.id,
               order_number: order.shopify_order_number,
               customer_email: order.customer_email,
               customer_name: order.customer_name || '',
-              quantity: componentQty,
-              source_type: order.source_channel === 'subscription' ? 'subscription' : 'bundle',
-              source_item: itemTitle,
+              quantity: perFulfillmentQty,
+              source_type: order.source_channel === 'subscription' ? 'subscription' : 'direct',
+              source_item: normalizedTitle,
+              fulfillment_index: fulfillmentCount > 1 ? fi + 1 : undefined,
+              fulfillment_total: fulfillmentCount > 1 ? fulfillmentCount : undefined,
             });
           }
-        } else {
-          // Direct product line item
-          const normalizedTitle = normalizeProductName(itemTitle);
-          const key = `${productionDate}__${normalizedTitle}`;
-          if (lockedKeys.has(key)) continue;
-
-          if (!planMap[key]) {
-            planMap[key] = { productionDate, productName: normalizedTitle, units: 0, sources: [] };
-          }
-          planMap[key].units += itemQty;
-          planMap[key].sources.push({
-            order_id: order.id,
-            order_number: order.shopify_order_number,
-            customer_email: order.customer_email,
-            customer_name: order.customer_name || '',
-            quantity: itemQty,
-            source_type: order.source_channel === 'subscription' ? 'subscription' : 'direct',
-            source_item: normalizedTitle,
-          });
         }
       }
     }
