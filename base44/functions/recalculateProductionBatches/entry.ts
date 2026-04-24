@@ -134,8 +134,11 @@ function detectFulfillmentCount(order, bundleMap) {
 /**
  * For subscription orders, track which items go into each fulfillment.
  * This helps drivers see exactly what's in each weekly delivery.
+ * 
+ * Decomposes bundles into their component products per fulfillment.
+ * For non-bundle items, spreads the quantity across fulfillments.
  */
-function buildFulfillmentItemsMap(order, fulfillmentCount) {
+function buildFulfillmentItemsMap(order, fulfillmentCount, bundleMap, bundleFullData) {
   const fulfillmentItems = {};
   for (let i = 0; i < fulfillmentCount; i++) {
     fulfillmentItems[i] = [];
@@ -143,11 +146,60 @@ function buildFulfillmentItemsMap(order, fulfillmentCount) {
   
   if (order.line_items && order.source_channel === 'subscription') {
     order.line_items.forEach(item => {
-      const qtyPerFulfillment = Math.round((item.quantity || 0) / fulfillmentCount);
-      for (let i = 0; i < fulfillmentCount; i++) {
-        fulfillmentItems[i].push({
-          title: item.title,
-          quantity: qtyPerFulfillment,
+      const itemTitle = (item.title || '').trim();
+      
+      // Check if this is a bundle
+      const bundleComponents = findBundleComponents(bundleMap, itemTitle);
+      
+      if (bundleComponents && bundleComponents.length > 0) {
+        // This is a bundle — decompose into components for each fulfillment
+        for (let i = 0; i < fulfillmentCount; i++) {
+          for (const component of bundleComponents) {
+            // Each component qty is already the total per bundle
+            // For subscriptions, this is per-fulfillment
+            fulfillmentItems[i].push({
+              title: component.product_name,
+              quantity: Math.max(1, Math.round((component.quantity || 1) / fulfillmentCount)),
+              price: 0, // Component pricing not tracked separately
+            });
+          }
+        }
+      } else {
+        // Non-bundle item — spread quantity across fulfillments
+        const qtyPerFulfillment = Math.max(1, Math.round((item.quantity || 0) / fulfillmentCount));
+        for (let i = 0; i < fulfillmentCount; i++) {
+          fulfillmentItems[i].push({
+            title: itemTitle,
+            quantity: qtyPerFulfillment,
+            price: item.price || 0,
+          });
+        }
+      }
+    });
+  } else if (order.line_items && order.source_channel !== 'subscription') {
+    // One-time order — decompose bundles, keep line items as-is
+    order.line_items.forEach(item => {
+      const itemTitle = (item.title || '').trim();
+      
+      // Check if this is a bundle
+      const bundleComponents = findBundleComponents(bundleMap, itemTitle);
+      
+      if (bundleComponents && bundleComponents.length > 0) {
+        // This is a bundle — decompose into actual components
+        fulfillmentItems[0] = fulfillmentItems[0] || [];
+        for (const component of bundleComponents) {
+          fulfillmentItems[0].push({
+            title: component.product_name,
+            quantity: component.quantity || 1,
+            price: 0,
+          });
+        }
+      } else {
+        // Regular item
+        fulfillmentItems[0] = fulfillmentItems[0] || [];
+        fulfillmentItems[0].push({
+          title: itemTitle,
+          quantity: item.quantity || 1,
           price: item.price || 0,
         });
       }
@@ -284,7 +336,7 @@ Deno.serve(async (req) => {
       
       // Build fulfillment breakdown for the order (for driver visibility)
       if (order.source_channel === 'subscription' && fulfillmentCount > 1) {
-        const fulfillmentItems = buildFulfillmentItemsMap(order, fulfillmentCount);
+        const fulfillmentItems = buildFulfillmentItemsMap(order, fulfillmentCount, bundleMap, bundleFullData);
         const fulfillmentsArray = [];
         
         for (let fi = 0; fi < fulfillmentDates.length; fi++) {
@@ -323,13 +375,32 @@ Deno.serve(async (req) => {
         if (!order.assigned_delivery_date && fulfillmentsArray.length > 0) {
           order._deliveryDateAssigned = fulfillmentsArray[0].delivery_date;
         }
-      } else if (order.source_channel !== 'subscription' && !order.assigned_delivery_date && !order.requested_delivery_date) {
-        // For one-time orders without explicit delivery dates, assign to calculated delivery date
-        const deliveryDate = new Date(productionDate + 'T00:00:00');
-        const dayOfWeek = new Date(productionDate + 'T00:00:00').getDay();
-        const daysToAdd = dayOfWeek === 5 ? 1 : (dayOfWeek === 6 ? 1 : 3);
-        deliveryDate.setDate(deliveryDate.getDate() + daysToAdd);
-        order._deliveryDateAssigned = deliveryDate.toISOString().split('T')[0];
+      } else if (order.source_channel !== 'subscription') {
+        // One-time orders: decompose bundles if present
+        const fulfillmentItems = buildFulfillmentItemsMap(order, 1, bundleMap, bundleFullData);
+        order.fulfillments = [{
+          fulfillment_number: 1,
+          production_date: productionDate,
+          delivery_date: (() => {
+            const d = new Date(productionDate + 'T00:00:00');
+            const dayOfWeek = d.getDay();
+            const daysToAdd = dayOfWeek === 5 ? 1 : (dayOfWeek === 6 ? 1 : 3);
+            d.setDate(d.getDate() + daysToAdd);
+            return d.toISOString().split('T')[0];
+          })(),
+          items: fulfillmentItems[0] || [],
+          status: 'pending',
+          address_line1: order.address_line1 || '',
+          address_line2: order.address_line2 || '',
+          address_city: order.address_city || '',
+          address_state: order.address_state || '',
+          address_postal_code: order.address_postal_code || '',
+          address_country: order.address_country || 'US',
+          delivery_notes: order.delivery_notes || '',
+        }];
+        if (!order.assigned_delivery_date) {
+          order._deliveryDateAssigned = order.fulfillments[0].delivery_date;
+        }
       }
 
       for (const item of order.line_items) {
