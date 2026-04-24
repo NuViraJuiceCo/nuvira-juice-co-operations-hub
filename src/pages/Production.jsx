@@ -1,162 +1,86 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import AdminGuide from "../components/shared/AdminGuide";
-import { Calendar, Trash2, Edit2 } from "lucide-react";
-import { SelectContent, SelectItem } from "@/components/ui/select";
-import StatusBadge from "../components/shared/StatusBadge";
-import PullToRefresh from "../components/shared/PullToRefresh";
-import SelectMobile from "../components/SelectMobile";
 import BatchEditForm from "../components/production/BatchEditForm";
-import moment from "moment";
+import ProductionDayCard from "../components/production/ProductionDayCard";
+import PullToRefresh from "../components/shared/PullToRefresh";
+import { SelectContent, SelectItem } from "@/components/ui/select";
+import SelectMobile from "../components/SelectMobile";
+import { Button } from "@/components/ui/button";
+import { RefreshCw, Lock } from "lucide-react";
 import _ from "lodash";
+import moment from "moment";
 
 export default function Production() {
   const [batches, setBatches] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [bundles, setBundles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [recalculating, setRecalculating] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selected, setSelected] = useState(new Set());
-  const [deleting, setDeleting] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [editingBatch, setEditingBatch] = useState(null);
+  const [lastCalc, setLastCalc] = useState(null);
 
-  useEffect(() => {
-    async function load() {
-      const [batchData, orderData, bundleData] = await Promise.all([
-        base44.entities.ProductionBatch.list("production_date", 100),
-        base44.entities.ShopifyOrder.list("-created_date", 100),
-        base44.entities.Bundle.list("-updated_date", 100),
-      ]);
-      setBatches(batchData);
-      setOrders(orderData);
-      setBundles(bundleData);
-      setLoading(false);
-    }
-    load();
-
-    // Subscribe to order changes for real-time updates
-    const unsubOrders = base44.entities.ShopifyOrder.subscribe((event) => {
-      if (event.type === 'create' || event.type === 'update' || event.type === 'delete') {
-        load();
-      }
-    });
-
-    return () => unsubOrders();
-  }, []);
-
-  const handleRefresh = async () => {
+  const load = useCallback(async () => {
     const [batchData, orderData] = await Promise.all([
-      base44.entities.ProductionBatch.list("production_date", 100),
-      base44.entities.ShopifyOrder.list("-created_date", 100),
+      base44.entities.ProductionBatch.list("production_date", 200),
+      base44.entities.ShopifyOrder.list("-created_date", 200),
     ]);
     setBatches(batchData);
     setOrders(orderData);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+    const unsub = base44.entities.ProductionBatch.subscribe(() => load());
+    return () => unsub();
+  }, [load]);
+
+  const handleRecalculate = async () => {
+    setRecalculating(true);
+    try {
+      const res = await base44.functions.invoke('recalculateProductionBatches', {});
+      setLastCalc(res.data?.message || 'Done');
+      await load();
+    } finally {
+      setRecalculating(false);
+    }
   };
 
   const handleSaveEdit = async () => {
     setEditingBatch(null);
-    const [batchData, orderData] = await Promise.all([
-      base44.entities.ProductionBatch.list("production_date", 100),
-      base44.entities.ShopifyOrder.list("-created_date", 100),
-    ]);
-    setBatches(batchData);
-    setOrders(orderData);
+    await load();
   };
 
   const handleDelete = async (id) => {
-    setDeleting(id);
-    try {
-      await base44.entities.ProductionBatch.delete(id);
-      setBatches(batches.filter(b => b.id !== id));
-    } finally {
-      setDeleting(null);
-    }
+    await base44.entities.ProductionBatch.delete(id);
+    setBatches(prev => prev.filter(b => b.id !== id));
   };
 
-  const handleBulkDelete = async () => {
-    if (!window.confirm(`Delete ${selected.size} batch(es)?`)) return;
-    setDeleting(true);
-    try {
-      await Promise.all(Array.from(selected).map(id => base44.entities.ProductionBatch.delete(id)));
-      setBatches(batches.filter(b => !selected.has(b.id)));
-      setSelected(new Set());
-    } finally {
-      setDeleting(false);
-    }
+  const handleToggleLock = async (batch) => {
+    await base44.entities.ProductionBatch.update(batch.id, { is_locked: !batch.is_locked });
+    await load();
   };
 
-  const toggleSelect = (id) => {
-    const newSelected = new Set(selected);
-    if (newSelected.has(id)) newSelected.delete(id);
-    else newSelected.add(id);
-    setSelected(newSelected);
-  };
+  const today = moment().format("YYYY-MM-DD");
 
-  const getLinkedOrders = (batch) => {
-    // Check if this batch is for a base product (not a bundle)
-    const isBaseProduct = !bundles.some(b => b.bundle_name === batch.product_name);
-    if (!isBaseProduct) return []; // Skip bundle batches
-    
-    return orders.filter(o => {
-      if (!o || !o.line_items || o.production_status === 'fulfilled') return false;
-      
-      return o.line_items.some(item => {
-        // Direct product match
-        if (item.title === batch.product_name) return true;
-        
-        // Check if it's a bundle containing this product
-        const bundle = bundles.find(b => b.bundle_name === item.title);
-        if (bundle && bundle.components) {
-          return bundle.components.some(c => c.product_name === batch.product_name);
-        }
-        return false;
-      });
-    });
-  };
+  // Filter
+  const filtered = batches.filter(b => {
+    if (statusFilter !== "all" && b.status !== statusFilter) return false;
+    if (categoryFilter !== "all" && b.product_category !== categoryFilter) return false;
+    return true;
+  });
 
-  const getTotalOrderQty = (batch) => {
-    return getLinkedOrders(batch).reduce((sum, o) => {
-      const qty = o.line_items.reduce((s, item) => {
-        // Direct product match
-        if (item.title === batch.product_name) {
-          return s + (item.quantity || 0);
-        }
-        // Check if it's a bundle containing this product
-        const bundle = bundles.find(b => b.bundle_name === item.title);
-        if (bundle && bundle.components) {
-          const componentMatch = bundle.components.find(c => c.product_name === batch.product_name);
-          if (componentMatch) {
-            return s + ((item.quantity || 0) * componentMatch.quantity);
-          }
-        }
-        return s;
-      }, 0);
-      return sum + qty;
-    }, 0);
-  };
-
-  const filtered = batches.filter(
-    (b) => getLinkedOrders(b).length > 0
+  // Group by production date, only future/today
+  const grouped = _.groupBy(
+    filtered.filter(b => b.production_date >= today),
+    b => b.production_date
   );
 
-  // Group by production_date and product_name to consolidate batches by flavor
-  const grouped = _.groupBy(filtered, (b) => b.production_date || '');
-  
-  // For each date, consolidate batches by product and sum order quantities
-  const consolidatedByDate = Object.entries(grouped).reduce((acc, [date, dateBatches]) => {
-    const productMap = {};
-    dateBatches.forEach(batch => {
-      const key = batch.product_name;
-      if (!productMap[key]) {
-        productMap[key] = { ...batch, total_order_qty: 0 };
-      }
-      productMap[key].total_order_qty += getTotalOrderQty(batch);
-    });
-    acc[date] = Object.values(productMap);
-    return acc;
-  }, {});
-
-  const activeBatches = filtered.filter((b) => b.status !== "Completed").length;
+  const sortedDates = Object.keys(grouped).sort();
+  const activeBatches = filtered.filter(b => b.status !== "Completed" && b.production_date >= today);
+  const totalUnits = activeBatches.reduce((s, b) => s + (b.planned_units || 0), 0);
 
   if (loading) {
     return (
@@ -166,176 +90,90 @@ export default function Production() {
     );
   }
 
-  const today = moment().format("YYYY-MM-DD");
-
   return (
     <>
-    <PullToRefresh onRefresh={handleRefresh}>
-      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <AdminGuide
-        title="Admin Guide — Production Planning"
-        steps={[
-          "Use the Prod Scheduler page to plan and create new production batches.",
-          "Batches are grouped by production date so you can see what's planned for each day.",
-          "Click the edit icon on a batch to update its status (Planned → In Production → Completed) and actual units produced.",
-          "Filter by status using the dropdown in the top right to focus on active or upcoming batches.",
-        ]}
-        tips={[
-          "Always set 'Actual Units' when a batch is completed — this feeds into your reporting.",
-          "Batch IDs follow the format BATCH-YYYY-WXX-A for easy tracking.",
-          "Link batches to orders so production and fulfillment stay in sync.",
-        ]}
-      />
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
-          <p className="text-muted-foreground mt-1">
-            {batches.length} batches · {activeBatches} active
-          </p>
-        </div>
-        <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-44">
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="Planned">Planned</SelectItem>
-            <SelectItem value="Awaiting Ingredients">Awaiting Ingredients</SelectItem>
-            <SelectItem value="In Production">In Production</SelectItem>
-            <SelectItem value="In Packing">In Packing</SelectItem>
-            <SelectItem value="Completed">Completed</SelectItem>
-          </SelectContent>
-        </SelectMobile>
-        </div>
+      <PullToRefresh onRefresh={load}>
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <AdminGuide
+            title="Admin Guide — Production Planning"
+            steps={[
+              "Click 'Recalculate' to sync all order data into production cards. This runs automatically when orders change.",
+              "Each card represents one product/flavor for a specific production date — quantities are pulled from all active orders.",
+              "Bundles and packages are automatically decomposed into their individual products.",
+              "Lock a production day once planning is finalized to prevent auto-recalculation from overwriting it.",
+              "Edit any card to update status (Planned → In Production → Completed) and actual units produced.",
+            ]}
+            tips={[
+              "The 'Total Orders' count shows bottles actually needed based on all decomposed order data.",
+              "Subscriptions, bundles, and one-time orders all flow in automatically.",
+              "Lock a date before production starts so changes to orders won't affect finalized plans.",
+            ]}
+          />
 
-        {selected.size > 0 && (
-          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
-            <button onClick={handleBulkDelete} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
-              {deleting ? "Deleting..." : "Delete Selected"}
-            </button>
-            <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
-              Cancel
-            </button>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
+              <p className="text-muted-foreground mt-1">
+                {activeBatches.length} active batches · {totalUnits} total units needed
+              </p>
+              {lastCalc && (
+                <p className="text-xs text-green-600 mt-1">{lastCalc}</p>
+              )}
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <SelectMobile value={categoryFilter} onValueChange={setCategoryFilter} placeholder="All Categories" triggerClassName="w-40">
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="juice">Juice</SelectItem>
+                  <SelectItem value="shot">Shot</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </SelectMobile>
+              <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-44">
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="Planned">Planned</SelectItem>
+                  <SelectItem value="Awaiting Ingredients">Awaiting Ingredients</SelectItem>
+                  <SelectItem value="In Production">In Production</SelectItem>
+                  <SelectItem value="In Packing">In Packing</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                </SelectContent>
+              </SelectMobile>
+              <Button
+                onClick={handleRecalculate}
+                disabled={recalculating}
+                className="gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
+                {recalculating ? 'Recalculating...' : 'Recalculate'}
+              </Button>
+            </div>
           </div>
-        )}
 
-        {/* Grouped by Date */}
-      <div className="space-y-8">
-        {Object.entries(consolidatedByDate)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([date, dateBatches]) => {
-            const isToday = date === today;
-            const dateLabel = isToday
-              ? `Today — ${moment(date).format("dddd, MMM D")}`
-              : moment(date).format("dddd, MMM D, YYYY");
-
-            return (
-              <div key={date}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold text-foreground">{dateLabel}</h3>
-                  <span className="text-xs text-muted-foreground">
-                    ({dateBatches.length} flavors)
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  {dateBatches.map((batch) => (
-                    <div
-                      key={batch.id}
-                      className="bg-card border border-border rounded-xl p-5 hover:shadow-sm transition-shadow relative"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selected.has(batch.id)}
-                        onChange={() => toggleSelect(batch.id)}
-                        className="absolute top-3 left-3"
-                      />
-                      <button
-                        onClick={() => handleDelete(batch.id)}
-                        disabled={deleting === batch.id}
-                        className="absolute top-3 right-3 text-red-600 hover:text-red-700 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                      <div className="flex items-start justify-between pl-6">
-                        <div>
-                          <h4 className="font-semibold text-foreground">{batch.product_name}</h4>
-                          <p className="text-xs text-muted-foreground mt-0.5">{batch.batch_id}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setEditingBatch(batch)}
-                            className="text-primary hover:text-primary/80"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <StatusBadge status={batch.status} />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-3 mt-4">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Total Orders</p>
-                          <p className="text-lg font-semibold text-primary">{batch.total_order_qty}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Planned</p>
-                          <p className="text-lg font-semibold text-foreground">{batch.planned_units}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Produced</p>
-                          <p className="text-lg font-semibold text-foreground">
-                            {batch.actual_units || "—"}
-                          </p>
-                        </div>
-                      </div>
-
-                      {(batch.assigned_to || batch.notes) && (
-                        <div className="mt-3 pt-3 border-t border-border space-y-1">
-                          {batch.assigned_to && (
-                            <p className="text-xs text-muted-foreground">
-                              Assigned: {batch.assigned_to}
-                            </p>
-                          )}
-                          {batch.notes && (
-                            <p className="text-xs text-muted-foreground">{batch.notes}</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Orders for this date */}
-                {getLinkedOrders(dateBatches[0]).length > 0 && (
-                  <div className="bg-card border border-border rounded-xl p-5">
-                    <p className="text-sm font-semibold text-foreground mb-4">
-                      Orders for {dateLabel} ({getLinkedOrders(dateBatches[0]).length})
-                    </p>
-                    <div className="space-y-2">
-                      {getLinkedOrders(dateBatches[0]).map(o => (
-                        <a
-                          key={o.id}
-                          href="/orders"
-                          className="block p-3 bg-muted rounded-lg hover:bg-accent transition-colors"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="text-sm font-medium text-foreground">{o.shopify_order_number}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">{o.customer_email}</p>
-                              {o.customer_name && (
-                                <p className="text-xs text-muted-foreground">{o.customer_name}</p>
-                              )}
-                            </div>
-                            <span className="text-sm font-semibold text-primary">${o.total_price}</span>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-            })}
-      </div>
-      </div>
+          {/* Production Days */}
+          {sortedDates.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <p className="text-lg font-medium mb-2">No upcoming production scheduled</p>
+              <p className="text-sm">Click Recalculate to generate production cards from active orders.</p>
+            </div>
+          ) : (
+            <div className="space-y-10">
+              {sortedDates.map(date => (
+                <ProductionDayCard
+                  key={date}
+                  date={date}
+                  batches={grouped[date]}
+                  orders={orders}
+                  today={today}
+                  onEdit={setEditingBatch}
+                  onDelete={handleDelete}
+                  onToggleLock={handleToggleLock}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </PullToRefresh>
 
       {editingBatch && (

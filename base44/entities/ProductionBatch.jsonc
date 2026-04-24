@@ -4,11 +4,21 @@
   "properties": {
     "batch_id": {
       "type": "string",
-      "description": "Batch ID like BATCH-2026-W15-A"
+      "description": "Batch ID like BATCH-2026-05-01-Aura"
     },
     "product_name": {
       "type": "string",
-      "description": "Juice product name"
+      "description": "Juice product or shot flavor name"
+    },
+    "product_category": {
+      "type": "string",
+      "enum": [
+        "juice",
+        "shot",
+        "other"
+      ],
+      "default": "juice",
+      "description": "Category of product"
     },
     "status": {
       "type": "string",
@@ -23,7 +33,7 @@
     },
     "planned_units": {
       "type": "number",
-      "description": "Number of units planned"
+      "description": "Total units required based on orders"
     },
     "actual_units": {
       "type": "number",
@@ -41,6 +51,43 @@
     "notes": {
       "type": "string",
       "description": "Production notes"
+    },
+    "is_locked": {
+      "type": "boolean",
+      "default": false,
+      "description": "Locked production days cannot be auto-recalculated"
+    },
+    "order_sources": {
+      "type": "array",
+      "description": "Breakdown of which orders contribute to this batch",
+      "items": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string"
+          },
+          "order_number": {
+            "type": "string"
+          },
+          "customer_email": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "source_type": {
+            "type": "string",
+            "description": "direct, bundle, subscription"
+          },
+          "source_item": {
+            "type": "string",
+            "description": "Original line item title if from bundle"
+          }
+        }
+      }
     }
   },
   "required": [
