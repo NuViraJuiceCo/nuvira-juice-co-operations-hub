@@ -233,8 +233,15 @@ Deno.serve(async (req) => {
         
         for (let fi = 0; fi < fulfillmentDates.length; fi++) {
           const fDate = fulfillmentDates[fi];
-          const deliveryDate = new Date(fDate + 'T00:00:00');
-          deliveryDate.setDate(deliveryDate.getDate() + 3); // 3 days after production
+          // Production day → delivery day mapping:
+          // Tue (2) → Fri (5): +3 days
+          // Fri (5) → Sat (6): +1 day
+          // Sat (6) → Sun (0): +1 day (next day)
+          const prodDate = new Date(fDate + 'T00:00:00');
+          const dayOfWeek = prodDate.getDay();
+          const daysToAdd = dayOfWeek === 5 ? 1 : (dayOfWeek === 6 ? 1 : 3);
+          const deliveryDate = new Date(prodDate);
+          deliveryDate.setDate(deliveryDate.getDate() + daysToAdd);
           
           fulfillmentsArray.push({
             fulfillment_number: fi + 1,

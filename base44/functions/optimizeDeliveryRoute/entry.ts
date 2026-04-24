@@ -19,35 +19,21 @@ Deno.serve(async (req) => {
     // Filter to orders for the selected date if provided
     let orders = allOrders;
     if (date) {
-      const selectedDate = new Date(date);
-      const cutoffDate = new Date(date);
-      cutoffDate.setDate(cutoffDate.getDate() - 1);
-      const cutoffStr = cutoffDate.toISOString().split('T')[0];
-
       orders = allOrders.filter(o => {
         // For subscription orders: check if any fulfillment matches the date
         if (o.source_channel === 'subscription' && o.fulfillments && o.fulfillments.length > 0) {
-          return o.fulfillments.some(f => f.delivery_date && f.delivery_date.startsWith(date));
+          return o.fulfillments.some(f => f.delivery_date && f.delivery_date === date);
         }
 
-        // For non-subscription orders: only show if assigned/requested for this specific date
-        if (o.assigned_delivery_date && o.assigned_delivery_date.startsWith(date)) {
+        // For non-subscription orders: only show if explicitly assigned to this date
+        if (o.assigned_delivery_date && o.assigned_delivery_date === date) {
           return true;
         }
-        if (o.requested_delivery_date && o.requested_delivery_date.startsWith(date)) {
+        if (o.requested_delivery_date && o.requested_delivery_date === date) {
           return true;
         }
 
-        // Include pre-order/new orders created up to and including the cutoff date
-        // These get assigned to the selected delivery date (only if no prior date assigned)
-        if (!o.assigned_delivery_date && !o.requested_delivery_date) {
-          if (o.production_status === 'new' || o.production_status === 'awaiting_production') {
-            const createdDate = o.customer_order_date || o.created_date;
-            if (createdDate && createdDate.substring(0, 10) <= cutoffStr) {
-              return true;
-            }
-          }
-        }
+        // Do NOT include pre-orders or new orders without explicit delivery assignments
         return false;
       });
     }
