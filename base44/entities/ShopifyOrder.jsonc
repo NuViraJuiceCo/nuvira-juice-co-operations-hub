@@ -273,9 +273,33 @@
       "type": "string",
       "description": "Stripe subscription ID if recurring/subscription order"
     },
+    "stripe_charge_id": {
+      "type": "string",
+      "description": "Stripe charge ID if applicable"
+    },
     "stripe_event_id_applied": {
       "type": "string",
       "description": "Most recent Stripe event ID that was successfully processed for this order"
+    },
+    "stripe_created_event_type": {
+      "type": "string",
+      "description": "Original webhook event type that created this order (checkout.session.completed, payment_intent.succeeded, etc)"
+    },
+    "last_reconciliation_at": {
+      "type": "string",
+      "description": "ISO timestamp when last reconciled against Stripe"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "stripe_checkout",
+        "stripe_subscription",
+        "stripe_invoice",
+        "manual_repair",
+        "customer_app",
+        "admin_create"
+      ],
+      "description": "How this order was originally sourced"
     },
     "repair_status": {
       "type": "string",
@@ -296,6 +320,23 @@
     "repair_method": {
       "type": "string",
       "description": "Which repair method was used (e.g., canonical_checkout_session_lookup, event_replay)"
+    },
+    "subscription_parent_id": {
+      "type": "string",
+      "description": "For fulfillment-derived orders: parent Stripe subscription ID"
+    },
+    "fulfillment_instance_date": {
+      "type": "string",
+      "format": "date",
+      "description": "For fulfillment-derived orders: the date this fulfillment instance represents"
+    },
+    "fulfillment_sequence_number": {
+      "type": "number",
+      "description": "For fulfillment-derived orders: which fulfillment instance in the subscription (1, 2, 3, ...)"
+    },
+    "source_invoice_id": {
+      "type": "string",
+      "description": "For fulfillment-derived orders: source Stripe invoice ID"
     },
     "delivery_photo_url": {
       "type": "string"
