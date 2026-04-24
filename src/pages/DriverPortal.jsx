@@ -569,6 +569,8 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const [updatingId, setUpdatingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [manualOrder, setManualOrder] = useState(null); // Track manual reordering
+  const [isDragging, setIsDragging] = useState(null);
 
   const getDateLabel = (dateStr) => {
     const target = new Date(dateStr + 'T00:00:00');
@@ -622,10 +624,17 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const optimizeRoute = async () => {
     if (!queuedOrders?.length) return;
     setOptimizing(true);
+    setManualOrder(null); // Reset manual overrides when re-optimizing
     try {
       const res = await base44.functions.invoke('optimizeDeliveryRoute', { date: date || undefined, optimize: true });
       setRouteData(res.data);
-      toast.success(`Route optimized! ${queuedOrders.length} stops`);
+      
+      const stats = res.data?.route_stats;
+      if (stats?.time_saved_minutes > 0) {
+        toast.success(`Route optimized! ~${stats.time_saved_minutes} min saved (${stats.total_distance_miles} mi, ${stats.optimized_duration_minutes} min)`);
+      } else if (stats) {
+        toast.success(`Route optimized (${stats.optimized_duration_minutes} min, ${stats.total_distance_miles} mi)`);
+      }
     } catch {
       toast.error('Optimization failed');
     } finally {
@@ -734,9 +743,22 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     }
   };
 
-  const displayOrders = routeData?.optimized_orders || queuedOrders || [];
-  const isOptimized = !!routeData?.optimized_orders;
+  // Use manual order if set, otherwise use optimized/queued orders
+  let displayOrders = routeData?.optimized_orders || queuedOrders || [];
+  if (manualOrder) {
+    displayOrders = manualOrder;
+  }
+  const isOptimized = !!routeData?.optimized_orders && !manualOrder;
   const delivered = displayOrders.filter(o => o.status === 'delivered').length;
+
+  // Manual reordering handler
+  const handleReorderStop = (fromIdx, toIdx) => {
+    if (!displayOrders) return;
+    const newOrder = [...displayOrders];
+    const [movedItem] = newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, movedItem);
+    setManualOrder(newOrder);
+  };
 
   const todaysOrderIds = new Set(displayOrders.map(o => o.id));
   const todaysBagReturns = bagReturns.filter(r => todaysOrderIds.has(r.order_id));
@@ -834,13 +856,40 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
       {isOptimized && (
         <div className="px-4 mt-4 space-y-2">
-          {routeData?.total_distance_miles && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-600 shrink-0" />
-                <p className="text-xs text-blue-700 font-medium">~{routeData.total_duration_minutes} min · {routeData.total_distance_miles} mi</p>
+          {routeData?.route_stats && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                  <p className="text-sm font-bold text-blue-900">Route Optimized</p>
+                </div>
+                <button onClick={() => setRouteData(null)} className="text-[10px] text-blue-500 font-semibold underline">Reset</button>
               </div>
-              <button onClick={() => setRouteData(null)} className="text-[10px] text-blue-500 font-semibold underline">Reset</button>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="bg-white rounded-lg px-2 py-1.5 border border-blue-200">
+                  <p className="text-blue-600 font-medium">Duration</p>
+                  <p className="text-lg font-bold text-blue-900">{routeData.route_stats.optimized_duration_minutes || 0}</p>
+                  <p className="text-[10px] text-blue-500">minutes</p>
+                </div>
+                <div className="bg-white rounded-lg px-2 py-1.5 border border-blue-200">
+                  <p className="text-blue-600 font-medium">Distance</p>
+                  <p className="text-lg font-bold text-blue-900">{routeData.route_stats.total_distance_miles}</p>
+                  <p className="text-[10px] text-blue-500">miles</p>
+                </div>
+                <div className="bg-white rounded-lg px-2 py-1.5 border border-blue-200">
+                  <p className="text-blue-600 font-medium">Stops</p>
+                  <p className="text-lg font-bold text-blue-900">{routeData.route_stats.stops_count}</p>
+                  <p className="text-[10px] text-blue-500">in route</p>
+                </div>
+                {routeData.route_stats.time_saved_minutes > 0 && (
+                  <div className="bg-green-50 rounded-lg px-2 py-1.5 border border-green-300">
+                    <p className="text-green-700 font-medium">Savings</p>
+                    <p className="text-lg font-bold text-green-900">~{routeData.route_stats.time_saved_minutes}</p>
+                    <p className="text-[10px] text-green-600">min saved</p>
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-blue-600">Method: {routeData.route_stats.optimization_method === 'google_routes_api' ? 'Google Routes API' : 'Cluster-based sorting'}</p>
             </div>
           )}
           {(() => {
@@ -886,7 +935,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
                   </div>
                 )}
                 <div className="flex-1 pb-2">
-                  {isOptimized ? (
+                  {isOptimized || manualOrder ? (
                     <StopCard
                        order={order}
                        pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
@@ -898,6 +947,11 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
                        user={user}
                        isUpdating={updatingId === order.id || deletingId === order.id}
                        onDelete={handleDeleteOrder}
+                       isDragging={isDragging === idx}
+                       onDragStart={() => setIsDragging(idx)}
+                       onDragEnd={() => setIsDragging(null)}
+                       onReorder={(toIdx) => handleReorderStop(idx, toIdx)}
+                       isManuallyReordered={!!manualOrder}
                      />
                   ) : (
                     <PreOptimizeOrderCard

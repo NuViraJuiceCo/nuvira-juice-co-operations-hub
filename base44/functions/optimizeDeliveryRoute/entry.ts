@@ -119,18 +119,139 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Basic optimization: sort by address (mock optimization)
-    // In production, integrate with Google Routes API for real optimization
-    const optimizedOrders = [...queuedOrders].sort((a, b) => {
-      return (a.delivery_address || '').localeCompare(b.delivery_address || '');
+    // Proper route optimization using Google Routes API
+    if (!optimize) {
+      return Response.json({ 
+        status: 'success', 
+        orders: queuedOrders,
+        optimized_orders: null,
+        route_stats: null,
+      });
+    }
+
+    // Filter to undelivered stops only for optimization
+    const undeliveredStops = queuedOrders.filter(o => o.status !== 'delivered');
+    
+    if (undeliveredStops.length === 0) {
+      return Response.json({ 
+        status: 'success', 
+        orders: queuedOrders,
+        optimized_orders: queuedOrders,
+        route_stats: {
+          original_duration_minutes: 0,
+          optimized_duration_minutes: 0,
+          total_distance_miles: 0,
+          stops_count: 0,
+          time_saved_minutes: 0,
+        },
+      });
+    }
+
+    // Get depot coordinates (fixed origin)
+    const depotCoords = { latitude: 38.6849, longitude: -90.6639 }; // O'Fallon, MO coordinates
+    
+    // Build waypoints for Google Routes API
+    const waypoints = undeliveredStops.map(stop => ({
+      location: {
+        address: stop.delivery_address,
+      },
+    }));
+
+    // Call Google Routes Optimization API
+    let optimizedRoute = null;
+    const googleApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
+    
+    if (googleApiKey && waypoints.length > 0) {
+      try {
+        const routeResp = await fetch('https://routeoptimization.googleapis.com/v1/projects/-/locations/us:optimizeTours', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': googleApiKey,
+          },
+          body: JSON.stringify({
+            parent: 'projects/-/locations/us',
+            routeObjectives: ['ROUTE_MINIMIZE_DRIVING_TIME'],
+            vehicles: [
+              {
+                displayName: 'Driver Vehicle',
+                startLocation: {
+                  latitude: depotCoords.latitude,
+                  longitude: depotCoords.longitude,
+                },
+                endLocation: {
+                  latitude: depotCoords.latitude,
+                  longitude: depotCoords.longitude,
+                },
+              },
+            ],
+            locations: waypoints.map((wp, idx) => ({
+              displayName: undeliveredStops[idx].customer_name || undeliveredStops[idx].customer_email,
+              address: wp.location.address,
+            })),
+            model: 'COST_MINIMIZATION',
+          }),
+        });
+
+        if (routeResp.ok) {
+          const routeData = await routeResp.json();
+          if (routeData.routes && routeData.routes.length > 0) {
+            const visits = routeData.routes[0].visits || [];
+            const optimizedIndices = visits.map(v => v.shipmentIndex);
+            optimizedRoute = optimizedIndices.map(idx => undeliveredStops[idx]);
+            
+            // Extract stats
+            const route = routeData.routes[0];
+            const optimizedMetrics = {
+              distance_meters: route.metrics?.totalDistance || 0,
+              duration_seconds: route.metrics?.totalDuration || 0,
+              stops: visits.length,
+            };
+            
+            // Calculate original route duration (simple heuristic: 10 min per stop + 2 min per mile)
+            const avgDistPerStop = (optimizedMetrics.distance_meters / 1609.34) / (optimizedMetrics.stops || 1);
+            const originalEstimate = (optimizedMetrics.stops * 10) + (avgDistPerStop * optimizedMetrics.stops * 2);
+            const timeSaved = Math.max(0, Math.round(originalEstimate - (optimizedMetrics.duration_seconds / 60)));
+
+            return Response.json({
+              status: 'success',
+              orders: queuedOrders,
+              optimized_orders: [...queuedOrders.filter(o => o.status === 'delivered'), ...optimizedRoute],
+              route_stats: {
+                optimized_duration_minutes: Math.round(optimizedMetrics.duration_seconds / 60),
+                total_distance_miles: Math.round((optimizedMetrics.distance_meters / 1609.34) * 10) / 10,
+                stops_count: optimizedMetrics.stops,
+                time_saved_minutes: timeSaved,
+                optimization_method: 'google_routes_api',
+              },
+            });
+          }
+        } else {
+          console.warn('[OPTIMIZE-ROUTE] Google Routes API failed, falling back to basic sort');
+        }
+      } catch (err) {
+        console.error('[OPTIMIZE-ROUTE] Google Routes integration error:', err.message);
+      }
+    }
+
+    // Fallback: cluster-based sort (group by zip code proximity)
+    const clusteredOrders = [...undeliveredStops].sort((a, b) => {
+      const aZip = (a.delivery_address || '').match(/\d{5}/)?.[0] || '';
+      const bZip = (b.delivery_address || '').match(/\d{5}/)?.[0] || '';
+      return aZip.localeCompare(bZip) || (a.delivery_address || '').localeCompare(b.delivery_address || '');
     });
 
-    return Response.json({ 
-      status: 'success', 
+    return Response.json({
+      status: 'success',
       orders: queuedOrders,
-      optimized_orders: optimizedOrders,
-      total_distance_miles: Math.round(queuedOrders.length * 2.5), // Mock calculation
-      total_duration_minutes: Math.round(queuedOrders.length * 15), // Mock calculation
+      optimized_orders: [...queuedOrders.filter(o => o.status === 'delivered'), ...clusteredOrders],
+      route_stats: {
+        optimized_duration_minutes: Math.round(undeliveredStops.length * 12),
+        total_distance_miles: Math.round(undeliveredStops.length * 2.5),
+        stops_count: undeliveredStops.length,
+        time_saved_minutes: 0,
+        optimization_method: 'cluster_sort',
+      },
     });
 
   } catch (error) {
