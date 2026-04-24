@@ -125,21 +125,21 @@ function IngredientRow({ ingredient, expanded, onToggleExpanded }) {
             {purchase.has_yield_data && ingredient.status === 'purchase_needed' && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white border border-border rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground font-medium">Yield</p>
+                  <p className="text-xs text-gray-900 font-bold">Yield</p>
                   <p className="text-sm font-bold text-foreground mt-1">{purchase.oz_per_unit} oz/{purchase.purchase_unit}</p>
                 </div>
                 <div className="bg-white border border-border rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground font-medium">Order Qty</p>
+                  <p className="text-xs text-gray-900 font-bold">Order Qty</p>
                   <p className="text-sm font-bold text-foreground mt-1">{purchase.units_needed} {purchase.purchase_unit}s</p>
                 </div>
                 {purchase.units_per_case && (
                   <>
                     <div className="bg-white border border-border rounded-lg p-3">
-                      <p className="text-xs text-muted-foreground font-medium">Pack Size</p>
+                      <p className="text-xs text-gray-900 font-bold">Pack Size</p>
                       <p className="text-sm font-bold text-foreground mt-1">{purchase.units_per_case} per case</p>
                     </div>
                     <div className="bg-white border border-border rounded-lg p-3">
-                      <p className="text-xs text-muted-foreground font-medium">Cases</p>
+                      <p className="text-xs text-gray-900 font-bold">Cases</p>
                       <p className="text-sm font-bold text-foreground mt-1">{purchase.cases_needed}</p>
                     </div>
                   </>
@@ -150,15 +150,15 @@ function IngredientRow({ ingredient, expanded, onToggleExpanded }) {
             {/* Sources */}
             {hasSources && (
               <div className="bg-white border border-border rounded-lg p-4">
-                <p className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+                <p className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
                   <Package className="h-4 w-4 text-primary" />
                   Sources ({ingredient.sources.length})
                 </p>
                 <div className="space-y-2">
                   {ingredient.sources.map((src, i) => (
-                    <div key={i} className="bg-muted/40 rounded p-2.5 text-sm">
-                      <p className="font-semibold text-foreground">{src.product_name}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                    <div key={i} className="bg-gray-100 rounded p-2.5 text-sm">
+                      <p className="font-semibold text-gray-900">{src.product_name}</p>
+                      <p className="text-xs text-gray-700 mt-0.5">
                         {src.batch_units} unit{src.batch_units !== 1 ? 's' : ''} × {Math.round(src.ingredient_oz * 10) / 10} oz = <strong>{Math.round(src.ingredient_oz * src.batch_units * 10) / 10} oz</strong>
                       </p>
                     </div>
@@ -170,8 +170,8 @@ function IngredientRow({ ingredient, expanded, onToggleExpanded }) {
             {/* Supplier info */}
             {ingredient.supplier && (
               <div className="bg-white border border-border rounded-lg p-3">
-                <p className="text-xs text-muted-foreground font-medium">Supplier</p>
-                <p className="text-sm font-semibold text-foreground mt-1">{ingredient.supplier}</p>
+                <p className="text-xs text-gray-900 font-bold">Supplier</p>
+                <p className="text-sm font-semibold text-gray-900 mt-1">{ingredient.supplier}</p>
               </div>
             )}
           </div>
