@@ -84,6 +84,7 @@ export default function Production() {
     } catch (error) {
       console.error('Recalculate error:', error);
       setLastCalc('Error: ' + error.message);
+    } finally {
       setRecalculating(false);
     }
   };
