@@ -13,75 +13,78 @@ Deno.serve(async (req) => {
 
     const { date, optimize } = await req.json();
 
-    if (!CUSTOMER_APP_API || !SYNC_SECRET) {
-      return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
+    // Load ALL orders from local ShopifyOrder database (not from customer app)
+    const allOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500);
+    
+    // Filter to orders for the selected date if provided
+    let orders = allOrders;
+    if (date) {
+      orders = allOrders.filter(o => {
+        const orderDate = o.assigned_delivery_date || o.requested_delivery_date || o.customer_order_date;
+        return orderDate && orderDate.startsWith(date);
+      });
     }
 
-    // Fetch orders and bag returns from customer app
-    const [ordersRes, returnsRes] = await Promise.all([
-      fetch(`${CUSTOMER_APP_API}/functions/getOrdersForSync`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SYNC_SECRET}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(date ? { date } : {}),
-      }),
-      fetch(`${CUSTOMER_APP_API}/functions/getBagReturnsForSync`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SYNC_SECRET}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ includeCompleted: true, date: date ? date : undefined }),
-      }),
-    ]);
-
-    if (!ordersRes.ok) {
-      const text = await ordersRes.text();
-      throw new Error(`Customer app error ${ordersRes.status}: ${text.slice(0, 200)}`);
-    }
-
-    const ordersData = await ordersRes.json();
-    const orders = ordersData.orders || [];
-
-    // Sync bag returns if available
-    if (returnsRes.ok) {
+    // Optionally sync bag returns from customer app if configured
+    if (CUSTOMER_APP_API && SYNC_SECRET) {
       try {
-        const returnsData = await returnsRes.json();
-        const bagReturns = returnsData.returns || [];
-        console.log(`[OPTIMIZE-ROUTE] Fetched ${bagReturns.length} bag returns from customer app`);
+        const returnsRes = await fetch(`${CUSTOMER_APP_API}/functions/getBagReturnsForSync`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SYNC_SECRET}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ includeCompleted: true }),
+        });
         
-        for (const ret of bagReturns) {
-          try {
-            const existing = await base44.asServiceRole.entities.BagReturn.filter({
-              customer_email: ret.customer_email,
-              order_id: ret.order_id,
-            });
-            if (!existing || existing.length === 0) {
-              await base44.asServiceRole.entities.BagReturn.create(ret);
-              console.log(`[OPTIMIZE-ROUTE] Created bag return for ${ret.customer_email}`);
-            } else {
-              await base44.asServiceRole.entities.BagReturn.update(existing[0].id, ret);
-              console.log(`[OPTIMIZE-ROUTE] Updated bag return for ${ret.customer_email}`);
+        if (returnsRes.ok) {
+          const returnsData = await returnsRes.json();
+          const bagReturns = returnsData.returns || [];
+          console.log(`[OPTIMIZE-ROUTE] Syncing ${bagReturns.length} bag returns from customer app`);
+          
+          for (const ret of bagReturns) {
+            try {
+              const existing = await base44.asServiceRole.entities.BagReturn.filter({
+                customer_email: ret.customer_email,
+                order_id: ret.order_id,
+              });
+              if (!existing || existing.length === 0) {
+                await base44.asServiceRole.entities.BagReturn.create(ret);
+              } else {
+                await base44.asServiceRole.entities.BagReturn.update(existing[0].id, ret);
+              }
+            } catch (err) {
+              console.error(`[OPTIMIZE-ROUTE] Failed to sync bag return for ${ret.customer_email}:`, err);
             }
-          } catch (err) {
-            console.error(`[OPTIMIZE-ROUTE] Failed to sync bag return for ${ret.customer_email}:`, err);
           }
         }
-      } catch (parseErr) {
-        console.error(`[OPTIMIZE-ROUTE] Failed to parse bag returns response:`, parseErr);
+      } catch (err) {
+        console.error(`[OPTIMIZE-ROUTE] Bag returns sync failed (non-critical):`, err);
       }
-    } else {
-      console.warn(`[OPTIMIZE-ROUTE] Bag returns endpoint returned status ${returnsRes.status}`);
     }
 
     if (!Array.isArray(orders) || orders.length === 0) {
       return Response.json({ status: 'success', orders: [], optimized_orders: [] });
     }
 
-    // Filter to only undelivered orders (check both status and production_status fields)
-     const queuedOrders = orders.filter(o => o.status !== 'delivered' && o.production_status !== 'fulfilled');
+    // Map ShopifyOrder to driver portal format and filter to undelivered orders
+    const queuedOrders = orders
+      .filter(o => o.production_status !== 'fulfilled')
+      .map(o => ({
+        id: o.id,
+        order_number: o.shopify_order_number,
+        customer_email: o.customer_email,
+        customer_name: o.customer_name,
+        contact_phone: o.customer_phone,
+        delivery_address: o.delivery_address,
+        items: o.line_items || [],
+        status: o.production_status === 'fulfilled' ? 'delivered' : o.production_status,
+        delivery_photo_url: o.delivery_photo_url,
+        delivery_drop_location: o.delivery_drop_location,
+        delivered_by: o.delivered_by,
+        delivered_at: o.delivered_at,
+        leg_duration_seconds: null,
+      }));
 
     if (!optimize) {
       return Response.json({ 
