@@ -42,17 +42,31 @@ export default function Orders() {
   };
 
   const handleSync = async () => {
-    setSyncing(true);
-    try {
-      await base44.functions.invoke('pullOrdersFromCustomerApp', {});
-      // Wait for database to commit before refreshing
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await handleRefresh();
-    } catch (error) {
-      console.error('Sync failed:', error.message);
-    } finally {
-      setSyncing(false);
-    }
+   setSyncing(true);
+   try {
+     await base44.functions.invoke('pullOrdersFromCustomerApp', {});
+     // Wait for database to commit before refreshing
+     await new Promise(resolve => setTimeout(resolve, 1000));
+     await handleRefresh();
+   } catch (error) {
+     console.error('Sync failed:', error.message);
+   } finally {
+     setSyncing(false);
+   }
+  };
+
+  const handleRecalculateBatches = async () => {
+   setSyncing(true);
+   try {
+     await base44.functions.invoke('recalculateProductionBatches', {});
+     await new Promise(resolve => setTimeout(resolve, 500));
+     alert('Production batches recalculated successfully');
+   } catch (error) {
+     console.error('Recalculation failed:', error.message);
+     alert('Recalculation failed: ' + error.message);
+   } finally {
+     setSyncing(false);
+   }
   };
 
   const handleSaveEdit = async () => {
@@ -188,6 +202,10 @@ export default function Orders() {
           <Button variant="outline" onClick={handleSync} disabled={syncing} className="gap-2">
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Syncing...' : 'Sync'}
+          </Button>
+          <Button variant="outline" onClick={handleRecalculateBatches} disabled={syncing} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Recalc...' : 'Recalc Batches'}
           </Button>
           <Button variant="outline" onClick={exportCSV} className="gap-2">
             <Download className="h-4 w-4" /> Export
