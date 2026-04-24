@@ -127,6 +127,8 @@ export default function ProductionDayCard({ date, batches, today, onEdit, onDele
   const isSoon = !isToday && moment(date).diff(moment(), 'days') <= 3;
   const dateLabel = isToday
     ? `Today — ${moment(date).format("dddd, MMMM D, YYYY")}`
+    : isSoon
+    ? `${moment(date).format("dddd, MMMM D, YYYY")} (in ${moment(date).diff(moment().startOf('day'), 'days')} days)`
     : moment(date).format("dddd, MMMM D, YYYY");
 
   const juices = batches.filter(b => b.product_category !== 'shot');
