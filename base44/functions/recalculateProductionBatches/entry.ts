@@ -253,13 +253,20 @@ Deno.serve(async (req) => {
         }
         
         // Update the order with fulfillment breakdown (will be saved later if needed)
-         order.fulfillments = fulfillmentsArray;
+        order.fulfillments = fulfillmentsArray;
 
-         // Assign subscription to its first delivery date for driver portal filtering
-         if (!order.assigned_delivery_date && fulfillmentsArray.length > 0) {
-           order._deliveryDateAssigned = fulfillmentsArray[0].delivery_date;
-         }
+        // Assign subscription to its first delivery date for driver portal filtering
+        if (!order.assigned_delivery_date && fulfillmentsArray.length > 0) {
+          order._deliveryDateAssigned = fulfillmentsArray[0].delivery_date;
         }
+      } else if (order.source_channel !== 'subscription' && !order.assigned_delivery_date && !order.requested_delivery_date) {
+        // For one-time orders without explicit delivery dates, assign to calculated delivery date
+        const deliveryDate = new Date(productionDate + 'T00:00:00');
+        const dayOfWeek = new Date(productionDate + 'T00:00:00').getDay();
+        const daysToAdd = dayOfWeek === 5 ? 1 : (dayOfWeek === 6 ? 1 : 3);
+        deliveryDate.setDate(deliveryDate.getDate() + daysToAdd);
+        order._deliveryDateAssigned = deliveryDate.toISOString().split('T')[0];
+      }
 
       for (const item of order.line_items) {
         const itemTitle = (item.title || '').trim();
