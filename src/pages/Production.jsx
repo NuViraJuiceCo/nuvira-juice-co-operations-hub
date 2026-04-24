@@ -3,11 +3,13 @@ import { base44 } from "@/api/base44Client";
 import AdminGuide from "../components/shared/AdminGuide";
 import BatchEditForm from "../components/production/BatchEditForm";
 import ProductionDayCard from "../components/production/ProductionDayCard";
+import IngredientPlanningPanel from "../components/production/IngredientPlanningPanel";
+import RecipeEditor from "../components/production/RecipeEditor";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import SelectMobile from "../components/SelectMobile";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Lock } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import _ from "lodash";
 import moment from "moment";
 
@@ -20,6 +22,22 @@ export default function Production() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [editingBatch, setEditingBatch] = useState(null);
   const [lastCalc, setLastCalc] = useState(null);
+  const [ingredientData, setIngredientData] = useState({}); // date -> dateData
+  const [ingredientLoading, setIngredientLoading] = useState(false);
+
+  const loadIngredients = useCallback(async () => {
+    setIngredientLoading(true);
+    try {
+      const res = await base44.functions.invoke('getIngredientDemandByDate', {});
+      if (res.data?.dates) {
+        const map = {};
+        for (const d of res.data.dates) map[d.date] = d;
+        setIngredientData(map);
+      }
+    } finally {
+      setIngredientLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     const [batchData, orderData] = await Promise.all([
@@ -33,16 +51,20 @@ export default function Production() {
 
   useEffect(() => {
     load();
-    const unsub = base44.entities.ProductionBatch.subscribe(() => load());
+    loadIngredients();
+    const unsub = base44.entities.ProductionBatch.subscribe(() => {
+      load();
+      loadIngredients();
+    });
     return () => unsub();
-  }, [load]);
+  }, [load, loadIngredients]);
 
   const handleRecalculate = async () => {
     setRecalculating(true);
     try {
       const res = await base44.functions.invoke('recalculateProductionBatches', {});
       setLastCalc(res.data?.message || 'Done');
-      await load();
+      await Promise.all([load(), loadIngredients()]);
     } finally {
       setRecalculating(false);
     }
@@ -151,6 +173,9 @@ export default function Production() {
             </div>
           </div>
 
+          {/* Recipe Editor — admin tool for setting up ingredient mappings */}
+          <RecipeEditor onRecipeSaved={loadIngredients} />
+
           {/* Production Days */}
           {sortedDates.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
@@ -160,16 +185,21 @@ export default function Production() {
           ) : (
             <div className="space-y-10">
               {sortedDates.map(date => (
-                <ProductionDayCard
-                  key={date}
-                  date={date}
-                  batches={grouped[date]}
-                  orders={orders}
-                  today={today}
-                  onEdit={setEditingBatch}
-                  onDelete={handleDelete}
-                  onToggleLock={handleToggleLock}
-                />
+                <div key={date}>
+                  <ProductionDayCard
+                    date={date}
+                    batches={grouped[date]}
+                    orders={orders}
+                    today={today}
+                    onEdit={setEditingBatch}
+                    onDelete={handleDelete}
+                    onToggleLock={handleToggleLock}
+                  />
+                  <IngredientPlanningPanel
+                    dateData={ingredientData[date]}
+                    loading={ingredientLoading}
+                  />
+                </div>
               ))}
             </div>
           )}
