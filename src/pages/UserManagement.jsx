@@ -48,15 +48,27 @@ export default function UserManagement() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">User Management</h1>
           <p className="text-muted-foreground mt-1">{users.length} registered users</p>
         </div>
-        <Button
-          className="gap-2 self-start sm:self-auto"
-          onClick={() => {
-            const email = prompt("Enter user email to invite:");
-            if (email) base44.users.inviteUser(email, "user").then(() => alert("Invite sent!"));
-          }}
-        >
-          <UserPlus className="h-4 w-4" /> Invite User
-        </Button>
+        <div className="flex gap-2 self-start sm:self-auto flex-wrap">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => {
+              const email = prompt("Enter admin email to invite:");
+              if (email) base44.users.inviteUser(email, "admin").then(() => alert("Admin invite sent!"));
+            }}
+          >
+            <UserPlus className="h-4 w-4" /> Invite Admin
+          </Button>
+          <Button
+            className="gap-2"
+            onClick={() => {
+              const email = prompt("Enter user email to invite:");
+              if (email) base44.users.inviteUser(email, "user").then(() => alert("Invite sent!"));
+            }}
+          >
+            <UserPlus className="h-4 w-4" /> Invite User
+          </Button>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
