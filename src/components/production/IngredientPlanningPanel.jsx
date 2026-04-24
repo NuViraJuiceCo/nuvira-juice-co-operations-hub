@@ -110,6 +110,9 @@ function IngredientRow({ ing, view }) {
                     <div className="bg-white border border-orange-200 rounded-lg p-2">
                      <p className="text-gray-500">Yield per {p.purchase_unit}</p>
                      <p className="font-bold text-orange-800">{p.oz_per_unit} oz</p>
+                     {p.validation_warning && (
+                       <p className="text-xs text-red-600 mt-1 font-medium">⚠️ {p.validation_warning}</p>
+                     )}
                     </div>
                     <div className="bg-white border border-orange-300 rounded-lg p-2">
                      <p className="text-gray-500">Order qty</p>
@@ -193,6 +196,11 @@ function IngredientRow({ ing, view }) {
               <span className="text-gray-500">Order: <span className="font-semibold text-gray-900">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</span></span>
               {p.units_per_case && (
                 <span className="text-gray-500">Cases: <span className="font-semibold text-gray-900">{p.cases_needed} ({p.split_case_allowed ? 'split ok' : 'full cases only'})</span></span>
+              )}
+              {p.validation_warning && (
+                <div className="col-span-2 sm:col-span-3 text-xs text-red-600 font-medium bg-red-50 px-2 py-1 rounded border border-red-200">
+                  ⚠️ {p.validation_warning}
+                </div>
               )}
             </div>
           )}

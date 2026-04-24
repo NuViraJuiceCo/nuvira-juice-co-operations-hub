@@ -28,9 +28,10 @@ function normalizeProductName(name) {
 
 /**
  * Given a shortfall in oz and a yield config, compute purchase recommendation.
- * Returns { units_needed, units_exact, cases_needed, cases_exact, has_yield_data }
+ * Includes sanity validation to flag unrealistic conversions.
+ * Returns { units_needed, units_exact, cases_needed, cases_exact, has_yield_data, validation_warning }
  */
-function computePurchaseQty(shortfallOz, yieldConfig) {
+function computePurchaseQty(shortfallOz, yieldConfig, ingredientName) {
   if (!yieldConfig || !yieldConfig.oz_per_purchase_unit) {
     return { has_yield_data: false };
   }
@@ -68,6 +69,16 @@ function computePurchaseQty(shortfallOz, yieldConfig) {
     }
   }
 
+  // Sanity check: flag if units_needed is wildly out of proportion to needed oz
+  let validationWarning = null;
+  if (unitsNeeded > 0 && ozPerUnit > 0) {
+    const ratioUnitsToOz = unitsNeeded / shortfallOz;
+    // If units needed is more than 10x the needed oz (e.g., 72 units for 13.7 oz), flag it
+    if (ratioUnitsToOz > 10) {
+      validationWarning = `Unit conversion seems high: ${unitsNeeded} ${yieldConfig.purchase_unit}s for ${Math.round(shortfallOz * 10) / 10} oz`;
+    }
+  }
+
   return {
     has_yield_data: true,
     purchase_unit: yieldConfig.purchase_unit,
@@ -80,6 +91,7 @@ function computePurchaseQty(shortfallOz, yieldConfig) {
     cases_needed: casesNeeded,
     split_case_allowed: splitAllowed,
     rounding_rule: rounding,
+    validation_warning: validationWarning,
   };
 }
 
@@ -207,7 +219,7 @@ Deno.serve(async (req) => {
 
         // Purchase quantity conversion (only meaningful if there's a shortfall)
         const purchaseQty = (shortfallOz > 0)
-          ? computePurchaseQty(shortfallOz, yieldConfig)
+          ? computePurchaseQty(shortfallOz, yieldConfig, demand.name)
           : { has_yield_data: !!yieldConfig, purchase_unit: yieldConfig?.purchase_unit };
 
         ingredients.push({
