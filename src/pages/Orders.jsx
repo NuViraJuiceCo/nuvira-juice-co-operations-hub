@@ -45,6 +45,8 @@ export default function Orders() {
     setSyncing(true);
     try {
       await base44.functions.invoke('pullOrdersFromCustomerApp', {});
+      // Wait for database to commit before refreshing
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await handleRefresh();
     } catch (error) {
       console.error('Sync failed:', error.message);
