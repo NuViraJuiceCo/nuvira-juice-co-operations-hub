@@ -91,15 +91,43 @@ function findBundleComponents(bundleMap, itemTitle) {
  * For subscription orders, the line item quantity is the TOTAL for the subscription period.
  * We need to split this into per-fulfillment quantities spread across consecutive production dates.
  *
- * Detects fulfillment count from customer_notes (e.g. "4 weeks", "4 times").
- * Returns fulfillment count (default 1 if not a subscription or not detectable).
+ * Detects fulfillment count by:
+ * 1. Looking up the Bundle in bundleMap and using its fulfillment_count
+ * 2. Falling back to customer_notes pattern matching
+ * 3. Default to 1 if not a subscription or not detectable
  */
-function detectFulfillmentCount(order) {
+function detectFulfillmentCount(order, bundleMap) {
   if (order.source_channel !== 'subscription') return 1;
+  
+  // Try to find fulfillment count from Bundle entity (most reliable for subscriptions)
+  if (order.line_items && order.line_items.length > 0) {
+    for (const item of order.line_items) {
+      const bundleComponents = findBundleComponents(bundleMap, item.title);
+      if (bundleComponents !== null) {
+        // Found a Bundle—check if it has explicit fulfillment_count
+        // bundleMap stores the full bundle data, so we need the original bundle object
+        // We'll look it up by the bundle name
+        const bundleName = item.title;
+        // Search bundleMap keys for a match
+        for (const key of Object.keys(bundleMap)) {
+          if (key === bundleName || key === bundleName.toLowerCase() || 
+              stripArticle(key) === stripArticle(bundleName)) {
+            // Found it—but bundleMap only stores components
+            // We need to check the actual Bundle entity
+            // This will be done in the main function and passed here
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Fall back to customer_notes pattern matching
   const notes = (order.customer_notes || '').toLowerCase();
   // Match patterns like "4 weeks", "4 times", "4 deliveries", "every week for 4 weeks"
   const match = notes.match(/(\d+)\s*(week|time|deliver|fulfillment)/);
   if (match) return parseInt(match[1], 10);
+  
   return 1; // fallback: treat as single fulfillment
 }
 
@@ -172,9 +200,10 @@ Deno.serve(async (req) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Build bundle lookup map: bundle_name (normalized) -> components
+    // Build bundle lookup map: bundle_name (normalized) -> full bundle object
     // Also map exact original names so we can match order line items flexibly
     const bundleMap = {};
+    const bundleFullData = {}; // Store full bundle data for fulfillment count lookup
     for (const b of allBundles) {
       if (b.is_active !== false) {
         const comps = b.components || [];
@@ -186,6 +215,10 @@ Deno.serve(async (req) => {
         bundleMap[stripped] = comps;
         bundleMap[normalizeProductName(stripped)] = comps;
         bundleMap[stripped.toLowerCase()] = comps;
+        
+        // Store full bundle data for fulfillment_count lookup
+        const normalizedName = normalizeProductName(b.bundle_name);
+        bundleFullData[normalizedName] = b;
       }
     }
 
@@ -223,7 +256,27 @@ Deno.serve(async (req) => {
 
       // For subscriptions, detect how many fulfillments are in this order
       // and split the total quantity evenly across that many weekly production dates.
-      const fulfillmentCount = detectFulfillmentCount(order);
+      // First, try to get fulfillment count from Bundle metadata
+      let fulfillmentCount = 1;
+      if (order.source_channel === 'subscription' && order.line_items && order.line_items.length > 0) {
+        for (const item of order.line_items) {
+          const bundleComponents = findBundleComponents(bundleMap, item.title);
+          if (bundleComponents !== null) {
+            // Found a Bundle—look up full data for fulfillment_count
+            const bundleName = normalizeProductName(item.title);
+            const bundleData = bundleFullData[bundleName];
+            if (bundleData && bundleData.fulfillment_count) {
+              fulfillmentCount = Math.max(1, bundleData.fulfillment_count);
+              break;
+            }
+          }
+        }
+      }
+      // If no bundle match, fall back to customer_notes or default to 1
+      if (fulfillmentCount === 1) {
+        fulfillmentCount = detectFulfillmentCount(order, bundleMap);
+      }
+      
       const fulfillmentDates = getSubscriptionProductionDates(productionDate, fulfillmentCount);
       
       // Build fulfillment breakdown for the order (for driver visibility)
@@ -281,8 +334,11 @@ Deno.serve(async (req) => {
         const totalQty = Number(item.quantity) || 0;
         if (totalQty <= 0 || !itemTitle) continue;
 
-        // Per-fulfillment quantity (divide total evenly across fulfillments)
-        const perFulfillmentQty = Math.round(totalQty / fulfillmentCount);
+        // CRITICAL: Per-fulfillment quantity (divide total ONLY across fulfillments for THIS order)
+        // For subscription: if 12 bottles for 4 weeks, this is 3 bottles per week
+        const perFulfillmentQty = fulfillmentCount > 1 
+          ? Math.round(totalQty / fulfillmentCount) 
+          : totalQty;
 
         // Check if this line item is a bundle (try multiple name variations)
         const bundleComponents = findBundleComponents(bundleMap, itemTitle);
@@ -293,11 +349,17 @@ Deno.serve(async (req) => {
           if (fDateObj < today) continue; // skip past dates
 
           if (bundleComponents && bundleComponents.length > 0) {
-            // Decompose bundle into individual products, per fulfillment
+            // Decompose bundle into individual products, FOR THIS FULFILLMENT ONLY
             for (const component of bundleComponents) {
               const productName = normalizeProductName(component.product_name);
-              // component.quantity = total across all fulfillments; divide evenly
-              const qty = Math.round((Number(component.quantity) || 1) / fulfillmentCount) || 1;
+              
+              // CRITICAL: component.quantity is the TOTAL across all fulfillments in the bundle definition
+              // Divide by fulfillmentCount to get per-fulfillment amount
+              const componentQtyPerFulfillment = fulfillmentCount > 1
+                ? Math.round((Number(component.quantity) || 1) / fulfillmentCount)
+                : (Number(component.quantity) || 1);
+              const qty = Math.max(1, componentQtyPerFulfillment); // Ensure at least 1 if component exists
+              
               const key = `${fDate}__${productName}`;
 
               if (lockedKeys.has(key)) continue;
@@ -319,7 +381,7 @@ Deno.serve(async (req) => {
               });
             }
           } else {
-            // Direct product line item, per fulfillment
+            // Direct product line item, FOR THIS FULFILLMENT ONLY
             const normalizedTitle = normalizeProductName(itemTitle);
             const key = `${fDate}__${normalizedTitle}`;
             if (lockedKeys.has(key)) continue;
