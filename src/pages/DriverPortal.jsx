@@ -822,17 +822,17 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
         {/* Calendar & Date Input */}
         {showCalendar && (
-          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-semibold text-foreground">Select Delivery Date</p>
-              <button onClick={() => setShowCalendar(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
+          <div className="bg-card border border-border rounded-lg p-2.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-foreground">Select Date</p>
+              <button onClick={() => setShowCalendar(false)} className="text-muted-foreground hover:text-foreground p-0.5">
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
             <input type="date" value={date} onChange={e => { setDate(e.target.value); setShowCalendar(false); }}
-              className="w-full bg-background border border-border text-sm px-3 py-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary" />
-            <p className="text-[10px] text-muted-foreground">
-              Selected: <span className="font-semibold text-foreground">{getDateLabel(date)}</span>
+              className="w-full bg-background border border-border text-xs px-2.5 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary" />
+            <p className="text-[9px] text-muted-foreground">
+              <span className="font-medium text-foreground">{getDateLabel(date)}</span>
             </p>
           </div>
         )}
