@@ -133,14 +133,59 @@
       "enum": [
         "synced",
         "processing",
+        "pending_reconciliation",
         "failed"
       ],
       "default": "synced",
-      "description": "Sync status from customer app"
+      "description": "Sync status: synced (complete), pending_reconciliation (awaiting Stripe verification), processing (in progress), failed (needs review)"
     },
     "last_sync_at": {
       "type": "string",
       "description": "Timestamp of last sync from customer app"
+    },
+    "stripe_customer_id": {
+      "type": "string",
+      "description": "Stripe customer ID for canonical customer lookup"
+    },
+    "stripe_checkout_session_id": {
+      "type": "string",
+      "description": "Stripe checkout session ID if from online checkout"
+    },
+    "stripe_payment_intent_id": {
+      "type": "string",
+      "description": "Stripe payment intent ID for payment matching"
+    },
+    "stripe_invoice_id": {
+      "type": "string",
+      "description": "Stripe invoice ID if applicable"
+    },
+    "stripe_subscription_id": {
+      "type": "string",
+      "description": "Stripe subscription ID if recurring/subscription order"
+    },
+    "stripe_event_id_applied": {
+      "type": "string",
+      "description": "Most recent Stripe event ID that was successfully processed for this order"
+    },
+    "repair_status": {
+      "type": "string",
+      "enum": [
+        "none",
+        "restored_from_stripe",
+        "reconciled",
+        "repaired_from_event",
+        "needs_review"
+      ],
+      "default": "none",
+      "description": "Whether this record has been repaired and how"
+    },
+    "repair_timestamp": {
+      "type": "string",
+      "description": "When the last repair action occurred"
+    },
+    "repair_method": {
+      "type": "string",
+      "description": "Which repair method was used (e.g., canonical_checkout_session_lookup, event_replay)"
     }
   },
   "required": [

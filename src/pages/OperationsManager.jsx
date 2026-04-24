@@ -14,6 +14,57 @@ export default function OperationsManager() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [autoHealResult, setAutoHealResult] = useState(null);
+  const [stripeSyncHealth, setStripeSyncHealth] = useState(null);
+  const [webhookHistory, setWebhookHistory] = useState(null);
+
+  const runAutoDetectIssues = async () => {
+    try {
+      const res = await base44.functions.invoke('detectStripeOrderSyncIssues', {});
+      console.log('Detection result:', res.data.result);
+    } catch (error) {
+      console.error('Detection failed:', error.message);
+    }
+  };
+
+  const runAutoReconcile = async () => {
+    try {
+      const res = await base44.functions.invoke('reconcileStripeOrders', {});
+      const reconcileResult = res.data.result;
+      setAutoHealResult(reconcileResult);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await fetchBriefing();
+    } catch (error) {
+      console.error('Reconciliation failed:', error.message);
+    }
+  };
+
+  const fetchStripeSyncHealth = async () => {
+    try {
+      const allOrders = await base44.entities.ShopifyOrder.list('-updated_date', 100);
+      const events = await base44.entities.StripeEventLog.list('-created_date', 50);
+      
+      const health = {
+        synced: allOrders.filter(o => o.sync_status === 'synced').length,
+        pending_reconciliation: allOrders.filter(o => o.sync_status === 'pending_reconciliation').length,
+        needs_review: allOrders.filter(o => o.repair_status === 'needs_review').length,
+        unknown: allOrders.filter(o => o.shopify_order_id === 'base44_unknown').length,
+        stripe_linked: allOrders.filter(o => o.stripe_customer_id || o.stripe_payment_intent_id).length,
+        total_orders: allOrders.length,
+      };
+      
+      const eventStats = {
+        processed: events.filter(e => e.status === 'processed').length,
+        skipped: events.filter(e => e.status === 'skipped').length,
+        failed: events.filter(e => e.status === 'failed').length,
+        total_events: events.length,
+      };
+      
+      setStripeSyncHealth({ ...health, events: eventStats });
+      setWebhookHistory(events.slice(0, 20));
+    } catch (error) {
+      console.error('Failed to fetch Stripe health:', error.message);
+    }
+  };
 
   const runAutoRemediateStripe = async () => {
     try {
@@ -258,10 +309,11 @@ export default function OperationsManager() {
         )}
 
         <Tabs defaultValue="alerts" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="alerts">Alerts & Actions</TabsTrigger>
             <TabsTrigger value="orders">Order Health</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
+            <TabsTrigger value="stripe">Stripe Sync</TabsTrigger>
             <TabsTrigger value="summary">Summary</TabsTrigger>
           </TabsList>
 
@@ -431,6 +483,93 @@ export default function OperationsManager() {
                   </Card>
                 )}
               </div>
+            )}
+          </TabsContent>
+
+          {/* Stripe Sync Health & Repair */}
+          <TabsContent value="stripe" className="space-y-4">
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={fetchStripeSyncHealth} variant="outline" className="gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Refresh Health
+              </Button>
+              <Button onClick={runAutoDetectIssues} variant="outline" className="gap-2">
+                <AlertCircle className="h-4 w-4" />
+                Detect Issues
+              </Button>
+              <Button onClick={runAutoReconcile} variant="outline" className="gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Reconcile
+              </Button>
+            </div>
+
+            {stripeSyncHealth && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Stripe Sync Health Status</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                        <p className="text-xs font-semibold text-green-700">Synced</p>
+                        <p className="text-2xl font-bold text-green-600 mt-1">{stripeSyncHealth.synced}</p>
+                      </div>
+                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                        <p className="text-xs font-semibold text-amber-700">Pending Reconciliation</p>
+                        <p className="text-2xl font-bold text-amber-600 mt-1">{stripeSyncHealth.pending_reconciliation}</p>
+                      </div>
+                      <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                        <p className="text-xs font-semibold text-orange-700">Needs Review</p>
+                        <p className="text-2xl font-bold text-orange-600 mt-1">{stripeSyncHealth.needs_review}</p>
+                      </div>
+                      <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                        <p className="text-xs font-semibold text-red-700">#Unknown</p>
+                        <p className="text-2xl font-bold text-red-600 mt-1">{stripeSyncHealth.unknown}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-blue-50 rounded-lg">
+                        <p className="text-xs font-semibold text-blue-700">Stripe Linked Orders</p>
+                        <p className="text-xl font-bold text-blue-600 mt-1">{stripeSyncHealth.stripe_linked} / {stripeSyncHealth.total_orders}</p>
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-lg">
+                        <p className="text-xs font-semibold text-slate-700">Webhooks Processed</p>
+                        <p className="text-xl font-bold text-slate-600 mt-1">{stripeSyncHealth.events?.processed || 0}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {webhookHistory && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Recent Webhook History</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {webhookHistory.map((event, idx) => (
+                          <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm">
+                            <div className="flex justify-between items-start gap-2 mb-1">
+                              <p className="font-semibold text-slate-700">{event.event_type}</p>
+                              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                event.status === 'processed' ? 'bg-green-100 text-green-700' :
+                                event.status === 'skipped' ? 'bg-gray-100 text-gray-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>
+                                {event.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600">{event.stripe_event_id}</p>
+                            {event.customer_email && <p className="text-xs text-slate-600">📧 {event.customer_email}</p>}
+                            <p className="text-xs text-slate-500 mt-1">{new Date(event.created_date).toLocaleString()}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
           </TabsContent>
 
