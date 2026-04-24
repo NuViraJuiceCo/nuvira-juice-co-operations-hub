@@ -822,7 +822,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
         {/* Calendar & Date Input */}
         {showCalendar && (
-          <div className="bg-card border border-border rounded-lg p-3.5 space-y-2.5">
+          <div className="bg-card border border-border rounded-lg p-3.5 space-y-2.5 w-72">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-foreground">Select Date</p>
               <button onClick={() => setShowCalendar(false)} className="text-muted-foreground hover:text-foreground p-0.5">
