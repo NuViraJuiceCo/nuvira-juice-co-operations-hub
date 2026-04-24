@@ -15,7 +15,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const PRODUCTION_DAYS = [2, 5, 6]; // Tue=2, Fri=5, Sat=6 (0=Sun)
 
-const FIRST_PRODUCTION_DATE = '2026-05-01'; // Locked: first production is May 1st
+const FIRST_PRODUCTION_DATE = '2026-05-01'; // First production date (May 1st)
+const FIRST_DELIVERY_DATE = '2026-05-02'; // Deliveries start May 2nd
 
 function getNextProductionDate(fromDate) {
   const d = new Date(fromDate);
@@ -183,9 +184,12 @@ Deno.serve(async (req) => {
       // Determine production date for this order
       let productionDate;
       if (order.assigned_delivery_date) {
-        productionDate = getProductionDateForDelivery(order.assigned_delivery_date);
+        // Clamp delivery to FIRST_DELIVERY_DATE minimum
+        const deliveryDate = order.assigned_delivery_date < FIRST_DELIVERY_DATE ? FIRST_DELIVERY_DATE : order.assigned_delivery_date;
+        productionDate = getProductionDateForDelivery(deliveryDate);
       } else if (order.requested_delivery_date) {
-        productionDate = getProductionDateForDelivery(order.requested_delivery_date);
+        const deliveryDate = order.requested_delivery_date < FIRST_DELIVERY_DATE ? FIRST_DELIVERY_DATE : order.requested_delivery_date;
+        productionDate = getProductionDateForDelivery(deliveryDate);
       } else {
         const orderDate = order.customer_order_date ? new Date(order.customer_order_date) : new Date();
         productionDate = getNextProductionDate(orderDate);
