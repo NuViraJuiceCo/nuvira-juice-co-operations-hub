@@ -266,7 +266,7 @@ export default function Orders() {
                 { label: "Total", col: "total_price" },
                 { label: "Date", col: "created_date" },
                 ].map((h) => (
-                <th key={h.col} className={`px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50 ${h.col === "total" ? "text-right" : "text-left"}`} onClick={() => handleSort(h.col)}>
+                <th key={h.col} className="px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50 text-left" onClick={() => handleSort(h.col)}>
                  <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                 </th>
                 ))}
@@ -323,8 +323,8 @@ export default function Orders() {
                     </td>
                   </tr>
                   {expandedOrderId === order.id && order.line_items && order.line_items.length > 0 && (
-                    <tr className="border-b border-border/50 last:border-0 bg-muted/20">
-                      <td colSpan="10" className="px-5 py-4">
+                   <tr className="border-b border-border/50 last:border-0 bg-muted/20">
+                     <td colSpan="11" className="px-5 py-4">
                         <div className="space-y-2">
                           <p className="text-sm font-semibold text-foreground mb-3">Products in this order:</p>
                           <div className="space-y-2">
