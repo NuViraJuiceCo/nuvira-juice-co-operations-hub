@@ -57,44 +57,10 @@ Deno.serve(async (req) => {
       console.error('[PULL-ORDERS] Subscription fetch error:', err.message);
     }
 
-    // Also fetch recent Stripe orders already created in the hub (from webhooks)
-    try {
-      const allHubOrders = await base44.asServiceRole.entities.ShopifyOrder.list('', 500);
-      console.log(`[PULL-ORDERS] Fetched ${allHubOrders.length} total orders from hub`);
-      
-      // Include orders from webhooks that aren't already in our synced list
-      const orderedOrderIds = new Set(orders.map(o => o.shopify_order_id || o.id));
-      const newStripeOrders = (allHubOrders || [])
-        .filter(o => !orderedOrderIds.has(o.shopify_order_id || o.id));
-      
-      console.log(`[PULL-ORDERS] Found ${newStripeOrders.length} webhook orders not yet included in sync`);
-      
-      if (newStripeOrders.length > 0) {
-        // Convert to same format as customer app orders
-        orders = [...orders, ...newStripeOrders.map(o => ({
-          shopify_order_id: o.shopify_order_id,
-          id: o.id,
-          shopify_order_number: o.shopify_order_number,
-          customer_email: o.customer_email,
-          customer_phone: o.customer_phone,
-          source_channel: o.source_channel,
-          line_items: o.line_items,
-          fulfillment_method: o.fulfillment_method,
-          delivery_address: o.delivery_address,
-          requested_delivery_date: o.requested_delivery_date,
-          payment_status: o.payment_status,
-          fulfillment_status: o.fulfillment_status,
-          total_price: o.total_price,
-          customer_notes: o.customer_notes,
-          internal_notes: o.internal_notes,
-          production_status: o.production_status,
-          tags: o.tags,
-          created_date: o.created_date,
-        }))];
-      }
-    } catch (err) {
-      console.error('[PULL-ORDERS] Stripe order fetch error:', err.message);
-    }
+    // IMPORTANT: Do NOT re-add Stripe webhook orders from hub to orders list.
+    // Stripe orders already in the hub (from stripeCheckoutWebhook) should NOT be
+    // overwritten by incomplete subscription data from the customer app.
+    // Only sync orders that originate from the customer app's subscription endpoint.
 
     if (!Array.isArray(orders) || orders.length === 0) {
       console.log(`[PULL-ORDERS] No orders found`);
