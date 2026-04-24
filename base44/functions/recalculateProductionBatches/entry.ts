@@ -66,6 +66,26 @@ function normalizeProductName(name) {
   return name.trim().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
+function stripArticle(name) {
+  // Strip leading "The " for fuzzy bundle matching
+  if (!name) return name;
+  return name.replace(/^the\s+/i, '').trim();
+}
+
+function findBundleComponents(bundleMap, itemTitle) {
+  // Try multiple variations: exact, normalized, lowercase, without leading "The"
+  const stripped = stripArticle(itemTitle);
+  return (
+    bundleMap[itemTitle] ||
+    bundleMap[normalizeProductName(itemTitle)] ||
+    bundleMap[itemTitle.toLowerCase()] ||
+    bundleMap[stripped] ||
+    bundleMap[normalizeProductName(stripped)] ||
+    bundleMap[stripped.toLowerCase()] ||
+    null
+  );
+}
+
 function inferProductCategory(productName) {
   const name = (productName || '').toLowerCase();
   if (name.includes('shot') || name.includes('ginger') || name.includes('turmeric') || name.includes('wheatgrass') || name.includes('spirulina')) {
@@ -98,9 +118,15 @@ Deno.serve(async (req) => {
     const bundleMap = {};
     for (const b of allBundles) {
       if (b.is_active !== false) {
-        bundleMap[b.bundle_name] = b.components || [];
-        bundleMap[normalizeProductName(b.bundle_name)] = b.components || [];
-        bundleMap[b.bundle_name.toLowerCase()] = b.components || [];
+        const comps = b.components || [];
+        bundleMap[b.bundle_name] = comps;
+        bundleMap[normalizeProductName(b.bundle_name)] = comps;
+        bundleMap[b.bundle_name.toLowerCase()] = comps;
+        // Also index without leading "The "
+        const stripped = stripArticle(b.bundle_name);
+        bundleMap[stripped] = comps;
+        bundleMap[normalizeProductName(stripped)] = comps;
+        bundleMap[stripped.toLowerCase()] = comps;
       }
     }
 
@@ -142,8 +168,8 @@ Deno.serve(async (req) => {
         const itemQty = Number(item.quantity) || 0;
         if (itemQty <= 0 || !itemTitle) continue;
 
-        // Check if this line item is a bundle (try exact, normalized, and lowercase)
-        const bundleComponents = bundleMap[itemTitle] || bundleMap[normalizeProductName(itemTitle)] || bundleMap[itemTitle.toLowerCase()];
+        // Check if this line item is a bundle (try multiple name variations)
+        const bundleComponents = findBundleComponents(bundleMap, itemTitle);
 
         if (bundleComponents && bundleComponents.length > 0) {
           // Decompose bundle into individual products
