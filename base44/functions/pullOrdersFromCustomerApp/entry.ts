@@ -59,17 +59,18 @@ Deno.serve(async (req) => {
 
     // Also fetch recent Stripe orders already created in the hub (from webhooks)
     try {
-      const stripeOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
-        source_channel: 'online',
-      });
+      const allHubOrders = await base44.asServiceRole.entities.ShopifyOrder.list('', 500);
+      console.log(`[PULL-ORDERS] Fetched ${allHubOrders.length} total orders from hub`);
+      
       // Only include Stripe orders (those with STRIPE- prefix) that aren't already in our list
-      const stripeOrderIds = new Set(orders.map(o => o.shopify_order_id || o.id));
-      const newStripeOrders = (stripeOrders || [])
+      const orderedOrderIds = new Set(orders.map(o => o.shopify_order_id || o.id));
+      const newStripeOrders = (allHubOrders || [])
         .filter(o => o.shopify_order_number && o.shopify_order_number.includes('STRIPE'))
-        .filter(o => !stripeOrderIds.has(o.shopify_order_id || o.id));
+        .filter(o => !orderedOrderIds.has(o.shopify_order_id || o.id));
+      
+      console.log(`[PULL-ORDERS] Found ${newStripeOrders.length} Stripe webhook orders not yet synced`);
       
       if (newStripeOrders.length > 0) {
-        console.log(`[PULL-ORDERS] Found ${newStripeOrders.length} Stripe webhook orders`);
         // Convert to same format as customer app orders
         orders = [...orders, ...newStripeOrders.map(o => ({
           shopify_order_id: o.shopify_order_id,
