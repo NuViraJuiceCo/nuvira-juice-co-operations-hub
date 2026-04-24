@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, ShoppingCart, AlertTriangle, CheckCircle2, TrendingUp, Package, Copy } from "lucide-react";
+import {
+  ChevronDown, ChevronUp, ShoppingCart, AlertTriangle, CheckCircle2,
+  TrendingUp, Package, Copy, Scale, Boxes
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/components/ui/use-toast";
 
 const STATUS_CONFIG = {
   purchase_needed: {
@@ -36,15 +38,120 @@ const STATUS_CONFIG = {
 
 function formatOz(oz) {
   if (oz === null || oz === undefined) return "—";
+  if (oz >= 128) return `${Math.round((oz / 16) * 10) / 10} lbs`;
   if (oz >= 16) return `${Math.round((oz / 16) * 10) / 10} lbs`;
-  return `${oz} oz`;
+  return `${Math.round(oz * 10) / 10} oz`;
 }
 
-function IngredientRow({ ing }) {
+function PurchaseBadge({ purchase }) {
+  if (!purchase) return null;
+
+  if (!purchase.has_yield_data) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+        <AlertTriangle className="h-3 w-3" />
+        Yield data missing
+      </span>
+    );
+  }
+
+  if (purchase.units_needed === undefined) return null;
+
+  const unitLabel = purchase.purchase_unit || 'unit';
+  const plural = purchase.units_needed !== 1 ? 's' : '';
+
+  return (
+    <span className="inline-flex items-center gap-1 text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full border border-orange-200 font-medium">
+      <Scale className="h-3 w-3" />
+      Order: {purchase.units_needed} {unitLabel}{plural}
+      {purchase.cases_needed !== null && purchase.units_per_case
+        ? ` (${purchase.cases_needed} case${purchase.cases_needed !== 1 ? 's' : ''})`
+        : ''}
+    </span>
+  );
+}
+
+function IngredientRow({ ing, view }) {
   const [expanded, setExpanded] = useState(false);
   const config = STATUS_CONFIG[ing.status] || STATUS_CONFIG.no_stock_data;
   const Icon = config.icon;
+  const p = ing.purchase;
 
+  if (view === 'supplier') {
+    // Supplier order view
+    const hasPurchase = p?.has_yield_data && ing.status === 'purchase_needed';
+    return (
+      <div className={`border rounded-lg p-3 ${hasPurchase ? 'bg-orange-50 border-orange-200' : config.bg}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-sm text-foreground">{ing.name}</span>
+              {ing.supplier && (
+                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{ing.supplier}</span>
+              )}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config.badge}`}>
+                {config.label}
+              </span>
+            </div>
+
+            {ing.status === 'purchase_needed' && (
+              <div className="mt-2 space-y-1">
+                {!p?.has_yield_data ? (
+                  <p className="text-xs text-amber-700 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Yield / Pack Conversion Missing — configure in Yield Editor to get order quantities
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="bg-white border border-orange-200 rounded-lg p-2">
+                      <p className="text-muted-foreground">Shortage</p>
+                      <p className="font-bold text-orange-800">{formatOz(ing.shortfall_oz)}</p>
+                    </div>
+                    <div className="bg-white border border-orange-200 rounded-lg p-2">
+                      <p className="text-muted-foreground">Yield per {p.purchase_unit}</p>
+                      <p className="font-bold text-orange-800">{p.oz_per_unit} oz</p>
+                    </div>
+                    <div className="bg-white border border-orange-300 rounded-lg p-2">
+                      <p className="text-muted-foreground">Order qty</p>
+                      <p className="font-bold text-orange-900">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</p>
+                    </div>
+                    {p.units_per_case && (
+                      <div className="bg-white border border-orange-300 rounded-lg p-2">
+                        <p className="text-muted-foreground">Cases</p>
+                        <p className="font-bold text-orange-900">
+                          {p.cases_needed} case{p.cases_needed !== 1 ? 's' : ''}
+                          <span className="text-muted-foreground font-normal"> ({p.units_per_case}/{p.purchase_unit === 'each' ? 'case' : p.purchase_unit})</span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {ing.status === 'sufficient' && (
+              <p className="text-xs text-emerald-600 mt-1">
+                Stock covers demand. Remaining after production: {formatOz(ing.remaining_oz)}
+              </p>
+            )}
+            {ing.status === 'surplus' && (
+              <p className="text-xs text-blue-600 mt-1">
+                Surplus stock: {formatOz(ing.remaining_oz)} remaining
+              </p>
+            )}
+            {ing.status === 'no_stock_data' && (
+              <p className="text-xs text-amber-600 mt-1">
+                Need: {formatOz(ing.needed_oz)} — no inventory data to check against
+              </p>
+            )}
+          </div>
+          <Icon className={`h-4 w-4 ${config.text} shrink-0 mt-0.5`} />
+        </div>
+      </div>
+    );
+  }
+
+  // Default ingredient demand view
   return (
     <div className={`border rounded-lg p-3 ${config.bg}`}>
       <div className="flex items-start justify-between gap-2">
@@ -54,6 +161,7 @@ function IngredientRow({ ing }) {
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config.badge}`}>
               {config.label}
             </span>
+            {ing.status === 'purchase_needed' && <PurchaseBadge purchase={p} />}
           </div>
           <div className="flex flex-wrap gap-3 mt-1.5 text-xs">
             <span className="text-muted-foreground">
@@ -68,7 +176,7 @@ function IngredientRow({ ing }) {
             )}
             {ing.status === 'purchase_needed' && ing.shortfall_oz > 0 && (
               <span className={`font-semibold ${config.text}`}>
-                Buy: {formatOz(ing.shortfall_oz)}
+                Shortage: {formatOz(ing.shortfall_oz)}
               </span>
             )}
             {ing.status === 'sufficient' && ing.remaining_oz !== null && (
@@ -77,6 +185,17 @@ function IngredientRow({ ing }) {
               </span>
             )}
           </div>
+
+          {/* Purchase detail when expanded or purchase_needed */}
+          {ing.status === 'purchase_needed' && p?.has_yield_data && p.units_needed !== undefined && (
+            <div className="mt-2 pt-2 border-t border-current/10 text-xs grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <span className="text-muted-foreground">Yield: <span className="font-medium text-foreground">{p.oz_per_unit} oz/{p.purchase_unit}</span></span>
+              <span className="text-muted-foreground">Order: <span className="font-semibold text-foreground">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</span></span>
+              {p.units_per_case && (
+                <span className="text-muted-foreground">Cases: <span className="font-semibold text-foreground">{p.cases_needed} ({p.split_case_allowed ? 'split ok' : 'full cases only'})</span></span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <Icon className={`h-4 w-4 ${config.text}`} />
@@ -84,7 +203,6 @@ function IngredientRow({ ing }) {
             <button
               onClick={() => setExpanded(!expanded)}
               className="text-muted-foreground hover:text-foreground"
-              title="Show breakdown by product"
             >
               {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
@@ -111,9 +229,16 @@ function GroceryList({ items, date }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    const lines = [`Grocery List — ${date}`, ''];
+    const lines = [`Grocery / Supplier Order — ${date}`, ''];
     items.forEach(item => {
-      lines.push(`${item.name}: ${formatOz(item.amount_oz)}${item.supplier ? ` (${item.supplier})` : ''}`);
+      const p = item.purchase;
+      let line = `${item.name}: ${formatOz(item.amount_oz)}`;
+      if (p?.has_yield_data && p.units_needed !== undefined) {
+        line += ` → ${p.units_needed} ${p.purchase_unit}${p.units_needed !== 1 ? 's' : ''}`;
+        if (p.cases_needed !== null) line += ` (${p.cases_needed} case${p.cases_needed !== 1 ? 's' : ''})`;
+      }
+      if (item.supplier) line += ` — ${item.supplier}`;
+      lines.push(line);
     });
     navigator.clipboard.writeText(lines.join('\n'));
     setCopied(true);
@@ -141,18 +266,36 @@ function GroceryList({ items, date }) {
           {copied ? 'Copied!' : 'Copy List'}
         </Button>
       </div>
-      <div className="space-y-1.5">
-        {items.map((item, i) => (
-          <div key={i} className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            <span className="text-sm font-medium text-red-800">{item.name}</span>
-            <div className="text-right">
-              <span className="text-sm font-bold text-red-700">{formatOz(item.amount_oz)}</span>
-              {item.supplier && (
-                <p className="text-xs text-red-500">{item.supplier}</p>
-              )}
+      <div className="space-y-2">
+        {items.map((item, i) => {
+          const p = item.purchase;
+          return (
+            <div key={i} className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm font-medium text-red-800">{item.name}</span>
+                {item.supplier && (
+                  <span className="text-xs text-red-400 shrink-0">{item.supplier}</span>
+                )}
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-2 text-xs">
+                <span className="text-red-700">Shortage: <span className="font-bold">{formatOz(item.amount_oz)}</span></span>
+                {p?.has_yield_data && p.units_needed !== undefined ? (
+                  <>
+                    <span className="text-orange-700">→ Order: <span className="font-bold">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</span></span>
+                    {p.units_per_case && (
+                      <span className="text-orange-600">= <span className="font-bold">{p.cases_needed} case{p.cases_needed !== 1 ? 's' : ''}</span> of {p.units_per_case}</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-amber-600 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Yield data missing — add in Yield Editor
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -161,21 +304,20 @@ function GroceryList({ items, date }) {
 export default function IngredientPlanningPanel({ dateData }) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('ingredients');
+  const [view, setView] = useState('demand'); // 'demand' | 'supplier'
 
   if (!dateData) return null;
 
-  const { ingredients, grocery_list, missing_recipes, has_warnings } = dateData;
+  const { ingredients, grocery_list, missing_recipes } = dateData;
   const purchaseCount = grocery_list?.length || 0;
   const warningCount = missing_recipes?.length || 0;
+  const missingYieldCount = ingredients.filter(i => i.status === 'purchase_needed' && !i.purchase?.has_yield_data).length;
 
   return (
     <div className="mt-6 border border-border rounded-xl overflow-hidden">
-      {/* Panel header — always visible */}
       <button
         onClick={() => setOpen(!open)}
-        className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors ${
-          open ? 'bg-muted/60' : 'bg-muted/30 hover:bg-muted/50'
-        }`}
+        className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors ${open ? 'bg-muted/60' : 'bg-muted/30 hover:bg-muted/50'}`}
       >
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
@@ -198,8 +340,14 @@ export default function IngredientPlanningPanel({ dateData }) {
               {warningCount} recipe{warningCount !== 1 ? 's' : ''} missing
             </span>
           )}
+          {missingYieldCount > 0 && (
+            <span className="bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+              <Scale className="h-3 w-3" />
+              {missingYieldCount} yield config missing
+            </span>
+          )}
           {ingredients.length === 0 && warningCount === 0 && (
-            <span className="text-xs text-muted-foreground">No recipe data — add ingredients to recipes</span>
+            <span className="text-xs text-muted-foreground">No recipe data</span>
           )}
         </div>
         {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
@@ -224,30 +372,47 @@ export default function IngredientPlanningPanel({ dateData }) {
 
           {ingredients.length > 0 && (
             <>
-              {/* Tabs */}
-              <div className="flex gap-1 bg-muted/40 rounded-lg p-1">
-                <button
-                  onClick={() => setActiveTab('ingredients')}
-                  className={`flex-1 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${
-                    activeTab === 'ingredients' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  All Ingredients ({ingredients.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('grocery')}
-                  className={`flex-1 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${
-                    activeTab === 'grocery' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Grocery List {purchaseCount > 0 ? `(${purchaseCount})` : '✓'}
-                </button>
+              {/* View toggle + Tabs */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+                {/* View toggle */}
+                <div className="flex gap-1 bg-muted/40 rounded-lg p-1 w-fit">
+                  <button
+                    onClick={() => setView('demand')}
+                    className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${view === 'demand' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    <Package className="h-3 w-3" />
+                    Ingredient Demand
+                  </button>
+                  <button
+                    onClick={() => setView('supplier')}
+                    className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${view === 'supplier' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    <Boxes className="h-3 w-3" />
+                    Supplier Order View
+                  </button>
+                </div>
+
+                {/* Tab selector */}
+                <div className="flex gap-1 bg-muted/40 rounded-lg p-1 w-fit">
+                  <button
+                    onClick={() => setActiveTab('ingredients')}
+                    className={`text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${activeTab === 'ingredients' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    All ({ingredients.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('grocery')}
+                    className={`text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${activeTab === 'grocery' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    Purchase List {purchaseCount > 0 ? `(${purchaseCount})` : '✓'}
+                  </button>
+                </div>
               </div>
 
               {activeTab === 'ingredients' && (
                 <div className="space-y-2">
                   {ingredients.map((ing, i) => (
-                    <IngredientRow key={i} ing={ing} />
+                    <IngredientRow key={i} ing={ing} view={view} />
                   ))}
                 </div>
               )}

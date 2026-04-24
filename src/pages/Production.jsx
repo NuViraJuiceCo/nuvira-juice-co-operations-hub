@@ -5,6 +5,7 @@ import BatchEditForm from "../components/production/BatchEditForm";
 import ProductionDayCard from "../components/production/ProductionDayCard";
 import IngredientPlanningPanel from "../components/production/IngredientPlanningPanel";
 import RecipeEditor from "../components/production/RecipeEditor";
+import IngredientYieldEditor from "../components/production/IngredientYieldEditor";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import SelectMobile from "../components/SelectMobile";
@@ -173,8 +174,9 @@ export default function Production() {
             </div>
           </div>
 
-          {/* Recipe Editor — admin tool for setting up ingredient mappings */}
+          {/* Admin tools — Recipe Editor + Yield/Pack Conversion Editor */}
           <RecipeEditor onRecipeSaved={loadIngredients} />
+          <IngredientYieldEditor onSaved={loadIngredients} />
 
           {/* Production Days */}
           {sortedDates.length === 0 ? (
