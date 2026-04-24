@@ -126,21 +126,21 @@ function IngredientRow({ ingredient, expanded, onToggleExpanded }) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white border border-border rounded-lg p-3">
                   <p className="text-xs text-gray-900 font-bold">Yield</p>
-                  <p className="text-sm font-bold text-foreground mt-1">{purchase.oz_per_unit} oz/{purchase.purchase_unit}</p>
+                  <p className="text-sm font-bold text-gray-900 mt-1">{purchase.oz_per_unit} oz/{purchase.purchase_unit}</p>
                 </div>
                 <div className="bg-white border border-border rounded-lg p-3">
                   <p className="text-xs text-gray-900 font-bold">Order Qty</p>
-                  <p className="text-sm font-bold text-foreground mt-1">{purchase.units_needed} {purchase.purchase_unit}s</p>
+                  <p className="text-sm font-bold text-gray-900 mt-1">{purchase.units_needed} {purchase.purchase_unit}s</p>
                 </div>
                 {purchase.units_per_case && (
                   <>
                     <div className="bg-white border border-border rounded-lg p-3">
                       <p className="text-xs text-gray-900 font-bold">Pack Size</p>
-                      <p className="text-sm font-bold text-foreground mt-1">{purchase.units_per_case} per case</p>
+                      <p className="text-sm font-bold text-gray-900 mt-1">{purchase.units_per_case} per case</p>
                     </div>
                     <div className="bg-white border border-border rounded-lg p-3">
                       <p className="text-xs text-gray-900 font-bold">Cases</p>
-                      <p className="text-sm font-bold text-foreground mt-1">{purchase.cases_needed}</p>
+                      <p className="text-sm font-bold text-gray-900 mt-1">{purchase.cases_needed}</p>
                     </div>
                   </>
                 )}
