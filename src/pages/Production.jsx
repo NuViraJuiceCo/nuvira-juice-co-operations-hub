@@ -53,11 +53,19 @@ export default function Production() {
   useEffect(() => {
     load();
     loadIngredients();
+
+    let debounceTimer = null;
     const unsub = base44.entities.ProductionBatch.subscribe(() => {
-      load();
-      loadIngredients();
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        load();
+        loadIngredients();
+      }, 2000);
     });
-    return () => unsub();
+    return () => {
+      unsub();
+      clearTimeout(debounceTimer);
+    };
   }, [load, loadIngredients]);
 
   const handleRecalculate = async () => {
