@@ -101,24 +101,24 @@ export default function Fulfillment() {
           ]}
         />
         
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Fulfillment Queue</h1>
-            <p className="text-muted-foreground mt-1">
-              {todayTasks} tasks today · {unassigned} unassigned
-            </p>
-          </div>
-          <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-44">
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="Unassigned">Unassigned</SelectItem>
-              <SelectItem value="Scheduled">Scheduled</SelectItem>
-              <SelectItem value="Packed">Packed</SelectItem>
-              <SelectItem value="In Transit">In Transit</SelectItem>
-              <SelectItem value="Completed">Completed</SelectItem>
-            </SelectContent>
-          </SelectMobile>
-        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+           <div>
+             <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Fulfillment Queue</h1>
+             <p className="text-muted-foreground mt-1">
+               {todayTasks} tasks today · {unassigned} unassigned
+             </p>
+           </div>
+           <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-full sm:w-44">
+             <SelectContent>
+               <SelectItem value="all">All Statuses</SelectItem>
+               <SelectItem value="Unassigned">Unassigned</SelectItem>
+               <SelectItem value="Scheduled">Scheduled</SelectItem>
+               <SelectItem value="Packed">Packed</SelectItem>
+               <SelectItem value="In Transit">In Transit</SelectItem>
+               <SelectItem value="Completed">Completed</SelectItem>
+             </SelectContent>
+           </SelectMobile>
+         </div>
 
         {selected.size > 0 && (
           <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -133,61 +133,61 @@ export default function Fulfillment() {
         )}
 
         {/* Table */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-5 py-3 text-left w-10">
-                    <input
-                      type="checkbox"
-                      checked={selected.size === filtered.length && filtered.length > 0}
-                      onChange={toggleSelectAll}
-                      className="cursor-pointer"
-                    />
-                  </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Time Window</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Driver</th>
-                  <th className="px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
-                </tr>
-              </thead>
+         <div className="bg-card border border-border rounded-xl overflow-hidden">
+           <div className="overflow-x-auto">
+             <table className="w-full">
+               <thead>
+                 <tr className="border-b border-border">
+                   <th className="px-3 sm:px-5 py-3 text-left w-10">
+                     <input
+                       type="checkbox"
+                       checked={selected.size === filtered.length && filtered.length > 0}
+                       onChange={toggleSelectAll}
+                       className="cursor-pointer"
+                     />
+                   </th>
+                   <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer</th>
+                   <th className="hidden sm:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
+                   <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                   <th className="hidden sm:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
+                   <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Time Window</th>
+                   <th className="hidden md:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Driver</th>
+                   <th className="px-3 sm:px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
+                 </tr>
+               </thead>
               <tbody>
                 {filtered.map((task) => (
-                  <tr key={task.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors min-h-touch">
-                    <td className="px-5 py-3.5 w-10">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(task.id)}
-                        onChange={() => toggleSelect(task.id)}
-                        className="cursor-pointer"
-                      />
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <p className="text-sm font-medium text-foreground">{task.customer_name}</p>
-                      {task.address && <p className="text-xs text-muted-foreground">{task.address}</p>}
-                    </td>
-                    <td className="px-5 py-3.5 text-sm text-muted-foreground">{task.fulfillment_type || '—'}</td>
-                    <td className="px-5 py-3.5"><StatusBadge status={task.status} /></td>
-                    <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
-                      {moment(task.scheduled_date).format("MMM D")}
-                    </td>
-                    <td className="px-5 py-3.5 text-sm text-muted-foreground">{task.time_window || '—'}</td>
-                    <td className="px-5 py-3.5 text-sm text-muted-foreground">{task.assigned_driver || 'Unassigned'}</td>
-                    <td className="px-5 py-3.5 text-center">
-                      <button
-                        onClick={() => handleDelete(task.id)}
-                        disabled={deleting === task.id}
-                        className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                    <tr key={task.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors min-h-touch">
+                      <td className="px-3 sm:px-5 py-3.5 w-10">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(task.id)}
+                          onChange={() => toggleSelect(task.id)}
+                          className="cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-3 sm:px-5 py-3.5">
+                        <p className="text-sm font-medium text-foreground">{task.customer_name}</p>
+                        {task.address && <p className="text-xs text-muted-foreground truncate">{task.address}</p>}
+                      </td>
+                      <td className="hidden sm:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.fulfillment_type || '—'}</td>
+                      <td className="px-3 sm:px-5 py-3.5"><StatusBadge status={task.status} /></td>
+                      <td className="hidden sm:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
+                        {moment(task.scheduled_date).format("MMM D")}
+                      </td>
+                      <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.time_window || '—'}</td>
+                      <td className="hidden md:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.assigned_driver || 'Unassigned'}</td>
+                      <td className="px-3 sm:px-5 py-3.5 text-center">
+                        <button
+                          onClick={() => handleDelete(task.id)}
+                          disabled={deleting === task.id}
+                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>

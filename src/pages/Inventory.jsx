@@ -177,12 +177,12 @@ export default function Inventory() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder="Search ingredients..." value={search} onChange={e => setSearch(e.target.value)} />
+          <Input className="pl-9 text-sm" placeholder="Search ingredients..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg border border-input bg-background text-sm"
+          className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-input bg-background text-xs sm:text-sm min-w-32 sm:min-w-44"
         >
           {statusOptions.map(s => (
             <option key={s} value={s}>{s === "all" ? "All Statuses" : s}</option>
@@ -219,7 +219,7 @@ export default function Inventory() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="px-4 py-3 text-left w-10">
+                <th className="px-3 sm:px-4 py-3 text-left w-10">
                   <input
                     type="checkbox"
                     checked={selected.size === sorted.length && sorted.length > 0}
@@ -227,21 +227,25 @@ export default function Inventory() {
                     className="cursor-pointer"
                   />
                 </th>
-                {[
-                   { label: "Category", col: "category" },
-                   { label: "Ingredient", col: "ingredient" },
-                   { label: "Stock", col: "stock" },
-                   { label: "Unit", col: "unit" },
-                   { label: "Reorder At", col: "reorder_point" },
-                   { label: "Status", col: "status" },
-                   { label: "Supplier", col: "supplier" },
-                   { label: "Location", col: "location" },
-                ].map(h => (
-                   <th key={h.col} className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort(h.col)}>
-                     <ColumnSorter column={h.label} sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                   </th>
-                 ))}
-                <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("ingredient")}>
+                  <ColumnSorter column="Ingredient" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                </th>
+                <th className="hidden sm:table-cell px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("category")}>
+                  <ColumnSorter column="Category" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                </th>
+                <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("stock")}>
+                  <ColumnSorter column="Stock" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                </th>
+                <th className="hidden md:table-cell px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("reorder_point")}>
+                  <ColumnSorter column="Reorder At" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                </th>
+                <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("status")}>
+                  <ColumnSorter column="Status" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                </th>
+                <th className="hidden lg:table-cell px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("supplier")}>
+                  <ColumnSorter column="Supplier" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                </th>
+                <th className="px-3 sm:px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -249,7 +253,7 @@ export default function Inventory() {
                 const status = getStatus(item);
                 return (
                   <tr key={item.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3.5 w-10">
+                    <td className="px-3 sm:px-4 py-3.5 w-10">
                       <input
                         type="checkbox"
                         checked={selected.has(item.id)}
@@ -257,17 +261,15 @@ export default function Inventory() {
                         className="cursor-pointer"
                       />
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.category || "—"}</td>
-                    <td className="px-4 py-3.5 font-medium text-sm text-foreground">{item.ingredient}</td>
-                    <td className="px-4 py-3.5 text-sm font-semibold text-foreground">{item.stock}</td>
-                    <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.unit}</td>
-                    <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.reorder_point}</td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-3 sm:px-4 py-3.5 font-medium text-sm text-foreground">{item.ingredient}</td>
+                    <td className="hidden sm:table-cell px-3 sm:px-4 py-3.5 text-sm text-muted-foreground">{item.category || "—"}</td>
+                    <td className="px-3 sm:px-4 py-3.5 text-sm font-semibold text-foreground">{item.stock} {item.unit}</td>
+                    <td className="hidden md:table-cell px-3 sm:px-4 py-3.5 text-sm text-muted-foreground">{item.reorder_point}</td>
+                    <td className="px-3 sm:px-4 py-3.5">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[status]}`}>{status}</span>
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.supplier || "—"}</td>
-                    <td className="px-4 py-3.5 text-sm text-muted-foreground">{item.location || "—"}</td>
-                    <td className="px-4 py-3.5 text-center w-20">
+                    <td className="hidden lg:table-cell px-3 sm:px-4 py-3.5 text-sm text-muted-foreground">{item.supplier || "—"}</td>
+                    <td className="px-3 sm:px-4 py-3.5 text-center w-20">
                        <div className="flex items-center justify-center gap-2 flex-nowrap">
                          <button
                            onClick={() => setEditingItem(item)}

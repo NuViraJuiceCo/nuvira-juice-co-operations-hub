@@ -63,40 +63,40 @@ export default function Reporting() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Reporting</h1>
-          <p className="text-muted-foreground mt-1">Financial summaries and operational analytics</p>
-        </div>
-        <Button onClick={exportCSV} className="gap-2">
-          <Download className="h-4 w-4" /> Export CSV
-        </Button>
-      </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+         <div>
+           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Reporting</h1>
+           <p className="text-muted-foreground mt-1">Financial summaries and operational analytics</p>
+         </div>
+         <Button onClick={exportCSV} className="gap-2 w-full sm:w-auto justify-center sm:justify-start">
+           <Download className="h-4 w-4" /> <span className="hidden sm:inline">Export CSV</span><span className="sm:hidden">Export</span>
+         </Button>
+       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 bg-card border border-border rounded-xl p-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">From</span>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-border rounded-lg bg-background"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">To</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-border rounded-lg bg-background"
-          />
-        </div>
-        <Select value={channelFilter} onValueChange={setChannelFilter}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="All Channels" />
-          </SelectTrigger>
+       <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-card border border-border rounded-xl p-4">
+         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-1 sm:flex-none">
+           <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">From</span>
+           <input
+             type="date"
+             value={dateFrom}
+             onChange={(e) => setDateFrom(e.target.value)}
+             className="px-3 py-1.5 text-xs sm:text-sm border border-border rounded-lg bg-background w-full sm:w-auto"
+           />
+         </div>
+         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-1 sm:flex-none">
+           <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">To</span>
+           <input
+             type="date"
+             value={dateTo}
+             onChange={(e) => setDateTo(e.target.value)}
+             className="px-3 py-1.5 text-xs sm:text-sm border border-border rounded-lg bg-background w-full sm:w-auto"
+           />
+         </div>
+         <Select value={channelFilter} onValueChange={setChannelFilter}>
+           <SelectTrigger className="w-full sm:w-44">
+             <SelectValue placeholder="All Channels" />
+           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Channels</SelectItem>
             <SelectItem value="online">Online</SelectItem>

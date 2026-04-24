@@ -100,36 +100,36 @@ export default function Suppliers() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {suppliers.map(s => (
-          <div key={s.id} className="bg-card border border-border rounded-xl p-5 hover:shadow-sm transition-shadow relative">
+          <div key={s.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 hover:shadow-sm transition-shadow relative">
             <input
               type="checkbox"
               checked={selected.has(s.id)}
               onChange={() => toggleSelect(s.id)}
-              className="absolute top-3 left-3"
+              className="absolute top-2.5 sm:top-3 left-2.5 sm:left-3 w-4 h-4"
             />
-            <div className="absolute top-3 right-3 flex gap-1">
+            <div className="absolute top-2.5 sm:top-3 right-2.5 sm:right-3 flex gap-1">
               <button
                 onClick={() => setEditingSupplier(s)}
-                className="text-primary hover:text-primary/80"
+                className="text-primary hover:text-primary/80 p-1"
               >
-                <Edit2 className="h-4 w-4" />
+                <Edit2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </button>
               <button
                 onClick={() => handleDelete(s.id)}
                 disabled={deleting === s.id}
-                className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                className="text-red-600 hover:text-red-700 disabled:opacity-50 p-1"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </button>
             </div>
             <div className="flex items-start justify-between mb-3 pl-6">
-              <div>
-                <h3 className="font-semibold text-foreground">{s.name}</h3>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-foreground text-sm truncate">{s.name}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">{s.category}</p>
               </div>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[s.status] || "bg-gray-50 text-gray-500"}`}>{s.status}</span>
+              <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-medium whitespace-nowrap ml-2 ${statusStyle[s.status] || "bg-gray-50 text-gray-500"}`}>{s.status}</span>
             </div>
             <div className="space-y-1.5">
               {s.contact_name && <p className="text-sm font-medium text-foreground">{s.contact_name}</p>}
