@@ -87,6 +87,7 @@ Deno.serve(async (req) => {
       if (b.is_active !== false) {
         bundleMap[b.bundle_name] = b.components || [];
         bundleMap[normalizeProductName(b.bundle_name)] = b.components || [];
+        bundleMap[b.bundle_name.toLowerCase()] = b.components || [];
       }
     }
 
@@ -128,8 +129,8 @@ Deno.serve(async (req) => {
         const itemQty = Number(item.quantity) || 0;
         if (itemQty <= 0 || !itemTitle) continue;
 
-        // Check if this line item is a bundle
-        const bundleComponents = bundleMap[itemTitle];
+        // Check if this line item is a bundle (try exact, normalized, and lowercase)
+        const bundleComponents = bundleMap[itemTitle] || bundleMap[normalizeProductName(itemTitle)] || bundleMap[itemTitle.toLowerCase()];
 
         if (bundleComponents && bundleComponents.length > 0) {
           // Decompose bundle into individual products
