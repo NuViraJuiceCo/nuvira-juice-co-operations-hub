@@ -104,25 +104,25 @@ function IngredientRow({ ing, view }) {
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                     <div className="bg-white border border-orange-200 rounded-lg p-2">
-                      <p className="text-muted-foreground">Shortage</p>
-                      <p className="font-bold text-orange-800">{formatOz(ing.shortfall_oz)}</p>
+                     <p className="text-gray-500">Shortage</p>
+                     <p className="font-bold text-orange-800">{formatOz(ing.shortfall_oz)}</p>
                     </div>
                     <div className="bg-white border border-orange-200 rounded-lg p-2">
-                      <p className="text-muted-foreground">Yield per {p.purchase_unit}</p>
-                      <p className="font-bold text-orange-800">{p.oz_per_unit} oz</p>
+                     <p className="text-gray-500">Yield per {p.purchase_unit}</p>
+                     <p className="font-bold text-orange-800">{p.oz_per_unit} oz</p>
                     </div>
                     <div className="bg-white border border-orange-300 rounded-lg p-2">
-                      <p className="text-muted-foreground">Order qty</p>
-                      <p className="font-bold text-orange-900">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</p>
+                     <p className="text-gray-500">Order qty</p>
+                     <p className="font-bold text-orange-900">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</p>
                     </div>
                     {p.units_per_case && (
-                      <div className="bg-white border border-orange-300 rounded-lg p-2">
-                        <p className="text-muted-foreground">Cases</p>
-                        <p className="font-bold text-orange-900">
-                          {p.cases_needed} case{p.cases_needed !== 1 ? 's' : ''}
-                          <span className="text-muted-foreground font-normal"> ({p.units_per_case}/{p.purchase_unit === 'each' ? 'case' : p.purchase_unit})</span>
-                        </p>
-                      </div>
+                     <div className="bg-white border border-orange-300 rounded-lg p-2">
+                       <p className="text-gray-500">Cases</p>
+                       <p className="font-bold text-orange-900">
+                         {p.cases_needed} case{p.cases_needed !== 1 ? 's' : ''}
+                         <span className="text-gray-500 font-normal"> ({p.units_per_case}/{p.purchase_unit === 'each' ? 'case' : p.purchase_unit})</span>
+                       </p>
+                     </div>
                     )}
                   </div>
                 )}
@@ -157,7 +157,7 @@ function IngredientRow({ ing, view }) {
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-sm text-foreground">{ing.name}</span>
+            <span className="font-medium text-sm text-gray-900">{ing.name}</span>
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config.badge}`}>
               {config.label}
             </span>
@@ -188,22 +188,22 @@ function IngredientRow({ ing, view }) {
 
           {/* Purchase detail when expanded or purchase_needed */}
           {ing.status === 'purchase_needed' && p?.has_yield_data && p.units_needed !== undefined && (
-            <div className="mt-2 pt-2 border-t border-current/10 text-xs grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <span className="text-muted-foreground">Yield: <span className="font-medium text-foreground">{p.oz_per_unit} oz/{p.purchase_unit}</span></span>
-              <span className="text-muted-foreground">Order: <span className="font-semibold text-foreground">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</span></span>
+            <div className="mt-2 pt-2 border-t border-gray-200 text-xs grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <span className="text-gray-500">Yield: <span className="font-medium text-gray-900">{p.oz_per_unit} oz/{p.purchase_unit}</span></span>
+              <span className="text-gray-500">Order: <span className="font-semibold text-gray-900">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</span></span>
               {p.units_per_case && (
-                <span className="text-muted-foreground">Cases: <span className="font-semibold text-foreground">{p.cases_needed} ({p.split_case_allowed ? 'split ok' : 'full cases only'})</span></span>
+                <span className="text-gray-500">Cases: <span className="font-semibold text-gray-900">{p.cases_needed} ({p.split_case_allowed ? 'split ok' : 'full cases only'})</span></span>
               )}
             </div>
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <Icon className={`h-4 w-4 ${config.text}`} />
-          {ing.sources && ing.sources.length > 0 && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="text-muted-foreground hover:text-foreground"
-            >
+        <Icon className={`h-4 w-4 ${config.text}`} />
+        {ing.sources && ing.sources.length > 0 && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-gray-400 hover:text-gray-700"
+          >
               {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
           )}
@@ -211,10 +211,10 @@ function IngredientRow({ ing, view }) {
       </div>
 
       {expanded && ing.sources && ing.sources.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-current/20 space-y-1">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Breakdown by product:</p>
+        <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
+          <p className="text-xs font-medium text-gray-500 mb-1">Breakdown by product:</p>
           {ing.sources.map((s, i) => (
-            <div key={i} className="flex justify-between text-xs text-muted-foreground pl-2">
+            <div key={i} className="flex justify-between text-xs text-gray-600 pl-2">
               <span>· {s.product} ({s.batch_units} units)</span>
               <span>{formatOz(s.qty_oz)}</span>
             </div>
