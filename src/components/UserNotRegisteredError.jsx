@@ -1,25 +1,53 @@
 import React from 'react';
+import { base44 } from '@/api/base44Client';
 
 const UserNotRegisteredError = () => {
+  const handleCompleteSignup = () => {
+    // Log out current partial session and redirect through login flow
+    // This allows the platform to complete account registration
+    base44.auth.logout(window.location.href);
+  };
+
+  const handleSignOut = () => {
+    base44.auth.logout();
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-white to-slate-50">
-      <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-lg border border-slate-100">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-slate-50 to-white px-4">
+      <div className="max-w-md w-full p-8 bg-white rounded-2xl shadow-lg border border-slate-200">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 mb-6 rounded-full bg-orange-100">
-            <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          <div className="inline-flex items-center justify-center w-16 h-16 mb-6 rounded-full bg-amber-100">
+            <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">Access Restricted</h1>
-          <p className="text-slate-600 mb-8">
-            You are not registered to use this application. Please contact the app administrator to request access.
+
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Account Setup Incomplete</h1>
+          <p className="text-slate-600 mb-6 text-sm leading-relaxed">
+            Your account hasn't been fully set up yet. This can happen when an invite link doesn't complete the sign-up process. Click below to sign out and sign back in — this will finish creating your account.
           </p>
-          <div className="p-4 bg-slate-50 rounded-md text-sm text-slate-600">
-            <p>If you believe this is an error, you can:</p>
-            <ul className="list-disc list-inside mt-2 space-y-1">
-              <li>Verify you are logged in with the correct account</li>
-              <li>Contact the app administrator for access</li>
-              <li>Try logging out and back in again</li>
+
+          <div className="space-y-3">
+            <button
+              onClick={handleCompleteSignup}
+              className="w-full bg-green-700 hover:bg-green-800 text-white font-semibold py-3 px-6 rounded-lg transition-colors text-sm"
+            >
+              Sign Out & Complete Setup
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 px-6 rounded-lg transition-colors text-sm"
+            >
+              Sign Out
+            </button>
+          </div>
+
+          <div className="mt-6 p-4 bg-slate-50 rounded-lg text-xs text-slate-500 text-left space-y-1">
+            <p className="font-semibold text-slate-600">Troubleshooting tips:</p>
+            <ul className="list-disc list-inside space-y-1 mt-1">
+              <li>Use the same email address your invite was sent to</li>
+              <li>If you haven't set a password yet, use the invite link from your email again</li>
+              <li>Contact <span className="font-medium">admin@nuvirajuice.com</span> if the issue persists</li>
             </ul>
           </div>
         </div>
