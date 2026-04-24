@@ -314,7 +314,7 @@ export default function Orders() {
                     <td className="px-5 py-3.5"><StatusBadge status={order.production_status} /></td>
                     <td className="px-5 py-3.5"><StatusBadge status={order.payment_status} /></td>
                     <td className="px-5 py-3.5 text-sm text-muted-foreground">
-                      {order.fulfillment_method}{order.delivery_address ? ` · ${order.delivery_address.substring(0, 20)}...` : " · -"}
+                      {order.fulfillment_method}{order.address_line1 ? ` · ${order.address_line1.substring(0, 20)}...` : (order.delivery_address ? ` · ${order.delivery_address.substring(0, 20)}...` : " · -")}
                     </td>
                     <td className="px-5 py-3.5 text-sm font-semibold text-foreground text-right">
                       ${order.total_price?.toFixed(2)}
@@ -343,20 +343,48 @@ export default function Orders() {
                   {expandedOrderId === order.id && order.line_items && order.line_items.length > 0 && (
                     <tr className="border-b border-border/50 last:border-0 bg-muted/20">
                       <td colSpan="10" className="px-5 py-4">
-                        <div className="space-y-2">
-                          <p className="text-sm font-semibold text-foreground mb-3">Products in this order:</p>
-                          <div className="space-y-2">
-                            {order.line_items.map((item, idx) => (
-                              <div key={idx} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-2.5">
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium text-foreground">{item.title}</p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">Qty: {item.quantity} @ ${item.price?.toFixed(2) || '0.00'} each</p>
-                                </div>
-                                <div className="text-sm font-semibold text-foreground text-right">
-                                  ${(item.quantity * (item.price || 0)).toFixed(2)}
-                                </div>
+                        <div className="space-y-4">
+                          {order.address_line1 && (
+                            <div>
+                              <p className="text-sm font-semibold text-foreground mb-2">Delivery Address</p>
+                              <p className="text-xs text-muted-foreground">
+                                {order.address_line1}{order.address_line2 ? `, ${order.address_line2}` : ''}<br />
+                                {order.address_city}, {order.address_state} {order.address_postal_code}
+                              </p>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-semibold text-foreground mb-3">
+                              {order.fulfillments && order.fulfillments.length > 0 ? 'Subscription Fulfillments' : 'Products in this order'}
+                            </p>
+                            {order.fulfillments && order.fulfillments.length > 0 ? (
+                              <div className="space-y-2">
+                                {order.fulfillments.map((f, fi) => (
+                                  <div key={fi} className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                                    <p className="text-xs font-semibold text-blue-700 mb-2">Week {f.fulfillment_number} · {f.delivery_date}</p>
+                                    <div className="space-y-1">
+                                      {f.items?.map((item, ii) => (
+                                        <p key={ii} className="text-xs text-blue-600">{item.title} × {item.quantity}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            ) : (
+                              <div className="space-y-2">
+                                {order.line_items.map((item, idx) => (
+                                  <div key={idx} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-2.5">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-foreground">{item.title}</p>
+                                      <p className="text-xs text-muted-foreground mt-0.5">Qty: {item.quantity} @ ${item.price?.toFixed(2) || '0.00'} each</p>
+                                    </div>
+                                    <div className="text-sm font-semibold text-foreground text-right">
+                                      ${(item.quantity * (item.price || 0)).toFixed(2)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
