@@ -133,9 +133,28 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
 
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Items</p>
-                {order.items?.map((item, i) => (
-                  <p key={i} className="text-xs">{item.title} × {item.quantity}</p>
-                ))}
+                {order.fulfillments && order.fulfillments.length > 0 ? (
+                  <div className="space-y-3">
+                    {order.fulfillments.map((fulfillment, fi) => (
+                      <div key={fi} className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
+                        <p className="text-xs font-semibold text-blue-700 mb-1.5">
+                          Week {fulfillment.fulfillment_number} — {fulfillment.delivery_date}
+                        </p>
+                        <div className="space-y-1">
+                          {fulfillment.items?.map((item, i) => (
+                            <p key={i} className="text-xs text-blue-600">{item.title} × {item.quantity}</p>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    {order.items?.map((item, i) => (
+                      <p key={i} className="text-xs">{item.title} × {item.quantity}</p>
+                    ))}
+                  </>
+                )}
               </div>
 
               {pendingReturn && pendingReturn.verification_status === 'requested' && !showReturnForm && (

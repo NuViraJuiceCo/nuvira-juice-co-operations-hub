@@ -58,6 +58,57 @@
         }
       }
     },
+    "fulfillments": {
+      "type": "array",
+      "description": "For subscription orders: breakdown of items per fulfillment week",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fulfillment_number": {
+            "type": "number",
+            "description": "Week/fulfillment number (1, 2, 3, 4, etc)"
+          },
+          "production_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date this fulfillment will be produced"
+          },
+          "delivery_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Expected delivery date (3 days after production)"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "price": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "produced",
+              "packaged",
+              "in_transit",
+              "delivered"
+            ],
+            "default": "pending"
+          }
+        }
+      }
+    },
     "fulfillment_method": {
       "type": "string",
       "enum": [

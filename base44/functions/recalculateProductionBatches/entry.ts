@@ -104,6 +104,32 @@ function detectFulfillmentCount(order) {
 }
 
 /**
+ * For subscription orders, track which items go into each fulfillment.
+ * This helps drivers see exactly what's in each weekly delivery.
+ */
+function buildFulfillmentItemsMap(order, fulfillmentCount) {
+  const fulfillmentItems = {};
+  for (let i = 0; i < fulfillmentCount; i++) {
+    fulfillmentItems[i] = [];
+  }
+  
+  if (order.line_items && order.source_channel === 'subscription') {
+    order.line_items.forEach(item => {
+      const qtyPerFulfillment = Math.round((item.quantity || 0) / fulfillmentCount);
+      for (let i = 0; i < fulfillmentCount; i++) {
+        fulfillmentItems[i].push({
+          title: item.title,
+          quantity: qtyPerFulfillment,
+          price: item.price || 0,
+        });
+      }
+    });
+  }
+  
+  return fulfillmentItems;
+}
+
+/**
  * Returns an array of N consecutive valid production dates starting from the given date.
  * Each date is 7 days apart (weekly fulfillments).
  */
@@ -199,6 +225,29 @@ Deno.serve(async (req) => {
       // and split the total quantity evenly across that many weekly production dates.
       const fulfillmentCount = detectFulfillmentCount(order);
       const fulfillmentDates = getSubscriptionProductionDates(productionDate, fulfillmentCount);
+      
+      // Build fulfillment breakdown for the order (for driver visibility)
+      if (order.source_channel === 'subscription' && fulfillmentCount > 1) {
+        const fulfillmentItems = buildFulfillmentItemsMap(order, fulfillmentCount);
+        const fulfillmentsArray = [];
+        
+        for (let fi = 0; fi < fulfillmentDates.length; fi++) {
+          const fDate = fulfillmentDates[fi];
+          const deliveryDate = new Date(fDate + 'T00:00:00');
+          deliveryDate.setDate(deliveryDate.getDate() + 3); // 3 days after production
+          
+          fulfillmentsArray.push({
+            fulfillment_number: fi + 1,
+            production_date: fDate,
+            delivery_date: deliveryDate.toISOString().split('T')[0],
+            items: fulfillmentItems[fi] || [],
+            status: 'pending',
+          });
+        }
+        
+        // Update the order with fulfillment breakdown (will be saved later if needed)
+        order.fulfillments = fulfillmentsArray;
+      }
 
       for (const item of order.line_items) {
         const itemTitle = (item.title || '').trim();
