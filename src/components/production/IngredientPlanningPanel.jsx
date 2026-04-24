@@ -58,12 +58,17 @@ function PurchaseBadge({ purchase }) {
   if (purchase.units_needed === undefined) return null;
 
   const unitLabel = purchase.purchase_unit || 'unit';
-  const plural = purchase.units_needed !== 1 ? 's' : '';
+  
+  const getPluralUnit = () => {
+    if (purchase.units_needed === 1) return unitLabel;
+    if (unitLabel === 'each') return 'units';
+    return unitLabel + 's';
+  };
 
   return (
     <span className="inline-flex items-center gap-1 text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full border border-orange-200 font-medium">
       <Scale className="h-3 w-3" />
-      Order: {purchase.units_needed} {unitLabel}{plural}
+      Order: {purchase.units_needed} {getPluralUnit()}
       {purchase.cases_needed !== null && purchase.units_per_case
         ? ` (${purchase.cases_needed} case${purchase.cases_needed !== 1 ? 's' : ''})`
         : ''}
@@ -116,14 +121,14 @@ function IngredientRow({ ing, view }) {
                     </div>
                     <div className="bg-white border border-orange-300 rounded-lg p-2">
                      <p className="text-gray-500">Order qty</p>
-                     <p className="font-bold text-orange-900">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</p>
+                     <p className="font-bold text-orange-900">{p.units_needed} {p.purchase_unit === 'each' && p.units_needed !== 1 ? 'units' : (p.units_needed !== 1 && p.purchase_unit !== 'each' ? p.purchase_unit + 's' : p.purchase_unit)}</p>
                     </div>
                     {p.units_per_case && (
                      <div className="bg-white border border-orange-300 rounded-lg p-2">
                        <p className="text-gray-500">Cases</p>
                        <p className="font-bold text-orange-900">
                          {p.cases_needed} case{p.cases_needed !== 1 ? 's' : ''}
-                         <span className="text-gray-500 font-normal"> ({p.units_per_case}/{p.purchase_unit === 'each' ? 'case' : p.purchase_unit})</span>
+                         <span className="text-gray-500 font-normal"> ({p.units_per_case}/case)</span>
                        </p>
                      </div>
                     )}
@@ -193,7 +198,7 @@ function IngredientRow({ ing, view }) {
           {ing.status === 'purchase_needed' && p?.has_yield_data && p.units_needed !== undefined && (
             <div className="mt-2 pt-2 border-t border-gray-200 text-xs grid grid-cols-2 sm:grid-cols-3 gap-2">
               <span className="text-gray-500">Yield: <span className="font-medium text-gray-900">{p.oz_per_unit} oz/{p.purchase_unit}</span></span>
-              <span className="text-gray-500">Order: <span className="font-semibold text-gray-900">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</span></span>
+              <span className="text-gray-500">Order: <span className="font-semibold text-gray-900">{p.units_needed} {p.purchase_unit === 'each' && p.units_needed !== 1 ? 'units' : (p.units_needed !== 1 && p.purchase_unit !== 'each' ? p.purchase_unit + 's' : p.purchase_unit)}</span></span>
               {p.units_per_case && (
                 <span className="text-gray-500">Cases: <span className="font-semibold text-gray-900">{p.cases_needed} ({p.split_case_allowed ? 'split ok' : 'full cases only'})</span></span>
               )}
@@ -242,7 +247,7 @@ function GroceryList({ items, date }) {
       const p = item.purchase;
       let line = `${item.name}: ${formatOz(item.amount_oz)}`;
       if (p?.has_yield_data && p.units_needed !== undefined) {
-        line += ` → ${p.units_needed} ${p.purchase_unit}${p.units_needed !== 1 ? 's' : ''}`;
+        line += ` → ${p.units_needed} ${p.purchase_unit === 'each' && p.units_needed !== 1 ? 'units' : (p.units_needed !== 1 && p.purchase_unit !== 'each' ? p.purchase_unit + 's' : p.purchase_unit)}`;
         if (p.cases_needed !== null) line += ` (${p.cases_needed} case${p.cases_needed !== 1 ? 's' : ''})`;
       }
       if (item.supplier) line += ` — ${item.supplier}`;
@@ -289,7 +294,7 @@ function GroceryList({ items, date }) {
                 <span className="text-red-700">Shortage: <span className="font-bold">{formatOz(item.amount_oz)}</span></span>
                 {p?.has_yield_data && p.units_needed !== undefined ? (
                   <>
-                    <span className="text-orange-700">→ Order: <span className="font-bold">{p.units_needed} {p.purchase_unit}{p.units_needed !== 1 ? 's' : ''}</span></span>
+                    <span className="text-orange-700">→ Order: <span className="font-bold">{p.units_needed} {p.purchase_unit === 'each' && p.units_needed !== 1 ? 'units' : (p.units_needed !== 1 && p.purchase_unit !== 'each' ? p.purchase_unit + 's' : p.purchase_unit)}</span></span>
                     {p.units_per_case && (
                       <span className="text-orange-600">= <span className="font-bold">{p.cases_needed} case{p.cases_needed !== 1 ? 's' : ''}</span> of {p.units_per_case}</span>
                     )}
