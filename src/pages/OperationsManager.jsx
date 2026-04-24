@@ -13,6 +13,19 @@ export default function OperationsManager() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  const [autoHealResult, setAutoHealResult] = useState(null);
+
+  const runAutoRemediateStripe = async () => {
+    try {
+      const res = await base44.functions.invoke('autoRemediateStripeOrders', {});
+      setAutoHealResult(res.data.result);
+      // Refresh briefing after heal
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await fetchBriefing();
+    } catch (error) {
+      console.error('Auto-remediate failed:', error.message);
+    }
+  };
 
   const runFullSync = async () => {
     setSyncing(true);
@@ -67,7 +80,13 @@ export default function OperationsManager() {
   };
 
   useEffect(() => {
-    fetchBriefing();
+    const init = async () => {
+      // Run auto-remediation first to fix any Stripe order issues
+      await runAutoRemediateStripe();
+      // Then fetch the briefing
+      await fetchBriefing();
+    };
+    init();
   }, []);
 
   const getAlertIcon = (type) => {
@@ -110,6 +129,39 @@ export default function OperationsManager() {
 
         {lastUpdated && (
           <p className="text-sm text-muted-foreground">Last updated: {lastUpdated.toLocaleTimeString()}</p>
+        )}
+
+        {/* Auto-Remediation Result */}
+        {autoHealResult && autoHealResult.fixed_count > 0 && (
+          <div className="border border-green-200 bg-green-50 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <CheckCircle2 className="w-5 h-5 text-green-600" />
+              <p className="font-semibold text-green-900">Auto-Remediation Complete</p>
+              <p className="text-xs text-green-700 ml-auto">{new Date(autoHealResult.timestamp).toLocaleTimeString()}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/70 rounded-lg px-3 py-2">
+                <p className="text-xs font-semibold text-green-700">Orders Recovered</p>
+                <p className="text-sm font-bold mt-0.5">{autoHealResult.fixed_count}</p>
+              </div>
+              <div className="bg-white/70 rounded-lg px-3 py-2">
+                <p className="text-xs font-semibold text-green-700">Duplicates Removed</p>
+                <p className="text-sm font-bold mt-0.5">
+                  {autoHealResult.actions.filter(a => a.action === 'deleted_duplicate').length}
+                </p>
+              </div>
+            </div>
+            {autoHealResult.issues.length > 0 && (
+              <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <p className="text-xs font-semibold text-amber-700 mb-2">Issues During Remediation:</p>
+                <div className="space-y-1">
+                  {autoHealResult.issues.slice(0, 3).map((issue, i) => (
+                    <p key={i} className="text-xs text-amber-600">⚠ {issue.problem}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Full Sync Result */}
