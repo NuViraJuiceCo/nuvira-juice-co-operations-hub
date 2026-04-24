@@ -3,14 +3,17 @@ import { base44 } from "@/api/base44Client";
 import { Calculator, BookOpen, RefreshCw, Calendar, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import IngredientNeedsResultFixed from "../components/production/IngredientNeedsResultFixed";
 import IngredientNeedsResult from "../components/production/IngredientNeedsResult";
+import YieldManager from "../components/production/YieldManager";
 import RecipeManager from "../components/production/RecipeManager";
 import PreOrderBatchPlanner from "../components/production/PreOrderBatchPlanner";
 
 const TABS = [
   { id: "preorders", label: "Pre-Orders", icon: Package },
   { id: "planner", label: "Production Planner", icon: Calculator },
-  { id: "recipes", label: "Recipes", icon: BookOpen }
+  { id: "recipes", label: "Recipes", icon: BookOpen },
+  { id: "yields", label: "Ingredient Yields", icon: Package }
 ];
 
 export default function ProductionPlanning() {
@@ -28,7 +31,7 @@ export default function ProductionPlanning() {
     let lastErr;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const res = await base44.functions.invoke("getIngredientDemandByDate", {
+        const res = await base44.functions.invoke("calculateIngredientDemandFixed", {
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined
         });
@@ -164,7 +167,7 @@ export default function ProductionPlanning() {
           )}
 
           {/* Results */}
-          {result && <IngredientNeedsResult result={result} />}
+          {result && <IngredientNeedsResultFixed result={result} />}
 
           {/* Empty state */}
           {!result && !error && !loading && (
@@ -181,6 +184,9 @@ export default function ProductionPlanning() {
 
       {/* Recipes Tab */}
       {activeTab === "recipes" && <RecipeManager />}
-    </div>
-  );
-}
+
+      {/* Ingredient Yields Tab */}
+      {activeTab === "yields" && <YieldManager />}
+      </div>
+      );
+      }
