@@ -1,0 +1,63 @@
+{
+  "name": "StripeEventLog",
+  "type": "object",
+  "properties": {
+    "stripe_event_id": {
+      "type": "string",
+      "description": "Unique Stripe event ID (for idempotency)"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Stripe event type (e.g., checkout.session.completed)"
+    },
+    "stripe_object_id": {
+      "type": "string",
+      "description": "Stripe object ID (session.id, intent.id, etc.)"
+    },
+    "stripe_customer_id": {
+      "type": "string",
+      "description": "Stripe customer ID if available"
+    },
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email from Stripe object"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Linked ShopifyOrder ID if successfully created/matched"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "processed",
+        "pending",
+        "failed",
+        "skipped"
+      ],
+      "description": "Processing status"
+    },
+    "failure_reason": {
+      "type": "string",
+      "description": "Reason if processing failed"
+    },
+    "retry_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of retry attempts"
+    },
+    "raw_event": {
+      "type": "object",
+      "description": "Full Stripe event payload (stored as reference)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Admin notes about this event"
+    }
+  },
+  "required": [
+    "stripe_event_id",
+    "event_type",
+    "stripe_object_id",
+    "status"
+  ]
+}

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, LogOut,
   ShoppingCart, Factory, Truck, CalendarDays, Package, Users,
   ShieldCheck, Wrench, CalendarCheck, Handshake, ClipboardList,
-  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings, Gift, Activity, FlaskConical,
+  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings, Gift, Activity, FlaskConical, Zap,
 } from "lucide-react";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
@@ -39,6 +39,7 @@ const navGroups = [
       { path: "/report-scheduler", label: "Reports", icon: FileBarChart },
       { path: "/settings", label: "Settings", icon: Settings },
       { path: "/users", label: "User Management", icon: UserCog },
+      { path: "/stripe-repair", label: "Stripe Recovery", icon: Zap },
     ],
   },
 ];
