@@ -260,16 +260,19 @@ Deno.serve(async (req) => {
       let fulfillmentCount = 1;
       if (order.source_channel === 'subscription' && order.line_items && order.line_items.length > 0) {
         for (const item of order.line_items) {
-          const bundleComponents = findBundleComponents(bundleMap, item.title);
-          if (bundleComponents !== null) {
-            // Found a Bundle—look up full data for fulfillment_count
-            const bundleName = normalizeProductName(item.title);
-            const bundleData = bundleFullData[bundleName];
-            if (bundleData && bundleData.fulfillment_count) {
-              fulfillmentCount = Math.max(1, bundleData.fulfillment_count);
-              break;
+          // Try to find bundle by exact name first
+          for (const bKey of Object.keys(bundleFullData)) {
+            if (bKey.toLowerCase() === item.title.toLowerCase() || 
+                stripArticle(bKey).toLowerCase() === stripArticle(item.title).toLowerCase()) {
+              const bundleData = bundleFullData[bKey];
+              if (bundleData && bundleData.fulfillment_count) {
+                fulfillmentCount = Math.max(1, bundleData.fulfillment_count);
+                console.log(`[RECALC] Found bundle "${item.title}" with fulfillment_count=${fulfillmentCount}`);
+                break;
+              }
             }
           }
+          if (fulfillmentCount > 1) break;
         }
       }
       // If no bundle match, fall back to customer_notes or default to 1
