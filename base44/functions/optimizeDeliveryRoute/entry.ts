@@ -21,24 +21,31 @@ Deno.serve(async (req) => {
     if (date) {
       const selectedDate = new Date(date);
       const cutoffDate = new Date(date);
-      cutoffDate.setDate(cutoffDate.getDate() - 1); // May 1st cutoff for May 2nd deliveries
+      cutoffDate.setDate(cutoffDate.getDate() - 1);
       const cutoffStr = cutoffDate.toISOString().split('T')[0];
 
       orders = allOrders.filter(o => {
-        // Check assigned delivery date first
+        // For subscription orders: check if any fulfillment matches the date
+        if (o.source_channel === 'subscription' && o.fulfillments && o.fulfillments.length > 0) {
+          return o.fulfillments.some(f => f.delivery_date && f.delivery_date.startsWith(date));
+        }
+
+        // For non-subscription orders: only show if assigned/requested for this specific date
         if (o.assigned_delivery_date && o.assigned_delivery_date.startsWith(date)) {
           return true;
         }
-        // Check requested delivery date
         if (o.requested_delivery_date && o.requested_delivery_date.startsWith(date)) {
           return true;
         }
+
         // Include pre-order/new orders created up to and including the cutoff date
-        // These get assigned to the selected delivery date
-        if (o.production_status === 'new' || o.production_status === 'awaiting_production') {
-          const createdDate = o.customer_order_date || o.created_date;
-          if (createdDate && createdDate.substring(0, 10) <= cutoffStr) {
-            return true;
+        // These get assigned to the selected delivery date (only if no prior date assigned)
+        if (!o.assigned_delivery_date && !o.requested_delivery_date) {
+          if (o.production_status === 'new' || o.production_status === 'awaiting_production') {
+            const createdDate = o.customer_order_date || o.created_date;
+            if (createdDate && createdDate.substring(0, 10) <= cutoffStr) {
+              return true;
+            }
           }
         }
         return false;
@@ -90,22 +97,31 @@ Deno.serve(async (req) => {
     // Map ShopifyOrder to driver portal format and filter to undelivered orders
     const queuedOrders = orders
       .filter(o => o.production_status !== 'fulfilled')
-      .map(o => ({
-        id: o.id,
-        order_number: o.shopify_order_number,
-        customer_email: o.customer_email,
-        customer_name: o.customer_name,
-        contact_phone: o.customer_phone,
-        delivery_address: o.delivery_address,
-        items: o.line_items || [],
-        fulfillments: o.fulfillments || [],
-        status: o.production_status === 'fulfilled' ? 'delivered' : o.production_status,
-        delivery_photo_url: o.delivery_photo_url,
-        delivery_drop_location: o.delivery_drop_location,
-        delivered_by: o.delivered_by,
-        delivered_at: o.delivered_at,
-        leg_duration_seconds: null,
-      }));
+      .map(o => {
+        let fulfillmentsForDate = o.fulfillments || [];
+        
+        // For subscription orders on a specific date, only show the fulfillment for that date
+        if (date && o.source_channel === 'subscription' && o.fulfillments && o.fulfillments.length > 0) {
+          fulfillmentsForDate = o.fulfillments.filter(f => f.delivery_date && f.delivery_date.startsWith(date));
+        }
+
+        return {
+          id: o.id,
+          order_number: o.shopify_order_number,
+          customer_email: o.customer_email,
+          customer_name: o.customer_name,
+          contact_phone: o.customer_phone,
+          delivery_address: o.delivery_address,
+          items: o.line_items || [],
+          fulfillments: fulfillmentsForDate,
+          status: o.production_status === 'fulfilled' ? 'delivered' : o.production_status,
+          delivery_photo_url: o.delivery_photo_url,
+          delivery_drop_location: o.delivery_drop_location,
+          delivered_by: o.delivered_by,
+          delivered_at: o.delivered_at,
+          leg_duration_seconds: null,
+        };
+      });
 
     if (!optimize) {
       return Response.json({ 
