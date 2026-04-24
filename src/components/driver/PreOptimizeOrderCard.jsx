@@ -108,7 +108,8 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
               </span>
             )}
           </div>
-          <p className="text-xs font-medium mt-0.5 truncate">{order.delivery_address}</p>
+          <p className="text-xs font-medium text-foreground mt-0.5">{order.customer_name || order.customer_email}</p>
+          <p className="text-xs font-medium mt-0.5 truncate text-muted-foreground">{order.delivery_address}</p>
           <p className="text-[10px] text-muted-foreground">{order.items?.map(i => `${i.title} ×${i.quantity}`).join(', ')}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
