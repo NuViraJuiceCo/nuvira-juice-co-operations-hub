@@ -83,21 +83,21 @@ function IngredientRow({ ing, view }) {
     return (
       <div className={`border rounded-lg p-3 ${hasPurchase ? 'bg-orange-50 border-orange-200' : config.bg}`}>
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium text-sm text-foreground">{ing.name}</span>
-              {ing.supplier && (
-                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{ing.supplier}</span>
-              )}
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config.badge}`}>
-                {config.label}
-              </span>
-            </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm text-gray-900">{ing.name}</span>
+            {ing.supplier && (
+              <span className="text-xs text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">{ing.supplier}</span>
+            )}
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config.badge}`}>
+              {config.label}
+            </span>
+          </div>
 
-            {ing.status === 'purchase_needed' && (
-              <div className="mt-2 space-y-1">
-                {!p?.has_yield_data ? (
-                  <p className="text-xs text-amber-700 flex items-center gap-1">
+          {ing.status === 'purchase_needed' && (
+            <div className="mt-2 space-y-1">
+              {!p?.has_yield_data ? (
+                <p className="text-xs text-amber-700 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
                     Yield / Pack Conversion Missing — configure in Yield Editor to get order quantities
                   </p>
@@ -164,15 +164,15 @@ function IngredientRow({ ing, view }) {
             {ing.status === 'purchase_needed' && <PurchaseBadge purchase={p} />}
           </div>
           <div className="flex flex-wrap gap-3 mt-1.5 text-xs">
-            <span className="text-muted-foreground">
-              <span className="font-semibold text-foreground">Need:</span> {formatOz(ing.needed_oz)}
+            <span className="text-gray-700">
+              <span className="font-semibold text-gray-900">Need:</span> {formatOz(ing.needed_oz)}
             </span>
             {ing.stock_oz !== null ? (
-              <span className="text-muted-foreground">
-                <span className="font-semibold text-foreground">Stock:</span> {formatOz(ing.stock_oz)}
+              <span className="text-gray-700">
+                <span className="font-semibold text-gray-900">Stock:</span> {formatOz(ing.stock_oz)}
               </span>
             ) : (
-              <span className="text-amber-600 font-medium">No inventory data</span>
+              <span className="text-amber-700 font-medium">No inventory data</span>
             )}
             {ing.status === 'purchase_needed' && ing.shortfall_oz > 0 && (
               <span className={`font-semibold ${config.text}`}>
