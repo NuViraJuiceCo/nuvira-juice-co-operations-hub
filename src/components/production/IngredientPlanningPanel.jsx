@@ -8,30 +8,30 @@ import { Button } from "@/components/ui/button";
 const STATUS_CONFIG = {
   purchase_needed: {
     label: "Buy",
-    bg: "bg-red-50 border-red-200",
+    bg: "bg-white border-red-400",
     text: "text-red-700",
-    badge: "bg-red-100 text-red-700",
+    badge: "bg-red-600 text-white",
     icon: ShoppingCart,
   },
   no_stock_data: {
     label: "No Stock Data",
-    bg: "bg-amber-50 border-amber-200",
+    bg: "bg-white border-amber-400",
     text: "text-amber-700",
-    badge: "bg-amber-100 text-amber-700",
+    badge: "bg-amber-500 text-white",
     icon: AlertTriangle,
   },
   sufficient: {
     label: "Covered",
-    bg: "bg-emerald-50 border-emerald-200",
+    bg: "bg-white border-emerald-400",
     text: "text-emerald-700",
-    badge: "bg-emerald-100 text-emerald-700",
+    badge: "bg-emerald-600 text-white",
     icon: CheckCircle2,
   },
   surplus: {
     label: "Surplus",
-    bg: "bg-blue-50 border-blue-200",
+    bg: "bg-white border-blue-400",
     text: "text-blue-700",
-    badge: "bg-blue-100 text-blue-700",
+    badge: "bg-blue-600 text-white",
     icon: TrendingUp,
   },
 };
@@ -270,7 +270,7 @@ function GroceryList({ items, date }) {
         {items.map((item, i) => {
           const p = item.purchase;
           return (
-            <div key={i} className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+            <div key={i} className="bg-white border border-red-400 rounded-lg px-3 py-2.5">
               <div className="flex items-start justify-between gap-2">
                 <span className="text-sm font-medium text-red-800">{item.name}</span>
                 {item.supplier && (
