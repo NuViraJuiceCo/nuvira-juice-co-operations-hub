@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PreOptimizeOrderCard from '@/components/driver/PreOptimizeOrderCard';
+import DeliveryProductBreakdown from '@/components/driver/DeliveryProductBreakdown';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -364,44 +365,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
               </div>
 
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Items & Fulfillments</p>
-                {order.fulfillments && order.fulfillments.length > 0 ? (
-                  <div className="space-y-3">
-                    {order.fulfillments.map((fulfillment, fi) => (
-                      <div key={fi} className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <p className="text-xs font-semibold text-blue-700">
-                            Week {fulfillment.fulfillment_number} — {fulfillment.delivery_date}
-                          </p>
-                          {!fulfillment.address_line1 && (
-                            <span className="text-[9px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded">
-                              ⚠ NO ADDR
-                            </span>
-                          )}
-                        </div>
-                        <div className="space-y-1 mb-1.5">
-                          {fulfillment.items?.map((item, i) => (
-                            <p key={i} className="text-xs text-blue-600">{item.title} × {item.quantity}</p>
-                          ))}
-                        </div>
-                        {fulfillment.address_line1 && (
-                          <p className="text-[10px] text-blue-600 border-t border-blue-200 pt-1 mt-1">
-                            📍 {fulfillment.address_line1}
-                            {fulfillment.address_line2 && <>, {fulfillment.address_line2}</>}
-                            <br />
-                            {fulfillment.address_city}, {fulfillment.address_state} {fulfillment.address_postal_code}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <>
-                    {order.items?.map((item, i) => (
-                      <p key={i} className="text-xs">{item.title} × {item.quantity}</p>
-                    ))}
-                  </>
-                )}
+                <DeliveryProductBreakdown order={order} date={order.selectedFulfillment?.delivery_date} />
               </div>
 
               {pendingReturn && pendingReturn.verification_status === 'requested' && (
@@ -774,8 +738,34 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     }
   };
 
-  // Use manual order if set, otherwise use optimized/queued orders
-  let displayOrders = routeData?.optimized_orders || queuedOrders || [];
+  // Filter orders to show only fulfillments for the selected date
+  // and extract per-fulfillment products
+  let displayOrders = (routeData?.optimized_orders || queuedOrders || []).map(order => {
+    if (order.fulfillments && order.fulfillments.length > 0) {
+      // Subscription: find the fulfillment for this delivery date
+      const fulfillmentForDate = order.fulfillments.find(f => f.delivery_date === date);
+      if (fulfillmentForDate) {
+        return {
+          ...order,
+          // Override items to show only this week's fulfillment products
+          deliveryItems: fulfillmentForDate.items || [],
+          selectedFulfillment: fulfillmentForDate,
+          isSubscriptionDelivery: true,
+        };
+      } else {
+        // No fulfillment for this date - skip this order
+        return null;
+      }
+    } else {
+      // One-time order: use line_items
+      return {
+        ...order,
+        deliveryItems: order.items || [],
+        isSubscriptionDelivery: false,
+      };
+    }
+  }).filter(o => o !== null);
+
   if (manualOrder) {
     displayOrders = manualOrder;
   }
