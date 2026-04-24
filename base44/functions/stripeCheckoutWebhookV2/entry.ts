@@ -144,11 +144,19 @@ async function findOrCreateOrder(base44, event) {
     }
   }
 
+  // CRITICAL: Never create/downgrade to unknown email. Preserve existing order email.
+  const finalEmail = email && email !== 'unknown@unknown.com' ? email : order?.customer_email;
+  if (!finalEmail) {
+    // Skip this event—cannot process without email linkage
+    console.warn('[STRIPE-V2] Skipping event', event.id, '— no email found in Stripe object or existing order');
+    return null;
+  }
+
   // Build order payload
   const orderPayload = {
     shopify_order_id: stripeId,
     shopify_order_number: order?.shopify_order_number || `#STR${Math.floor(Date.now() / 1000)}`,
-    customer_email: email || (order?.customer_email || 'unknown@unknown.com'),
+    customer_email: finalEmail,
     customer_name: data.customer_name || data.billing_details?.name || order?.customer_name || 'Unknown',
     customer_phone: data.customer_phone || data.billing_details?.phone || order?.customer_phone || '',
     line_items: lineItems.length > 0 ? lineItems : order?.line_items || [],
@@ -189,7 +197,7 @@ async function findOrCreateOrder(base44, event) {
     created = true;
   }
 
-  return { order, created, eventId: event.id };
+  return order ? { order, created, eventId: event.id } : null;
 }
 
 Deno.serve(async (req) => {
@@ -239,12 +247,21 @@ Deno.serve(async (req) => {
 
         // Process specific event types
         if (event.type === 'checkout.session.completed' || event.type === 'payment_intent.succeeded') {
-          const { order, created } = await findOrCreateOrder(base44, event);
-          await base44.asServiceRole.entities.StripeEventLog.update(eventLog.id, {
-            status: 'processed',
-            order_id: order?.id,
-          });
-          console.log(`[STRIPE-V2] ${created ? 'Created' : 'Updated'} order from Stripe event ${event.id}`);
+          const result = await findOrCreateOrder(base44, event);
+          if (!result) {
+            // No email found, can't process this event
+            await base44.asServiceRole.entities.StripeEventLog.update(eventLog.id, {
+              status: 'failed',
+              failure_reason: 'No valid email in Stripe object or matching existing order',
+            });
+          } else {
+            const { order, created } = result;
+            await base44.asServiceRole.entities.StripeEventLog.update(eventLog.id, {
+              status: 'processed',
+              order_id: order?.id,
+            });
+            console.log(`[STRIPE-V2] ${created ? 'Created' : 'Updated'} order from Stripe event ${event.id}`);
+          }
         } else {
           // Other event types: log but don't process yet
           await base44.asServiceRole.entities.StripeEventLog.update(eventLog.id, {
