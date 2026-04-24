@@ -246,8 +246,13 @@ Deno.serve(async (req) => {
         }
         
         // Update the order with fulfillment breakdown (will be saved later if needed)
-        order.fulfillments = fulfillmentsArray;
-      }
+         order.fulfillments = fulfillmentsArray;
+
+         // Assign subscription to its first delivery date for driver portal filtering
+         if (!order.assigned_delivery_date && fulfillmentsArray.length > 0) {
+           order._deliveryDateAssigned = fulfillmentsArray[0].delivery_date;
+         }
+        }
 
       for (const item of order.line_items) {
         const itemTitle = (item.title || '').trim();
@@ -323,6 +328,24 @@ Deno.serve(async (req) => {
       if (batch.is_locked) continue;
       const key = `${batch.production_date}__${normalizeProductName(batch.product_name)}`;
       existingBatchMap[key] = batch;
+    }
+
+    // ─── SAVE UPDATED ORDERS (fulfillments, assigned_delivery_date) ────────────
+    // Persist fulfillment breakdowns and delivery date assignments back to the database
+    const ordersToUpdate = allOrders.filter(o => o.fulfillments || o._deliveryDateAssigned);
+    for (const order of ordersToUpdate) {
+      if (order.fulfillments || (order._deliveryDateAssigned && !order.assigned_delivery_date)) {
+        const updateData = {};
+        if (order.fulfillments && order.fulfillments.length > 0) {
+          updateData.fulfillments = order.fulfillments;
+        }
+        if (order._deliveryDateAssigned && !order.assigned_delivery_date) {
+          updateData.assigned_delivery_date = order._deliveryDateAssigned;
+        }
+        if (Object.keys(updateData).length > 0) {
+          await base44.asServiceRole.entities.ShopifyOrder.update(order.id, updateData);
+        }
+      }
     }
 
     // ─── UPSERT BATCHES ────────────────────────────────────────────────────────
