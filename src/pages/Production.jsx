@@ -71,15 +71,19 @@ export default function Production() {
   const handleRecalculate = async () => {
     setRecalculating(true);
     try {
+      console.log('Starting recalculate...');
       const res = await base44.functions.invoke('recalculateProductionBatches', {});
+      console.log('Recalculate response:', res.data);
       setLastCalc(res.data?.message || 'Done');
-      // Wait a moment for database to commit, then refresh
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await Promise.all([load(), loadIngredients()]);
+      // Force refresh after 1.5 second delay for database commit
+      setTimeout(async () => {
+        console.log('Refreshing production data...');
+        await load();
+        await loadIngredients();
+      }, 1500);
     } catch (error) {
       console.error('Recalculate error:', error);
       setLastCalc('Error: ' + error.message);
-    } finally {
       setRecalculating(false);
     }
   };
