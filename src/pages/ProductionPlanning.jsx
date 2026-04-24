@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Calculator, BookOpen, RefreshCw, Calendar, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import AdminGuide from "../components/shared/AdminGuide";
 import IngredientNeedsResultFixed from "../components/production/IngredientNeedsResultFixed";
 import IngredientNeedsResult from "../components/production/IngredientNeedsResult";
 import YieldManager from "../components/production/YieldManager";
@@ -70,6 +71,22 @@ export default function ProductionPlanning() {
         <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
         <p className="text-muted-foreground mt-1">Calculate exactly how much produce to purchase based on incoming orders and your current inventory.</p>
       </div>
+
+      <AdminGuide
+        title="Admin Guide — Production Planning"
+        steps={[
+          "Start in the Recipes tab to define your juice products and their ingredient requirements. Each recipe must list ingredients with quantities in oz per bottle.",
+          "Go to Ingredient Yields to configure how each ingredient is purchased (per orange, per bunch, per lb, etc.) and its usable yield. This is critical for accurate ordering.",
+          "Use the Production Planner to select production dates and calculate ingredient needs. The system shows exactly what to buy based on orders and current inventory.",
+          "Pre-Orders tab shows upcoming orders scheduled for fulfillment. Use it to validate your batch planning before running production.",
+        ]}
+        tips={[
+          "Ingredient names in recipes must match exactly with yield configurations — use consistent naming.",
+          "The 'oz per purchase unit' yield field is crucial — it's how much usable juice you get from ONE unit (e.g., 2 oz per orange).",
+          "After adding or updating recipes/yields, always run a fresh calculation to see the impact.",
+          "Validation warnings appear if yield data is missing or seems suspicious — follow them to fix configuration issues.",
+        ]}
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-muted p-1 rounded-lg w-fit">
