@@ -73,7 +73,12 @@ export default function Production() {
     try {
       const res = await base44.functions.invoke('recalculateProductionBatches', {});
       setLastCalc(res.data?.message || 'Done');
+      // Wait a moment for database to commit, then refresh
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await Promise.all([load(), loadIngredients()]);
+    } catch (error) {
+      console.error('Recalculate error:', error);
+      setLastCalc('Error: ' + error.message);
     } finally {
       setRecalculating(false);
     }
