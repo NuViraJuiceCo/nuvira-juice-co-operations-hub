@@ -15,20 +15,31 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const PRODUCTION_DAYS = [2, 5, 6]; // Tue=2, Fri=5, Sat=6 (0=Sun)
 
+const FIRST_PRODUCTION_DATE = '2026-05-01'; // Locked: first production is May 1st
+
 function getNextProductionDate(fromDate) {
   const d = new Date(fromDate);
   d.setHours(0, 0, 0, 0);
+  
+  // Never schedule before the first production date
+  const firstProd = new Date(FIRST_PRODUCTION_DATE + 'T00:00:00');
+  if (d < firstProd) {
+    return FIRST_PRODUCTION_DATE;
+  }
+  
   for (let i = 1; i <= 14; i++) {
     const next = new Date(d);
     next.setDate(d.getDate() + i);
     if (PRODUCTION_DAYS.includes(next.getDay())) {
-      return next.toISOString().split('T')[0];
+      const nextStr = next.toISOString().split('T')[0];
+      return nextStr < FIRST_PRODUCTION_DATE ? FIRST_PRODUCTION_DATE : nextStr;
     }
   }
-  // fallback: 3 days from now
+  // fallback
   const fallback = new Date(d);
   fallback.setDate(d.getDate() + 3);
-  return fallback.toISOString().split('T')[0];
+  const fallbackStr = fallback.toISOString().split('T')[0];
+  return fallbackStr < FIRST_PRODUCTION_DATE ? FIRST_PRODUCTION_DATE : fallbackStr;
 }
 
 function getProductionDateForDelivery(deliveryDateStr) {
@@ -41,10 +52,12 @@ function getProductionDateForDelivery(deliveryDateStr) {
     const check = new Date(d);
     check.setDate(d.getDate() - i);
     if (PRODUCTION_DAYS.includes(check.getDay())) {
-      return check.toISOString().split('T')[0];
+      const result = check.toISOString().split('T')[0];
+      return result < FIRST_PRODUCTION_DATE ? FIRST_PRODUCTION_DATE : result;
     }
   }
-  return d.toISOString().split('T')[0];
+  const result = d.toISOString().split('T')[0];
+  return result < FIRST_PRODUCTION_DATE ? FIRST_PRODUCTION_DATE : result;
 }
 
 function normalizeProductName(name) {
