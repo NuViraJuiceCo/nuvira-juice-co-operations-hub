@@ -57,6 +57,45 @@ Deno.serve(async (req) => {
       console.error('[PULL-ORDERS] Subscription fetch error:', err.message);
     }
 
+    // Also fetch recent Stripe orders already created in the hub (from webhooks)
+    try {
+      const stripeOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
+        source_channel: 'online',
+      });
+      // Only include Stripe orders (those with STRIPE- prefix) that aren't already in our list
+      const stripeOrderIds = new Set(orders.map(o => o.shopify_order_id || o.id));
+      const newStripeOrders = (stripeOrders || [])
+        .filter(o => o.shopify_order_number && o.shopify_order_number.includes('STRIPE'))
+        .filter(o => !stripeOrderIds.has(o.shopify_order_id || o.id));
+      
+      if (newStripeOrders.length > 0) {
+        console.log(`[PULL-ORDERS] Found ${newStripeOrders.length} Stripe webhook orders`);
+        // Convert to same format as customer app orders
+        orders = [...orders, ...newStripeOrders.map(o => ({
+          shopify_order_id: o.shopify_order_id,
+          id: o.id,
+          shopify_order_number: o.shopify_order_number,
+          customer_email: o.customer_email,
+          customer_phone: o.customer_phone,
+          source_channel: o.source_channel,
+          line_items: o.line_items,
+          fulfillment_method: o.fulfillment_method,
+          delivery_address: o.delivery_address,
+          requested_delivery_date: o.requested_delivery_date,
+          payment_status: o.payment_status,
+          fulfillment_status: o.fulfillment_status,
+          total_price: o.total_price,
+          customer_notes: o.customer_notes,
+          internal_notes: o.internal_notes,
+          production_status: o.production_status,
+          tags: o.tags,
+          created_date: o.created_date,
+        }))];
+      }
+    } catch (err) {
+      console.error('[PULL-ORDERS] Stripe order fetch error:', err.message);
+    }
+
     if (!Array.isArray(orders) || orders.length === 0) {
       console.log(`[PULL-ORDERS] No orders found`);
       return Response.json({ status: 'success', count: 0, results: [] });
