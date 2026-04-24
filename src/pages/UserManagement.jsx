@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { UserPlus } from "lucide-react";
+import { UserPlus, ExternalLink, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import moment from "moment";
 
@@ -48,26 +48,26 @@ export default function UserManagement() {
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">User Management</h1>
           <p className="text-muted-foreground mt-1">{users.length} registered users</p>
         </div>
-        <div className="flex gap-2 self-start sm:self-auto flex-wrap">
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => {
-              const email = prompt("Enter admin email to invite:");
-              if (email) base44.users.inviteUser(email, "admin").then(() => alert("Admin invite sent!"));
-            }}
-          >
-            <UserPlus className="h-4 w-4" /> Invite Admin
+        <a
+          href="https://base44.com/dashboard"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Button className="gap-2 self-start sm:self-auto">
+            <UserPlus className="h-4 w-4" /> Invite Users
+            <ExternalLink className="h-3 w-3 opacity-70" />
           </Button>
-          <Button
-            className="gap-2"
-            onClick={() => {
-              const email = prompt("Enter user email to invite:");
-              if (email) base44.users.inviteUser(email, "user").then(() => alert("Invite sent!"));
-            }}
-          >
-            <UserPlus className="h-4 w-4" /> Invite User
-          </Button>
+        </a>
+      </div>
+
+      {/* Invite instructions */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
+        <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+        <div className="text-sm text-blue-800">
+          <p className="font-semibold mb-1">How to invite new users</p>
+          <p className="text-blue-700 text-xs leading-relaxed">
+            To invite someone, go to your <strong>Base44 Dashboard → Overview → Send Invites</strong>, enter their email, choose Admin or User role, and click Send Invitation. They'll receive an email to create their account and sign in. <strong>Do not use any other method</strong> — inviting via the dashboard is the only way to ensure their account is properly created.
+          </p>
         </div>
       </div>
 
