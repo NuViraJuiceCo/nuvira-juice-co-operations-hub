@@ -46,6 +46,8 @@ export default function Orders() {
     try {
       await base44.functions.invoke('pullOrdersFromCustomerApp', {});
       await handleRefresh();
+    } catch (error) {
+      console.error('Sync failed:', error.message);
     } finally {
       setSyncing(false);
     }
