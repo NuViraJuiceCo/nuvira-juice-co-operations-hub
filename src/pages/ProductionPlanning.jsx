@@ -28,7 +28,7 @@ export default function ProductionPlanning() {
     let lastErr;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const res = await base44.functions.invoke("calculateIngredientNeeds", {
+        const res = await base44.functions.invoke("getIngredientDemandByDate", {
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined
         });
@@ -101,7 +101,7 @@ export default function ProductionPlanning() {
           <div className="bg-card border border-border rounded-xl p-5">
             <h2 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
               <Calendar className="h-4 w-4 text-primary" />
-              Select Delivery Date Range
+              Select Production Date Range
             </h2>
             <div className="flex flex-wrap items-end gap-4">
               <div className="space-y-1">
@@ -152,7 +152,7 @@ export default function ProductionPlanning() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-3">
-              Leave dates empty to calculate needs across <strong>all active, unfulfilled orders</strong>. Use a date range to plan for a specific production day or week.
+              Filter by <strong>production date</strong>. Leave blank to see all upcoming production days. Select a range (e.g. May 1–May 1) to see only that production run's needs.
             </p>
           </div>
 
