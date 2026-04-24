@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import OrderEditForm from "../components/orders/OrderEditForm";
 import { base44 } from "@/api/base44Client";
 import { Search, Download, Trash2, Edit2, RefreshCw } from "lucide-react";
@@ -275,7 +275,7 @@ export default function Orders() {
             </thead>
             <tbody>
               {sorted.map((order) => (
-                <tbody key={order.id}>
+                <React.Fragment key={order.id}>
                   <tr className="border-b border-border/50 hover:bg-muted/30 transition-colors min-h-touch cursor-pointer" onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}>
                     <td className="px-5 py-3.5 w-10">
                       <input
@@ -319,12 +319,12 @@ export default function Orders() {
                        >
                          <Trash2 className="h-4 w-4" />
                        </button>
-                     </div>
+                      </div>
                     </td>
                   </tr>
                   {expandedOrderId === order.id && order.line_items && order.line_items.length > 0 && (
-                   <tr className="border-b border-border/50 last:border-0 bg-muted/20">
-                     <td colSpan="11" className="px-5 py-4">
+                    <tr className="border-b border-border/50 last:border-0 bg-muted/20">
+                      <td colSpan="10" className="px-5 py-4">
                         <div className="space-y-2">
                           <p className="text-sm font-semibold text-foreground mb-3">Products in this order:</p>
                           <div className="space-y-2">
@@ -344,7 +344,7 @@ export default function Orders() {
                       </td>
                     </tr>
                   )}
-                </tbody>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
