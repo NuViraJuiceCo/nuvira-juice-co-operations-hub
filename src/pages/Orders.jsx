@@ -302,7 +302,7 @@ export default function Orders() {
                       ${order.total_price?.toFixed(2)}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
-                      {moment(order.created_date).format("MMM D, h:mm A")}
+                      {moment(order.customer_order_date).format("MMM D, h:mm A")}
                     </td>
                     <td className="px-5 py-3.5 text-center w-20">
                      <div className="flex items-center justify-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
