@@ -109,7 +109,13 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
             )}
           </div>
           <p className="text-xs font-medium text-foreground mt-0.5">{order.customer_name || order.customer_email}</p>
-          <p className="text-xs font-medium mt-0.5 truncate text-muted-foreground">{order.delivery_address}</p>
+          <p className="text-xs font-medium mt-0.5 truncate text-muted-foreground">
+            {(() => {
+              // Build address from multiple possible sources
+              const addr = order.address_line1 ? `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}` : order.delivery_address;
+              return addr || '(address missing)';
+            })()}
+          </p>
           <p className="text-[10px] text-muted-foreground">{order.items?.map(i => `${i.title} ×${i.quantity}`).join(', ')}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

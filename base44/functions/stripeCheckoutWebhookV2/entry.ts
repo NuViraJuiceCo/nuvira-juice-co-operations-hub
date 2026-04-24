@@ -152,12 +152,16 @@ async function findOrCreateOrder(base44, event) {
     return null;
   }
 
+  // Extract address from Stripe shipping_details or billing_details
+  const shippingDetails = data.shipping_details?.address || data.billing_details?.address || {};
+  const shippingName = data.shipping_details?.name || data.customer_name || data.billing_details?.name || 'Unknown';
+  
   // Build order payload
   const orderPayload = {
     shopify_order_id: stripeId,
     shopify_order_number: order?.shopify_order_number || `#STR${Math.floor(Date.now() / 1000)}`,
     customer_email: finalEmail,
-    customer_name: data.customer_name || data.billing_details?.name || order?.customer_name || 'Unknown',
+    customer_name: shippingName,
     customer_phone: data.customer_phone || data.billing_details?.phone || order?.customer_phone || '',
     line_items: lineItems.length > 0 ? lineItems : order?.line_items || [],
     total_price: amount,
@@ -169,6 +173,15 @@ async function findOrCreateOrder(base44, event) {
     sync_status: 'synced',
     last_sync_at: new Date().toISOString(),
     customer_order_date: new Date(data.created * 1000).toISOString(),
+    // Address fields from Stripe
+    address_line1: shippingDetails.line1 || order?.address_line1 || '',
+    address_line2: shippingDetails.line2 || order?.address_line2 || '',
+    address_city: shippingDetails.city || order?.address_city || '',
+    address_state: shippingDetails.state || order?.address_state || '',
+    address_postal_code: shippingDetails.postal_code || order?.address_postal_code || '',
+    address_country: shippingDetails.country || order?.address_country || 'US',
+    address_last_synced_from: shippingDetails.line1 ? 'stripe_checkout' : (order?.address_last_synced_from || 'unknown'),
+    address_last_synced_at: new Date().toISOString(),
     // PART 7: Stripe linkage
     stripe_customer_id: customerId || order?.stripe_customer_id || null,
     stripe_checkout_session_id: event.type === 'checkout.session.completed' ? stripeId : order?.stripe_checkout_session_id || null,

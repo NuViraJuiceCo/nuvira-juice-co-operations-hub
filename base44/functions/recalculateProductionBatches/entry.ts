@@ -249,6 +249,14 @@ Deno.serve(async (req) => {
             delivery_date: deliveryDate.toISOString().split('T')[0],
             items: fulfillmentItems[fi] || [],
             status: 'pending',
+            // Inherit address from parent order (source of truth)
+            address_line1: order.address_line1 || '',
+            address_line2: order.address_line2 || '',
+            address_city: order.address_city || '',
+            address_state: order.address_state || '',
+            address_postal_code: order.address_postal_code || '',
+            address_country: order.address_country || 'US',
+            delivery_notes: order.delivery_notes || '',
           });
         }
         

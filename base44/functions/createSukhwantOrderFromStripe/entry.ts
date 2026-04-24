@@ -52,6 +52,9 @@ Deno.serve(async (req) => {
       }));
     }
 
+    // Extract address from Stripe shipping_details
+    const shippingDetails = sessionData.shipping_details?.address || sessionData.billing_details?.address || {};
+    
     // Create new order
     const orderPayload = {
       shopify_order_id: checkoutSessionId,
@@ -69,6 +72,15 @@ Deno.serve(async (req) => {
       sync_status: 'synced',
       last_sync_at: new Date().toISOString(),
       customer_order_date: sessionData.created ? new Date(sessionData.created * 1000).toISOString() : new Date().toISOString(),
+      // Address fields
+      address_line1: shippingDetails.line1 || '',
+      address_line2: shippingDetails.line2 || '',
+      address_city: shippingDetails.city || '',
+      address_state: shippingDetails.state || '',
+      address_postal_code: shippingDetails.postal_code || '',
+      address_country: shippingDetails.country || 'US',
+      address_last_synced_from: shippingDetails.line1 ? 'stripe_checkout' : 'manual',
+      address_last_synced_at: new Date().toISOString(),
       stripe_customer_id: sessionData.customer || null,
       stripe_checkout_session_id: checkoutSessionId,
       stripe_payment_intent_id: sessionData.payment_intent || null,

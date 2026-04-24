@@ -41,6 +41,46 @@
     "customer_phone": {
       "type": "string"
     },
+    "delivery_address": {
+      "type": "string",
+      "description": "DEPRECATED: use address_* fields instead. Full formatted address for display."
+    },
+    "address_line1": {
+      "type": "string",
+      "description": "Street address line 1"
+    },
+    "address_line2": {
+      "type": "string",
+      "description": "Street address line 2 (apt, suite, etc)"
+    },
+    "address_city": {
+      "type": "string",
+      "description": "City"
+    },
+    "address_state": {
+      "type": "string",
+      "description": "State / province"
+    },
+    "address_postal_code": {
+      "type": "string",
+      "description": "ZIP / postal code"
+    },
+    "address_country": {
+      "type": "string",
+      "description": "Country (e.g., US)"
+    },
+    "delivery_notes": {
+      "type": "string",
+      "description": "Special delivery instructions from customer"
+    },
+    "address_last_synced_from": {
+      "type": "string",
+      "description": "Source of address: stripe_checkout, stripe_customer, customer_app, manual, etc"
+    },
+    "address_last_synced_at": {
+      "type": "string",
+      "description": "ISO timestamp when address was last synced/updated"
+    },
     "line_items": {
       "type": "array",
       "items": {
@@ -105,6 +145,28 @@
               "delivered"
             ],
             "default": "pending"
+          },
+          "address_line1": {
+            "type": "string",
+            "description": "Delivery address - inherited from parent order at fulfillment generation"
+          },
+          "address_line2": {
+            "type": "string"
+          },
+          "address_city": {
+            "type": "string"
+          },
+          "address_state": {
+            "type": "string"
+          },
+          "address_postal_code": {
+            "type": "string"
+          },
+          "address_country": {
+            "type": "string"
+          },
+          "delivery_notes": {
+            "type": "string"
           }
         }
       }
@@ -118,9 +180,6 @@
         "pos"
       ],
       "default": "delivery"
-    },
-    "delivery_address": {
-      "type": "string"
     },
     "requested_delivery_date": {
       "type": "string"
@@ -237,6 +296,18 @@
     "repair_method": {
       "type": "string",
       "description": "Which repair method was used (e.g., canonical_checkout_session_lookup, event_replay)"
+    },
+    "delivery_photo_url": {
+      "type": "string"
+    },
+    "delivery_drop_location": {
+      "type": "string"
+    },
+    "delivered_by": {
+      "type": "string"
+    },
+    "delivered_at": {
+      "type": "string"
     }
   },
   "required": [

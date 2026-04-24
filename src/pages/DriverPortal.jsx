@@ -347,20 +347,51 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                 {order.contact_phone && <p className="text-xs font-semibold">{order.contact_phone}</p>}
               </div>
 
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Delivery Address</p>
+                <p className="text-xs">
+                  {(() => {
+                    // Fallback chain: fulfillment address → order address fields → old delivery_address
+                    if (order.address_line1) {
+                      return `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}`;
+                    }
+                    return order.delivery_address || '(address missing)';
+                  })()}
+                </p>
+                {!order.address_line1 && !order.delivery_address && (
+                  <p className="text-[10px] text-red-600 font-semibold">⚠ Missing address — flag for admin</p>
+                )}
+              </div>
+
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Items</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Items & Fulfillments</p>
                 {order.fulfillments && order.fulfillments.length > 0 ? (
                   <div className="space-y-3">
                     {order.fulfillments.map((fulfillment, fi) => (
                       <div key={fi} className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
-                        <p className="text-xs font-semibold text-blue-700 mb-1.5">
-                          Week {fulfillment.fulfillment_number} — {fulfillment.delivery_date}
-                        </p>
-                        <div className="space-y-1">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-xs font-semibold text-blue-700">
+                            Week {fulfillment.fulfillment_number} — {fulfillment.delivery_date}
+                          </p>
+                          {!fulfillment.address_line1 && (
+                            <span className="text-[9px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded">
+                              ⚠ NO ADDR
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-1 mb-1.5">
                           {fulfillment.items?.map((item, i) => (
                             <p key={i} className="text-xs text-blue-600">{item.title} × {item.quantity}</p>
                           ))}
                         </div>
+                        {fulfillment.address_line1 && (
+                          <p className="text-[10px] text-blue-600 border-t border-blue-200 pt-1 mt-1">
+                            📍 {fulfillment.address_line1}
+                            {fulfillment.address_line2 && <>, {fulfillment.address_line2}</>}
+                            <br />
+                            {fulfillment.address_city}, {fulfillment.address_state} {fulfillment.address_postal_code}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
