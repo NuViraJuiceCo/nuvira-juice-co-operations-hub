@@ -151,13 +151,14 @@ Deno.serve(async (req) => {
           shopify_order_id: orderId,
         });
 
-        const hubOrder = {
+        // Build order, but preserve existing data if incoming is empty
+        let hubOrder = {
           shopify_order_id: orderId || '',
           shopify_order_number: ord.shopify_order_number || ord.order_number || '',
           customer_email: ord.customer_email || '',
           customer_phone: ord.customer_phone || '',
           source_channel: ord.source_channel || ord.channel || 'online',
-          line_items: ord.line_items || ord.items || [],
+          line_items: ord.line_items && ord.line_items.length > 0 ? ord.line_items : (ord.items || []),
           fulfillment_method: ord.fulfillment_method || ord.fulfillment_type || 'delivery',
           delivery_address: ord.delivery_address || '',
           requested_delivery_date: ord.requested_delivery_date || ord.delivery_date || '',
@@ -176,11 +177,23 @@ Deno.serve(async (req) => {
         };
 
         if (existing && existing.length > 0) {
+         // Preserve critical fields from existing order if incoming data is empty
+         const existingData = existing[0];
+         if (!hubOrder.shopify_order_number && existingData.shopify_order_number) {
+           hubOrder.shopify_order_number = existingData.shopify_order_number;
+         }
+         if ((!hubOrder.line_items || hubOrder.line_items.length === 0) && existingData.line_items && existingData.line_items.length > 0) {
+           hubOrder.line_items = existingData.line_items;
+         }
+         if (!hubOrder.customer_name && existingData.customer_name) {
+           hubOrder.customer_name = existingData.customer_name;
+         }
+         
          await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, hubOrder);
-         results.push({ order_id: orderId, action: 'updated', order_number: ord.shopify_order_number });
+         results.push({ order_id: orderId, action: 'updated', order_number: hubOrder.shopify_order_number });
         } else {
          await base44.asServiceRole.entities.ShopifyOrder.create(hubOrder);
-         results.push({ order_id: orderId, action: 'created', order_number: ord.shopify_order_number });
+         results.push({ order_id: orderId, action: 'created', order_number: hubOrder.shopify_order_number });
         }
         } catch (err) {
         console.error(`[PULL-ORDERS] Failed to sync order ${ord.shopify_order_id}:`, err.message);
