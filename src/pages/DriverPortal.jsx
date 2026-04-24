@@ -561,19 +561,56 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
 // ─── Route Tab ──────────────────────────────────────────────────────────────
 
 function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]); // Default to today
   const [queuedOrders, setQueuedOrders] = useState(null);
   const [routeData, setRouteData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [showCalendar, setShowCalendar] = useState(false);
 
-  const loadQueue = async () => {
+  const getDateLabel = (dateStr) => {
+    const target = new Date(dateStr + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (target.getTime() === today.getTime()) return 'Today';
+    if (target.getTime() === tomorrow.getTime()) return 'Tomorrow';
+    if (target.getTime() === yesterday.getTime()) return 'Yesterday';
+    return format(target, 'MMM d');
+  };
+
+  const getQuickDates = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    return {
+      yesterday: yesterday.toISOString().split('T')[0],
+      today: today.toISOString().split('T')[0],
+      tomorrow: tomorrow.toISOString().split('T')[0],
+    };
+  };
+
+  const handleQuickDate = (quickDate) => {
+    const dates = getQuickDates();
+    setDate(dates[quickDate]);
+    setRouteData(null);
+  };
+
+  const loadQueue = async (selectedDate = date) => {
     setLoading(true);
     setRouteData(null);
     try {
-      const res = await base44.functions.invoke('optimizeDeliveryRoute', { date: date || undefined, optimize: false });
+      const res = await base44.functions.invoke('optimizeDeliveryRoute', { date: selectedDate || undefined, optimize: false });
       setQueuedOrders(res.data?.orders || []);
     } catch {
       toast.error('Failed to load delivery queue');
@@ -596,7 +633,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     }
   };
 
-  useEffect(() => { loadQueue(); }, [date]);
+  useEffect(() => { loadQueue(date); }, [date]);
 
   const handleMarkDelivered = async (order, proofPhotoUrl, dropLocation) => {
     setUpdatingId(order.id);
@@ -714,15 +751,59 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
   const routeReturnCount = todaysBagReturns.filter(r => r.verification_status === 'requested').length;
 
+  const quickDates = getQuickDates();
+
   return (
     <div className="pb-10">
-      <div className="px-4 pt-4 flex gap-2">
-        <input type="date" value={date} onChange={e => { setDate(e.target.value); setRouteData(null); }}
-          className="flex-1 bg-card border border-border text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary" />
-        <button onClick={loadQueue} disabled={loading}
-          className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center shrink-0">
-          <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
-        </button>
+      {/* Date Navigation */}
+      <div className="px-4 pt-4 space-y-3">
+        {/* Quick Date Tabs */}
+        <div className="flex gap-2">
+          <button onClick={() => handleQuickDate('yesterday')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors ${date === quickDates.yesterday ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground'}`}>
+            ← Previous
+          </button>
+          <button onClick={() => handleQuickDate('today')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors ${date === quickDates.today ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground'}`}>
+            📅 Today
+          </button>
+          <button onClick={() => handleQuickDate('tomorrow')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors ${date === quickDates.tomorrow ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-foreground'}`}>
+            Tomorrow →
+          </button>
+          <button onClick={() => setShowCalendar(!showCalendar)}
+            className="w-10 h-10 bg-card border border-border rounded-xl flex items-center justify-center hover:bg-secondary transition-colors">
+            <Clock className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        {/* Calendar & Date Input */}
+        {showCalendar && (
+          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-foreground">Select Delivery Date</p>
+              <button onClick={() => setShowCalendar(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <input type="date" value={date} onChange={e => { setDate(e.target.value); setShowCalendar(false); }}
+              className="w-full bg-background border border-border text-sm px-3 py-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary" />
+            <p className="text-[10px] text-muted-foreground">
+              Selected: <span className="font-semibold text-foreground">{getDateLabel(date)}</span>
+            </p>
+          </div>
+        )}
+
+        {/* Refresh Button & Current Date Label */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-foreground">
+            {getDateLabel(date)} Deliveries
+          </p>
+          <button onClick={() => loadQueue(date)} disabled={loading}
+            className="w-9 h-9 bg-secondary rounded-xl flex items-center justify-center hover:bg-secondary/80 transition-colors disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-4 divide-x divide-border border-y border-border bg-card mt-4">
