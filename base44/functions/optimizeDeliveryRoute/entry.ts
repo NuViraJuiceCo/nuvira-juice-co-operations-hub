@@ -19,9 +19,29 @@ Deno.serve(async (req) => {
     // Filter to orders for the selected date if provided
     let orders = allOrders;
     if (date) {
+      const selectedDate = new Date(date);
+      const cutoffDate = new Date(date);
+      cutoffDate.setDate(cutoffDate.getDate() - 1); // May 1st cutoff for May 2nd deliveries
+      const cutoffStr = cutoffDate.toISOString().split('T')[0];
+
       orders = allOrders.filter(o => {
-        const orderDate = o.assigned_delivery_date || o.requested_delivery_date || o.customer_order_date;
-        return orderDate && orderDate.startsWith(date);
+        // Check assigned delivery date first
+        if (o.assigned_delivery_date && o.assigned_delivery_date.startsWith(date)) {
+          return true;
+        }
+        // Check requested delivery date
+        if (o.requested_delivery_date && o.requested_delivery_date.startsWith(date)) {
+          return true;
+        }
+        // Include pre-order/new orders created up to and including the cutoff date
+        // These get assigned to the selected delivery date
+        if (o.production_status === 'new' || o.production_status === 'awaiting_production') {
+          const createdDate = o.customer_order_date || o.created_date;
+          if (createdDate && createdDate.substring(0, 10) <= cutoffStr) {
+            return true;
+          }
+        }
+        return false;
       });
     }
 
@@ -78,6 +98,7 @@ Deno.serve(async (req) => {
         contact_phone: o.customer_phone,
         delivery_address: o.delivery_address,
         items: o.line_items || [],
+        fulfillments: o.fulfillments || [],
         status: o.production_status === 'fulfilled' ? 'delivered' : o.production_status,
         delivery_photo_url: o.delivery_photo_url,
         delivery_drop_location: o.delivery_drop_location,
