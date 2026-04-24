@@ -130,7 +130,7 @@ export default function ProductionPlanning() {
                   type="date"
                   value={dateFrom}
                   onChange={e => setDateFrom(e.target.value)}
-                  className="w-44 bg-green-50 border-green-200"
+                  className="w-44 bg-green-50 border-green-200 text-black"
                 />
               </div>
               <div className="space-y-1">
@@ -139,7 +139,7 @@ export default function ProductionPlanning() {
                   type="date"
                   value={dateTo}
                   onChange={e => setDateTo(e.target.value)}
-                  className="w-44 bg-green-50 border-green-200"
+                  className="w-44 bg-green-50 border-green-200 text-black"
                 />
               </div>
               <div className="flex gap-2">
