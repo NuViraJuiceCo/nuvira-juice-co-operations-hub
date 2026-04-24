@@ -125,18 +125,22 @@ async function findOrCreateOrder(base44, event) {
   }
 
   // Extract line items if available
-  if (event.type === 'checkout.session.completed' && data.line_items) {
-    const itemsRes = await fetch(
-      `https://api.stripe.com/v1/checkout/sessions/${stripeId}/line_items?limit=100`,
-      { headers: { 'Authorization': `Bearer ${STRIPE_API_KEY}` } }
-    );
-    if (itemsRes.ok) {
-      const itemsData = await itemsRes.json();
-      lineItems = (itemsData.data || []).map(item => ({
-        title: item.description || 'Item',
-        quantity: item.quantity,
-        price: (item.amount_total || 0) / 100,
-      }));
+  if (event.type === 'checkout.session.completed') {
+    try {
+      const itemsRes = await fetch(
+        `https://api.stripe.com/v1/checkout/sessions/${stripeId}/line_items?limit=100`,
+        { headers: { 'Authorization': `Bearer ${STRIPE_API_KEY}` } }
+      );
+      if (itemsRes.ok) {
+        const itemsData = await itemsRes.json();
+        lineItems = (itemsData.data || []).map(item => ({
+          title: item.description || item.name || 'Item',
+          quantity: item.quantity,
+          price: (item.amount_total || 0) / 100,
+        }));
+      }
+    } catch (err) {
+      console.warn('[STRIPE-V2] Failed to fetch line items:', err.message);
     }
   }
 
