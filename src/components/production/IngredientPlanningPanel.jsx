@@ -375,17 +375,17 @@ export default function IngredientPlanningPanel({ dateData }) {
               {/* View toggle + Tabs */}
               <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                 {/* View toggle */}
-                <div className="flex gap-1 bg-muted/40 rounded-lg p-1 w-fit">
+                <div className="flex gap-1 bg-gray-200 rounded-lg p-1 w-fit">
                   <button
                     onClick={() => setView('demand')}
-                    className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${view === 'demand' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                    className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${view === 'demand' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     <Package className="h-3 w-3" />
                     Ingredient Demand
                   </button>
                   <button
                     onClick={() => setView('supplier')}
-                    className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${view === 'supplier' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                    className={`flex items-center gap-1.5 text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${view === 'supplier' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     <Boxes className="h-3 w-3" />
                     Supplier Order View
@@ -393,16 +393,16 @@ export default function IngredientPlanningPanel({ dateData }) {
                 </div>
 
                 {/* Tab selector */}
-                <div className="flex gap-1 bg-muted/40 rounded-lg p-1 w-fit">
+                <div className="flex gap-1 bg-gray-200 rounded-lg p-1 w-fit">
                   <button
                     onClick={() => setActiveTab('ingredients')}
-                    className={`text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${activeTab === 'ingredients' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                    className={`text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${activeTab === 'ingredients' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     All ({ingredients.length})
                   </button>
                   <button
                     onClick={() => setActiveTab('grocery')}
-                    className={`text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${activeTab === 'grocery' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                    className={`text-xs py-1.5 px-3 rounded-md font-medium transition-colors ${activeTab === 'grocery' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     Purchase List {purchaseCount > 0 ? `(${purchaseCount})` : '✓'}
                   </button>
