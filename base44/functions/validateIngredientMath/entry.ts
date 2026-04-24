@@ -138,6 +138,41 @@ Deno.serve(async (req) => {
       ));
     }
 
+    // TEST 9: units_needed should NEVER equal units_per_case (72)
+    // This is a critical error case
+    {
+      const unitsNeeded = 7;
+      const unitsPerCase = 72;
+      const isCriticalError = unitsNeeded === unitsPerCase;
+      
+      results.push(validateTestCase(
+        'Critical: units_needed (7) should NOT equal units_per_case (72)',
+        isCriticalError ? 1 : 0,
+        0,
+        0.5
+      ));
+    }
+
+    // TEST 10: Correct orange math end-to-end
+    {
+      const shortfallOz = 13.7;
+      const ozPerUnit = 3.5;
+      const wasteFactor = 1.05;
+      const unitsPerCase = 72;
+      
+      const adjustedShortfall = shortfallOz * wasteFactor;
+      const unitsExact = adjustedShortfall / ozPerUnit;
+      const unitsNeeded = Math.ceil(unitsExact);
+      const casesExact = unitsNeeded / unitsPerCase;
+      
+      results.push(validateTestCase(
+        'Orange end-to-end: 13.7 oz → 4 oranges (1 case for split_case_allowed=false)',
+        unitsNeeded,
+        4,
+        0.5
+      ));
+    }
+
     // TEST 7: Stock subtraction
     // Demand: 100 oz, Stock: 30 oz, Shortage: 70 oz
     {

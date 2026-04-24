@@ -56,16 +56,17 @@ function computePurchaseQty(shortfallOz, yieldConfig, ingredientName) {
   let casesExact = null;
   let casesNeeded = null;
 
-  if (unitsPerCase) {
+  if (unitsPerCase && unitsPerCase > 0) {
     casesExact = unitsNeeded / unitsPerCase;
     if (rounding === 'round_up_case') {
+      // Only snap units_needed if rounding rule is explicitly round_up_case
       casesNeeded = Math.ceil(casesExact);
-      unitsNeeded = casesNeeded * unitsPerCase; // snap to full case
+      // Keep units_needed as calculated above, don't override
     } else if (splitAllowed) {
       casesNeeded = Math.round(casesExact * 10) / 10; // allow partial case
     } else {
       casesNeeded = Math.ceil(casesExact); // must buy full cases
-      unitsNeeded = casesNeeded * unitsPerCase;
+      // Keep units_needed as calculated above, don't override
     }
   }
 
@@ -77,6 +78,11 @@ function computePurchaseQty(shortfallOz, yieldConfig, ingredientName) {
     if (ratioUnitsToOz > 10) {
       validationWarning = `Unit conversion seems high: ${unitsNeeded} ${yieldConfig.purchase_unit}s for ${Math.round(shortfallOz * 10) / 10} oz`;
     }
+  }
+
+  // CRITICAL AUDIT: If units_needed equals units_per_case, something is wrong
+  if (unitsNeeded === unitsPerCase && unitsPerCase > 10) {
+    validationWarning = `CRITICAL ERROR: units_needed (${unitsNeeded}) equals units_per_case (${unitsPerCase}) - this should never happen. Check yield configuration.`;
   }
 
   return {

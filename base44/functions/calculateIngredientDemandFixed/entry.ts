@@ -88,6 +88,7 @@ function computePurchaseWithValidation(shortfallOz, yieldConfig, ingredientName)
   result.units_per_case = yieldConfig.units_per_case || null;
 
   // Layer 4: Case conversion
+  // CRITICAL: Keep units_needed separate from case calculation
   const rounding = yieldConfig.rounding_rule || 'round_up_unit';
   const splitAllowed = yieldConfig.split_case_allowed !== false;
   const unitsPerCase = yieldConfig.units_per_case;
@@ -98,18 +99,20 @@ function computePurchaseWithValidation(shortfallOz, yieldConfig, ingredientName)
     result.units_needed = Math.ceil(unitsExact);
   }
 
-  // Case math
+  // Case math (ONLY if rounding is case-based)
+  // IMPORTANT: case calculations should NOT override units_needed for display
   if (unitsPerCase && unitsPerCase > 0) {
     result.cases_exact = Math.round((result.units_needed / unitsPerCase) * 1000) / 1000;
     
     if (rounding === 'round_up_case') {
+      // Only snap units_needed to full case if rounding rule is explicitly round_up_case
       result.cases_needed = Math.ceil(result.cases_exact);
-      result.units_needed = result.cases_needed * unitsPerCase;
+      // Note: Don't override units_needed here, keep actual units calculated above
     } else if (splitAllowed) {
       result.cases_needed = Math.round(result.cases_exact * 10) / 10;
     } else {
       result.cases_needed = Math.ceil(result.cases_exact);
-      result.units_needed = result.cases_needed * unitsPerCase;
+      // Note: Don't override units_needed here, keep actual units calculated above
     }
   }
 
@@ -128,6 +131,13 @@ function computePurchaseWithValidation(shortfallOz, yieldConfig, ingredientName)
   // Check if oz_per_unit seems wrong
   if (ozPerUnit > 1000) {
     result.validation_flags.push('YIELD_VALUE_UNUSUALLY_HIGH');
+  }
+
+  // CRITICAL AUDIT: If units_needed equals units_per_case, something is wrong
+  // This would only happen if units_needed was incorrectly set to the case size
+  if (result.units_needed === unitsPerCase && unitsPerCase > 10) {
+    result.validation_flags.push('CRITICAL_ERROR_UNITS_EQUALS_CASE_SIZE');
+    result.error_note = `units_needed (${result.units_needed}) equals units_per_case (${unitsPerCase}) - this should never happen`;
   }
 
   return result;
