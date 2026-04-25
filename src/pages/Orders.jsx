@@ -276,7 +276,8 @@ export default function Orders() {
                 </th>
                 {[
                 { label: "Order ID", col: "shopify_order_number" },
-                { label: "Customer", col: "customer_email" },
+                { label: "Name", col: "customer_name" },
+                { label: "Email", col: "customer_email" },
                 { label: "Channel", col: "source_channel" },
                 { label: "Status", col: "production_status" },
                 { label: "Payment", col: "payment_status" },
@@ -307,7 +308,10 @@ export default function Orders() {
                       <span className="text-sm font-medium text-primary">{order.shopify_order_number}</span>
                     </td>
                     <td className="px-5 py-3.5">
-                      <p className="text-sm font-medium text-foreground">{order.customer_email}</p>
+                      <p className="text-sm font-medium text-foreground">{order.customer_name || '—'}</p>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <p className="text-sm text-muted-foreground">{order.customer_email}</p>
                       <p className="text-xs text-muted-foreground">{order.customer_phone}</p>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.source_channel}</td>
@@ -320,7 +324,7 @@ export default function Orders() {
                       ${order.total_price?.toFixed(2)}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
-                      {moment(order.customer_order_date).format("MMM D, h:mm A")}
+                      {moment(order.customer_order_date).utcOffset(-5).format("MMM D, h:mm A")} CT
                     </td>
                     <td className="px-5 py-3.5 text-center w-20">
                      <div className="flex items-center justify-center gap-2 flex-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -342,7 +346,7 @@ export default function Orders() {
                   </tr>
                   {expandedOrderId === order.id && order.line_items && order.line_items.length > 0 && (
                     <tr className="border-b border-border/50 last:border-0 bg-muted/20">
-                      <td colSpan="10" className="px-5 py-4">
+                      <td colSpan="11" className="px-5 py-4">
                         <div className="space-y-4">
                           {order.address_line1 && (
                             <div>
