@@ -1,7 +1,27 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import Stripe from 'npm:stripe@14.21.0';
 
 const CUSTOMER_APP_API = Deno.env.get('CUSTOMER_APP_API_URL');
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
+const stripe = new Stripe(Deno.env.get('STRIPE_API_KEY'), { apiVersion: '2023-10-16' });
+
+async function fetchNameFromStripe(ord) {
+  try {
+    if (ord.stripe_checkout_session_id) {
+      const session = await stripe.checkout.sessions.retrieve(ord.stripe_checkout_session_id, { expand: ['customer'] });
+      const name = session.customer_details?.name || session.customer?.name;
+      if (name) return name;
+    }
+    if (ord.stripe_payment_intent_id) {
+      const pi = await stripe.paymentIntents.retrieve(ord.stripe_payment_intent_id, { expand: ['customer'] });
+      const name = pi.customer?.name || pi.shipping?.name;
+      if (name) return name;
+    }
+  } catch (err) {
+    console.log(`[PULL-ORDERS] Stripe name lookup failed for ${ord.stripe_checkout_session_id || ord.stripe_payment_intent_id}: ${err.message}`);
+  }
+  return null;
+}
 
 Deno.serve(async (req) => {
   try {
@@ -122,13 +142,18 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Build order, but preserve existing data if incoming is empty
-        // Build full customer name from available fields
-        const customerName = ord.customer_name ||
+        // Build full customer name — try payload first, then Stripe
+        let customerName = ord.customer_name ||
           (ord.first_name || ord.last_name ? `${ord.first_name || ''} ${ord.last_name || ''}`.trim() : null) ||
-          (ord.full_name) ||
-          null;
+          ord.full_name || null;
 
+        // If no name in payload, try to fetch from Stripe
+        if (!customerName && (ord.stripe_checkout_session_id || ord.stripe_payment_intent_id)) {
+          customerName = await fetchNameFromStripe(ord);
+          if (customerName) console.log(`[PULL-ORDERS] Got name from Stripe for ${orderId}: ${customerName}`);
+        }
+
+        // Also preserve existing name if we still have nothing
         let hubOrder = {
           shopify_order_id: orderId || '',
           shopify_order_number: ord.shopify_order_number || ord.order_number || '',
@@ -163,9 +188,34 @@ Deno.serve(async (req) => {
          if ((!hubOrder.line_items || hubOrder.line_items.length === 0) && existingData.line_items && existingData.line_items.length > 0) {
            hubOrder.line_items = existingData.line_items;
          }
-         // Preserve existing name only if incoming has no name at all
+         // Always preserve existing name if incoming has no name
          if (!hubOrder.customer_name && existingData.customer_name) {
            hubOrder.customer_name = existingData.customer_name;
+         }
+         // Preserve phone if incoming is empty
+         if (!hubOrder.customer_phone && existingData.customer_phone) {
+           hubOrder.customer_phone = existingData.customer_phone;
+         }
+         // Preserve tags if incoming is empty
+         if ((!hubOrder.tags || hubOrder.tags.length === 0) && existingData.tags && existingData.tags.length > 0) {
+           hubOrder.tags = existingData.tags;
+         }
+         // Never downgrade production_status from a meaningful state back to 'new'
+         const meaningfulStatuses = ['awaiting_production','in_production','bottled','labeled','qc_checked','packed','in_cold_storage','assigned_for_pickup','assigned_for_delivery','fulfilled','canceled','refunded'];
+         if (hubOrder.production_status === 'new' && meaningfulStatuses.includes(existingData.production_status)) {
+           hubOrder.production_status = existingData.production_status;
+         }
+         // Preserve fulfillments if existing has them and incoming doesn't
+         if ((!hubOrder.fulfillments || hubOrder.fulfillments.length === 0) && existingData.fulfillments && existingData.fulfillments.length > 0) {
+           hubOrder.fulfillments = existingData.fulfillments;
+         }
+         // Preserve internal_notes if existing has content
+         if (!hubOrder.internal_notes && existingData.internal_notes) {
+           hubOrder.internal_notes = existingData.internal_notes;
+         }
+         // Preserve assigned_delivery_date
+         if (!hubOrder.assigned_delivery_date && existingData.assigned_delivery_date) {
+           hubOrder.assigned_delivery_date = existingData.assigned_delivery_date;
          }
          
          await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, hubOrder);
