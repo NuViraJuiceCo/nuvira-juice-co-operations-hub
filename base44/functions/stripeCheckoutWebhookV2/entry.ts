@@ -90,43 +90,61 @@ async function findOrCreateOrder(base44, event) {
   let order = null;
   let created = false;
 
-  // Determine what object we're dealing with
-  let objectType = event.type.split('.')[0]; // e.g., checkout.session -> checkout
   let stripeId = data.id;
   let customerId = data.customer;
   let amount = data.amount_total || data.amount || 0;
   let email = data.customer_email || data.billing_details?.email || '';
   let lineItems = [];
 
+  // HARD STOP: Never process an event without a valid email — this is the root cause of #unknown orders
+  if (!email || email === 'unknown@unknown.com') {
+    console.warn('[STRIPE-V2] SKIPPING event', event.id, '— no email in Stripe payload. Refusing to create/update any order.');
+    return null;
+  }
+
   // Canonicalize to payment amount in dollars
   if (event.type.includes('checkout') || event.type.includes('payment_intent')) {
     amount = amount / 100;
   }
 
-  // Try to match by Stripe identifiers in order of precedence
-  const searchOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
-    customer_email: email,
+  // Try to match ONLY by Stripe ID fields — NEVER by email alone (too risky, causes overwrites)
+  // Search by Stripe object ID across checkout_session, payment_intent, invoice fields
+  let stripeMatchedOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
+    stripe_checkout_session_id: stripeId,
   });
+  if (!stripeMatchedOrders || stripeMatchedOrders.length === 0) {
+    stripeMatchedOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
+      stripe_payment_intent_id: stripeId,
+    });
+  }
 
-  if (searchOrders && searchOrders.length > 0) {
-    // Find order matching any Stripe ID field
-    order = searchOrders.find(o => 
-      o.stripe_customer_id === customerId ||
-      o.stripe_checkout_session_id === stripeId ||
-      o.stripe_payment_intent_id === stripeId ||
-      o.stripe_invoice_id === stripeId
-    );
+  if (stripeMatchedOrders && stripeMatchedOrders.length > 0) {
+    order = stripeMatchedOrders[0];
+  }
 
-    // If no exact match, use the most recent one (likely the one we're updating)
-    // GUARD: Never pick a subscription order as a fallback match — subscription orders are managed separately
-    if (!order) {
-      const nonSubOrders = searchOrders.filter(o => o.source_channel !== 'subscription');
-      if (nonSubOrders.length > 0) {
-        nonSubOrders.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-        order = nonSubOrders[0];
+  // If no Stripe ID match, search by email — but ONLY match non-subscription, non-unknown orders
+  if (!order) {
+    const emailOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
+      customer_email: email,
+    });
+    if (emailOrders && emailOrders.length > 0) {
+      const eligible = emailOrders.filter(o =>
+        o.source_channel !== 'subscription' &&
+        o.shopify_order_id !== 'base44_unknown' &&
+        o.shopify_order_number !== '#UNKNOWN' &&
+        o.shopify_order_number !== '#unknown'
+      );
+      if (eligible.length > 0) {
+        eligible.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        order = eligible[0];
       }
-      // If all orders for this email are subscriptions, do not match — create a new order instead
     }
+  }
+
+  // GUARD: Never touch a subscription order via this webhook path
+  if (order && order.source_channel === 'subscription') {
+    console.warn('[STRIPE-V2] SKIPPING event', event.id, '— matched order is a subscription, will not overwrite.');
+    return null;
   }
 
   // Extract line items if available
@@ -149,13 +167,7 @@ async function findOrCreateOrder(base44, event) {
     }
   }
 
-  // CRITICAL: Never create/downgrade to unknown email. Preserve existing order email.
-  const finalEmail = email && email !== 'unknown@unknown.com' ? email : order?.customer_email;
-  if (!finalEmail) {
-    // Skip this event—cannot process without email linkage
-    console.warn('[STRIPE-V2] Skipping event', event.id, '— no email found in Stripe object or existing order');
-    return null;
-  }
+  const finalEmail = email;
 
   // Extract address from Stripe shipping_details or billing_details
   const shippingDetails = data.shipping_details?.address || data.billing_details?.address || {};
