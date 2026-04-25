@@ -10,18 +10,10 @@ const TOOLS = [
     group: 'Subscription Orders',
     items: [
       {
-        id: 'createSukhwantOrderFromStripe',
-        label: 'Rebuild Sukhwant Kahlon\'s Order from Stripe',
-        description: 'Reconstructs the missing subscription order for Sukhwant Kahlon directly from Stripe data.',
-        fn: 'createSukhwantOrderFromStripe',
-        payload: {},
-        inputs: [],
-      },
-      {
-        id: 'restoreSukhwantOrder',
-        label: 'Restore Sukhwant Order (alternate)',
-        description: 'Alternate recovery path for Sukhwant\'s order.',
-        fn: 'restoreSukhwantOrder',
+        id: 'rebuildAllSubscriptionOrders',
+        label: 'Rebuild All Subscription Orders from Stripe',
+        description: 'Scans every Stripe subscription and creates or updates the matching order in the hub. Safe to run anytime — will not overwrite production status or fulfillments.',
+        fn: 'rebuildAllSubscriptionOrders',
         payload: {},
         inputs: [],
       },
