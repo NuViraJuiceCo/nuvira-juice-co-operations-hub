@@ -243,8 +243,15 @@ Deno.serve(async (req) => {
     }
 
     // Load all active orders and bundles
-    const [allOrders, allBundles, allBatches] = await Promise.all([
-      base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500),
+    // Only process orders with complete/verified data_quality_status
+    const allOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
+      "$or": [
+        { "data_quality_status": "complete" },
+        { "data_quality_status": "verified" }
+      ]
+    }, "-created_date", 500) || [];
+    
+    const [allBundles, allBatches] = await Promise.all([
       base44.asServiceRole.entities.Bundle.list('-updated_date', 100),
       base44.asServiceRole.entities.ProductionBatch.list('-production_date', 500),
     ]);
