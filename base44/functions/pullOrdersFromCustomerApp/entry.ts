@@ -17,8 +17,19 @@ async function fetchNameFromStripe(ord) {
       const name = pi.customer?.name || pi.shipping?.name;
       if (name) return name;
     }
+    if (ord.stripe_subscription_id) {
+      const sub = await stripe.subscriptions.retrieve(ord.stripe_subscription_id, { expand: ['customer'] });
+      const name = sub.customer?.name;
+      if (name) return name;
+    }
+    // Last resort: look up by email in Stripe (catches subscription orders with no IDs)
+    if (ord.customer_email) {
+      const customers = await stripe.customers.list({ email: ord.customer_email, limit: 1 });
+      const name = customers.data[0]?.name;
+      if (name) return name;
+    }
   } catch (err) {
-    console.log(`[PULL-ORDERS] Stripe name lookup failed for ${ord.stripe_checkout_session_id || ord.stripe_payment_intent_id}: ${err.message}`);
+    console.log(`[PULL-ORDERS] Stripe name lookup failed for ${ord.customer_email}: ${err.message}`);
   }
   return null;
 }
@@ -147,8 +158,8 @@ Deno.serve(async (req) => {
           (ord.first_name || ord.last_name ? `${ord.first_name || ''} ${ord.last_name || ''}`.trim() : null) ||
           ord.full_name || null;
 
-        // If no name in payload, try to fetch from Stripe
-        if (!customerName && (ord.stripe_checkout_session_id || ord.stripe_payment_intent_id)) {
+        // If no name in payload, try to fetch from Stripe (including email lookup for subscription orders)
+        if (!customerName && (ord.stripe_checkout_session_id || ord.stripe_payment_intent_id || ord.stripe_subscription_id || ord.customer_email)) {
           customerName = await fetchNameFromStripe(ord);
           if (customerName) console.log(`[PULL-ORDERS] Got name from Stripe for ${orderId}: ${customerName}`);
         }
