@@ -112,10 +112,15 @@ Deno.serve(async (req) => {
            }
          }
 
-        // Check if exists in hub
-        const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({
+        // Check if exists in hub — also check with base44_ prefix variant to avoid duplicates
+        let existing = await base44.asServiceRole.entities.ShopifyOrder.filter({
           shopify_order_id: orderId,
         });
+        if (!existing || existing.length === 0) {
+          existing = await base44.asServiceRole.entities.ShopifyOrder.filter({
+            shopify_order_id: `base44_${orderId}`,
+          });
+        }
 
         // Build order, but preserve existing data if incoming is empty
         // Build full customer name from available fields
