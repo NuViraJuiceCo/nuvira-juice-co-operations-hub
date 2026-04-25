@@ -127,21 +127,36 @@ Deno.serve(async (req) => {
         }
         processedIds.add(orderId);
 
+        // GUARD: Never touch subscription orders that were manually created or synced from Stripe.
+        // If a subscription order already exists for this email with source_channel=subscription,
+        // skip this incoming record entirely — the hub copy is the source of truth.
+        if (ord.source_channel === 'subscription' || ord.channel === 'subscription') {
+          const existingSubOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
+            customer_email: ord.customer_email || '',
+            source_channel: 'subscription',
+          });
+          if (existingSubOrders && existingSubOrders.length > 0) {
+            console.log(`[PULL-ORDERS] SKIPPING subscription order for ${ord.customer_email} — hub copy already exists, will not overwrite.`);
+            results.push({ order_id: orderId, action: 'skipped', reason: 'subscription_protected' });
+            continue;
+          }
+        }
+
         // Check for existing duplicates and delete all older versions before upserting
-         // But skip if this is a Stripe subscription (don't delete webhook orders)
-         if (!orderId.startsWith('sub_')) {
-           const existingDuplicates = await base44.asServiceRole.entities.ShopifyOrder.filter({
-             shopify_order_id: orderId,
-           });
-           if (existingDuplicates && existingDuplicates.length > 0) {
-             const sorted = existingDuplicates.sort((a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date));
-             // Keep the first (newest), delete the rest
-             for (let i = 1; i < sorted.length; i++) {
-               console.log(`[PULL-ORDERS] Deleting duplicate ${orderId}: ${sorted[i].id}`);
-               await base44.asServiceRole.entities.ShopifyOrder.delete(sorted[i].id);
-             }
-           }
-         }
+        // But skip if this is a Stripe subscription (don't delete webhook orders)
+        if (!orderId.startsWith('sub_')) {
+          const existingDuplicates = await base44.asServiceRole.entities.ShopifyOrder.filter({
+            shopify_order_id: orderId,
+          });
+          if (existingDuplicates && existingDuplicates.length > 0) {
+            const sorted = existingDuplicates.sort((a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date));
+            // Keep the first (newest), delete the rest
+            for (let i = 1; i < sorted.length; i++) {
+              console.log(`[PULL-ORDERS] Deleting duplicate ${orderId}: ${sorted[i].id}`);
+              await base44.asServiceRole.entities.ShopifyOrder.delete(sorted[i].id);
+            }
+          }
+        }
 
         // Check if exists in hub — also check with base44_ prefix variant to avoid duplicates
         let existing = await base44.asServiceRole.entities.ShopifyOrder.filter({

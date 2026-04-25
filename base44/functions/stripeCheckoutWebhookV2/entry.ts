@@ -118,9 +118,14 @@ async function findOrCreateOrder(base44, event) {
     );
 
     // If no exact match, use the most recent one (likely the one we're updating)
+    // GUARD: Never pick a subscription order as a fallback match — subscription orders are managed separately
     if (!order) {
-      searchOrders.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-      order = searchOrders[0];
+      const nonSubOrders = searchOrders.filter(o => o.source_channel !== 'subscription');
+      if (nonSubOrders.length > 0) {
+        nonSubOrders.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+        order = nonSubOrders[0];
+      }
+      // If all orders for this email are subscriptions, do not match — create a new order instead
     }
   }
 
