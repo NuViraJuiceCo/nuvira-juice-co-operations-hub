@@ -426,7 +426,13 @@ Deno.serve(async (req) => {
       }
 
       for (const item of order.line_items) {
-        const itemTitle = (item.title || '').trim();
+        let itemTitle = (item.title || '').trim();
+        
+        // CRITICAL FIX: Strip Stripe's quantity prefix (e.g., "1 × Monthly Ritual (at $144.00 / month)" → "Monthly Ritual")
+        itemTitle = itemTitle.replace(/^\d+\s*×\s*/, '').trim(); // Remove "1 × " prefix
+        itemTitle = itemTitle.replace(/\s*\(at\s+\$[\d.]+\s*\/\s*\w+\)/i, '').trim(); // Remove "(at $144.00 / month)"
+        itemTitle = itemTitle.replace(/\s*\(\$[\d.,]+.*?\)/i, '').trim(); // Generic price suffix removal
+        
         const totalQty = Number(item.quantity) || 0;
         if (totalQty <= 0 || !itemTitle) continue;
 
