@@ -1,0 +1,112 @@
+{
+  "name": "OrderReviewQueue",
+  "type": "object",
+  "properties": {
+    "incident_type": {
+      "type": "string",
+      "enum": [
+        "unknown_order_attempt",
+        "incomplete_payload",
+        "subscription_downgrade_attempt",
+        "duplicate_event",
+        "stale_update",
+        "missing_subscription_metadata",
+        "recovery_needs_review",
+        "zero_total_with_items",
+        "missing_customer_info",
+        "overwrite_rejection",
+        "source_conflict"
+      ],
+      "description": "Category of review issue"
+    },
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email address"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Customer name from order"
+    },
+    "existing_order_id": {
+      "type": "string",
+      "description": "ID of existing order if matched"
+    },
+    "existing_order_number": {
+      "type": "string",
+      "description": "Order number of existing record"
+    },
+    "existing_order_type": {
+      "type": "string",
+      "enum": [
+        "one_time",
+        "subscription",
+        "subscription_delivery",
+        "recovery_pending"
+      ],
+      "description": "Type of existing order if any"
+    },
+    "incoming_payload": {
+      "type": "object",
+      "description": "The incoming order data that was rejected"
+    },
+    "incoming_source": {
+      "type": "string",
+      "enum": [
+        "stripe_webhook",
+        "customer_app",
+        "manual_recovery",
+        "scheduled_sync"
+      ],
+      "description": "Source of incoming data"
+    },
+    "issue_description": {
+      "type": "string",
+      "description": "Human-readable description of the issue"
+    },
+    "recommended_action": {
+      "type": "string",
+      "enum": [
+        "merge",
+        "reject",
+        "recover_from_stripe",
+        "manual_review",
+        "quarantine"
+      ],
+      "description": "Recommended action for admin"
+    },
+    "admin_notes": {
+      "type": "string",
+      "description": "Admin notes/decision on the queue item"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "reviewed",
+        "resolved",
+        "escalated"
+      ],
+      "default": "pending",
+      "description": "Status of this review queue item"
+    },
+    "resolved_action": {
+      "type": "string",
+      "description": "What action was taken to resolve"
+    },
+    "resolved_at": {
+      "type": "string",
+      "description": "ISO timestamp when resolved"
+    },
+    "resolved_by": {
+      "type": "string",
+      "description": "User who resolved this item"
+    }
+  },
+  "required": [
+    "incident_type",
+    "customer_email",
+    "incoming_source",
+    "issue_description",
+    "status"
+  ]
+}

@@ -147,6 +147,32 @@ async function findOrCreateOrder(base44, event) {
     return null;
   }
 
+  // GUARD: Detect if this checkout was a subscription checkout
+  let isSubscriptionCheckout = false;
+  if (event.type === 'checkout.session.completed') {
+    try {
+      const session = await fetch(`https://api.stripe.com/v1/checkout/sessions/${stripeId}`, {
+        headers: { 'Authorization': `Bearer ${STRIPE_API_KEY}` }
+      });
+      if (session.ok) {
+        const sessionData = await session.json();
+        isSubscriptionCheckout = sessionData.mode === 'subscription';
+        if (isSubscriptionCheckout && !data.subscription) {
+          // The subscription may not be in the initial event; will be populated by future events
+          console.log(`[STRIPE-V2] Detected subscription checkout mode for session ${stripeId}`);
+        }
+      }
+    } catch (err) {
+      console.warn('[STRIPE-V2] Could not detect checkout mode:', err.message);
+    }
+  }
+
+  // If this is a subscription checkout but no subscription ID yet, skip and wait for subscription event
+  if (isSubscriptionCheckout && !data.subscription && !order?.stripe_subscription_id) {
+    console.warn('[STRIPE-V2] SKIPPING subscription checkout event', event.id, '— subscription not yet populated. Will process when invoice/subscription events arrive.');
+    return null;
+  }
+
   // Extract line items if available
   if (event.type === 'checkout.session.completed') {
     try {

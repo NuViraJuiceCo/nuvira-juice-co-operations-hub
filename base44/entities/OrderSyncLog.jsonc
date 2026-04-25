@@ -1,0 +1,114 @@
+{
+  "name": "OrderSyncLog",
+  "type": "object",
+  "properties": {
+    "sync_timestamp": {
+      "type": "string",
+      "description": "ISO timestamp when sync occurred"
+    },
+    "sync_source": {
+      "type": "string",
+      "enum": [
+        "stripe_webhook",
+        "customer_app_pull",
+        "manual_recovery",
+        "scheduled_rebuild",
+        "repair_worker"
+      ],
+      "description": "Source of the sync operation"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Type of event (e.g., checkout.session.completed, invoice.paid)"
+    },
+    "stripe_event_id": {
+      "type": "string",
+      "description": "Stripe event ID if from webhook"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Hub order ID affected"
+    },
+    "order_number": {
+      "type": "string",
+      "description": "Order number"
+    },
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "created",
+        "updated",
+        "skipped",
+        "rejected",
+        "quarantined"
+      ],
+      "description": "Action taken"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Reason for action"
+    },
+    "fields_updated": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of fields that were updated"
+    },
+    "fields_rejected": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of fields that were rejected from the incoming payload"
+    },
+    "incoming_data_completeness": {
+      "type": "object",
+      "properties": {
+        "has_customer_name": {
+          "type": "boolean"
+        },
+        "has_email": {
+          "type": "boolean"
+        },
+        "has_line_items": {
+          "type": "boolean"
+        },
+        "has_total": {
+          "type": "boolean"
+        },
+        "has_address": {
+          "type": "boolean"
+        },
+        "has_stripe_subscription_id": {
+          "type": "boolean"
+        },
+        "total_price": {
+          "type": "number"
+        },
+        "line_items_count": {
+          "type": "number"
+        }
+      },
+      "description": "Completeness check of incoming payload"
+    },
+    "success": {
+      "type": "boolean",
+      "description": "Whether sync succeeded"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if sync failed"
+    }
+  },
+  "required": [
+    "sync_timestamp",
+    "sync_source",
+    "action",
+    "success"
+  ]
+}

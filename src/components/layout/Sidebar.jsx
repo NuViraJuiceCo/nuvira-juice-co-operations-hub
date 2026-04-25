@@ -3,7 +3,7 @@ import {
   LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, LogOut,
   ShoppingCart, Factory, Truck, CalendarDays, Package, Users,
   ShieldCheck, Wrench, CalendarCheck, Handshake, ClipboardList,
-  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings, Gift, Activity, FlaskConical, Zap,
+  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings, Gift, Activity, FlaskConical, Zap, AlertCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
@@ -36,6 +36,7 @@ const navGroups = [
     label: "Admin",
     items: [
       { path: "/audit-logs", label: "Audit Logs", icon: ScrollText },
+      { path: "/order-review-queue", label: "Order Review Queue", icon: AlertCircle },
       { path: "/report-scheduler", label: "Reports", icon: FileBarChart },
       { path: "/settings", label: "Settings", icon: Settings },
       { path: "/users", label: "User Management", icon: UserCog },

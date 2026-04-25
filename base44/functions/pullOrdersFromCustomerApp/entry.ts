@@ -127,17 +127,33 @@ Deno.serve(async (req) => {
         }
         processedIds.add(orderId);
 
-        // GUARD: Never touch subscription orders that were manually created or synced from Stripe.
-        // If a subscription order already exists for this email with source_channel=subscription,
-        // skip this incoming record entirely — the hub copy is the source of truth.
-        if (ord.source_channel === 'subscription' || ord.channel === 'subscription') {
-          const existingSubOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
-            customer_email: ord.customer_email || '',
-            source_channel: 'subscription',
+        // GUARD: CRITICAL PROTECTION — Never overwrite subscription orders with one-time orders
+        // First, check if EXISTING order is a subscription
+        let existingOrder = null;
+        if (existing && existing.length > 0) {
+          existingOrder = existing[0];
+        }
+
+        if (existingOrder && existingOrder.source_channel === 'subscription') {
+          // The existing order is a subscription. Never downgrade it to one-time.
+          // This is a critical guard against the Sukhwant Kahlon bug.
+          console.log(`[PULL-ORDERS] ⛔ BLOCKING: Existing order ${orderId} is a SUBSCRIPTION. Refusing to overwrite with incoming ${ord.source_channel || 'online'} channel.`);
+          results.push({
+            order_id: orderId,
+            action: 'rejected',
+            reason: 'subscription_protection_active',
+            incoming_source_channel: ord.source_channel || 'online',
+            existing_source_channel: 'subscription',
           });
-          if (existingSubOrders && existingSubOrders.length > 0) {
-            console.log(`[PULL-ORDERS] SKIPPING subscription order for ${ord.customer_email} — hub copy already exists, will not overwrite.`);
-            results.push({ order_id: orderId, action: 'skipped', reason: 'subscription_protected' });
+          continue;
+        }
+
+        // Second, check if INCOMING order claims to be a subscription
+        if (ord.source_channel === 'subscription' || ord.channel === 'subscription') {
+          // If incoming is subscription but existing hub order isn't, that's also suspicious
+          if (existingOrder && existingOrder.source_channel !== 'subscription') {
+            console.log(`[PULL-ORDERS] SKIPPING: Incoming claims subscription but existing is ${existingOrder.source_channel}. Let Stripe webhook handle subscription orders.`);
+            results.push({ order_id: orderId, action: 'skipped', reason: 'subscription_routed_to_stripe_webhook' });
             continue;
           }
         }
