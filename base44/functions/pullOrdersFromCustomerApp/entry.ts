@@ -118,10 +118,17 @@ Deno.serve(async (req) => {
         });
 
         // Build order, but preserve existing data if incoming is empty
+        // Build full customer name from available fields
+        const customerName = ord.customer_name ||
+          (ord.first_name || ord.last_name ? `${ord.first_name || ''} ${ord.last_name || ''}`.trim() : null) ||
+          (ord.full_name) ||
+          null;
+
         let hubOrder = {
           shopify_order_id: orderId || '',
           shopify_order_number: ord.shopify_order_number || ord.order_number || '',
           customer_email: ord.customer_email || '',
+          customer_name: customerName,
           customer_phone: ord.customer_phone || '',
           source_channel: ord.source_channel || ord.channel || 'online',
           line_items: ord.line_items && ord.line_items.length > 0 ? ord.line_items : (ord.items || []),
@@ -151,6 +158,7 @@ Deno.serve(async (req) => {
          if ((!hubOrder.line_items || hubOrder.line_items.length === 0) && existingData.line_items && existingData.line_items.length > 0) {
            hubOrder.line_items = existingData.line_items;
          }
+         // Preserve existing name only if incoming has no name at all
          if (!hubOrder.customer_name && existingData.customer_name) {
            hubOrder.customer_name = existingData.customer_name;
          }
