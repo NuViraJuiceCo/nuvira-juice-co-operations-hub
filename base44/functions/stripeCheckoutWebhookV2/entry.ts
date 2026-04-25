@@ -161,6 +161,10 @@ async function findOrCreateOrder(base44, event) {
   const shippingDetails = data.shipping_details?.address || data.billing_details?.address || {};
   const shippingName = data.shipping_details?.name || data.customer_name || data.billing_details?.name || 'Unknown';
   
+  // Detect if this checkout was for a subscription
+  const isSubscription = !!(data.subscription || order?.source_channel === 'subscription');
+  const subscriptionId = data.subscription || order?.stripe_subscription_id || null;
+
   // Build order payload
   const orderPayload = {
     shopify_order_id: stripeId,
@@ -172,7 +176,7 @@ async function findOrCreateOrder(base44, event) {
     total_price: amount,
     subtotal: amount,
     payment_status: data.payment_status === 'paid' ? 'paid' : 'pending',
-    source_channel: 'online',
+    source_channel: isSubscription ? 'subscription' : (order?.source_channel || 'online'),
     fulfillment_method: 'delivery',
     production_status: order?.production_status || 'new',
     sync_status: 'synced',
@@ -192,7 +196,7 @@ async function findOrCreateOrder(base44, event) {
     stripe_checkout_session_id: event.type === 'checkout.session.completed' ? stripeId : order?.stripe_checkout_session_id || null,
     stripe_payment_intent_id: data.payment_intent || order?.stripe_payment_intent_id || null,
     stripe_invoice_id: order?.stripe_invoice_id || null,
-    stripe_subscription_id: data.subscription || order?.stripe_subscription_id || null,
+    stripe_subscription_id: subscriptionId,
     stripe_event_id_applied: event.id,
   };
 

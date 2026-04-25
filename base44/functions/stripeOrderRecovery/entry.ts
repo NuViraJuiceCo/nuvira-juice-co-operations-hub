@@ -83,21 +83,48 @@ async function recoverSession(base44, sessionId) {
       price: (item.price?.unit_amount || 0) / 100,
     }));
 
+    // Detect if this session is linked to a subscription
+    const isSubscription = !!session.subscription;
+    let stripeSubscriptionId = null;
+    let stripeCustomerId = session.customer || null;
+
+    if (isSubscription) {
+      stripeSubscriptionId = typeof session.subscription === 'string'
+        ? session.subscription
+        : session.subscription?.id;
+    }
+
+    // Extract address from Stripe shipping_details or customer_details
+    const addr = session.shipping_details?.address || session.customer_details?.address || {};
+    const customerName = session.shipping_details?.name || session.customer_details?.name || '';
+
     // Create order
     const order = await base44.asServiceRole.entities.ShopifyOrder.create({
-      shopify_order_id: sessionId,
-      shopify_order_number: `#STRIPE-${sessionId.slice(-8).toUpperCase()}`,
+      shopify_order_id: isSubscription && stripeSubscriptionId ? stripeSubscriptionId : sessionId,
+      shopify_order_number: isSubscription && stripeSubscriptionId
+        ? `#SUB-${stripeSubscriptionId.replace('sub_', '').slice(0, 8).toUpperCase()}`
+        : `#STRIPE-${sessionId.slice(-8).toUpperCase()}`,
       customer_email: session.customer_details?.email || 'unknown@stripe.local',
       customer_phone: session.customer_details?.phone || '',
-      customer_name: session.customer_details?.name || '',
+      customer_name: customerName,
       line_items: items,
       subtotal: (session.amount_subtotal || 0) / 100,
       total_price: (session.amount_total || 0) / 100,
-      source_channel: 'online',
-      fulfillment_method: 'shipping',
+      source_channel: isSubscription ? 'subscription' : 'online',
+      fulfillment_method: 'delivery',
       payment_status: 'paid',
       production_status: 'new',
       sync_status: 'synced',
+      source_type: isSubscription ? 'stripe_subscription' : 'stripe_checkout',
+      stripe_checkout_session_id: sessionId,
+      stripe_subscription_id: stripeSubscriptionId,
+      stripe_customer_id: stripeCustomerId,
+      address_line1: addr.line1 || '',
+      address_line2: addr.line2 || '',
+      address_city: addr.city || '',
+      address_state: addr.state || '',
+      address_postal_code: addr.postal_code || '',
+      address_country: addr.country || 'US',
       customer_order_date: new Date(session.created * 1000).toISOString(),
       internal_notes: `Recovered via admin repair function on ${new Date().toISOString()}`,
     });
