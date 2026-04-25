@@ -86,6 +86,9 @@ async function getStripeObject(objectId, objectType) {
 }
 
 async function findOrCreateOrder(base44, event) {
+  // ROUTE ALL WRITES THROUGH SAFE GATEWAY
+  // This function now validates and calls upsertOrderSafely()
+  // instead of direct .create()/.update()
   const data = event.data.object;
   let order = null;
   let created = false;
