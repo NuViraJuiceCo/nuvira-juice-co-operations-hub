@@ -199,8 +199,25 @@ async function findOrCreateOrder(base44, event) {
   const finalEmail = email;
 
   // Extract address from Stripe shipping_details or billing_details
-  const shippingDetails = data.shipping_details?.address || data.billing_details?.address || {};
-  const shippingName = data.shipping_details?.name || data.customer_name || data.billing_details?.name || 'Unknown';
+  // For subscriptions, always fetch full checkout session to ensure complete address
+  let shippingDetails = data.shipping_details?.address || data.billing_details?.address || {};
+  let shippingName = data.shipping_details?.name || data.customer_name || data.billing_details?.name || 'Unknown';
+  
+  // If checkout session and missing shipping details, fetch full session
+  if (event.type === 'checkout.session.completed' && (!shippingDetails.line1 || !shippingName)) {
+    try {
+      const fullSession = await fetch(`https://api.stripe.com/v1/checkout/sessions/${stripeId}`, {
+        headers: { 'Authorization': `Bearer ${STRIPE_API_KEY}` }
+      });
+      if (fullSession.ok) {
+        const sessionData = await fullSession.json();
+        shippingDetails = sessionData.shipping_details?.address || shippingDetails;
+        shippingName = sessionData.shipping_details?.name || sessionData.customer_details?.name || shippingName;
+      }
+    } catch (err) {
+      console.warn('[STRIPE-V2] Could not fetch full session for address details:', err.message);
+    }
+  }
   
   // Detect if this checkout was for a subscription
   const isSubscription = !!(data.subscription || order?.source_channel === 'subscription');
@@ -218,19 +235,19 @@ async function findOrCreateOrder(base44, event) {
     subtotal: amount,
     payment_status: data.payment_status === 'paid' ? 'paid' : 'pending',
     source_channel: isSubscription ? 'subscription' : (order?.source_channel || 'online'),
-    fulfillment_method: 'delivery',
+    fulfillment_method: isSubscription ? 'delivery' : (order?.fulfillment_method || 'delivery'),
     production_status: order?.production_status || 'new',
     sync_status: 'synced',
     last_sync_at: new Date().toISOString(),
     customer_order_date: new Date(data.created * 1000).toISOString(),
-    // Address fields from Stripe
+    // Address fields from Stripe — always preserve if we have them
     address_line1: shippingDetails.line1 || order?.address_line1 || '',
     address_line2: shippingDetails.line2 || order?.address_line2 || '',
     address_city: shippingDetails.city || order?.address_city || '',
     address_state: shippingDetails.state || order?.address_state || '',
     address_postal_code: shippingDetails.postal_code || order?.address_postal_code || '',
     address_country: shippingDetails.country || order?.address_country || 'US',
-    address_last_synced_from: shippingDetails.line1 ? 'stripe_checkout' : (order?.address_last_synced_from || 'unknown'),
+    address_last_synced_from: (shippingDetails.line1 || order?.address_line1) ? 'stripe_checkout' : 'unknown',
     address_last_synced_at: new Date().toISOString(),
     // PART 7: Stripe linkage
     stripe_customer_id: customerId || order?.stripe_customer_id || null,
