@@ -274,9 +274,31 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── DEDUP: Remove any duplicate batches in DB before recalculating ──────────
+    // If multiple batches exist for the same date+product, keep the locked one (or newest), delete the rest.
+    const seenBatchKeys = new Map();
+    for (const batch of allBatches) {
+      const key = `${batch.production_date}__${normalizeProductName(batch.product_name)}`;
+      if (!seenBatchKeys.has(key)) {
+        seenBatchKeys.set(key, batch);
+      } else {
+        const existing = seenBatchKeys.get(key);
+        // Keep locked one; if neither locked, keep newest updated_date
+        if (batch.is_locked && !existing.is_locked) {
+          await base44.asServiceRole.entities.ProductionBatch.delete(existing.id);
+          seenBatchKeys.set(key, batch);
+        } else {
+          await base44.asServiceRole.entities.ProductionBatch.delete(batch.id);
+        }
+        console.log(`[RECALC] Removed duplicate batch for key: ${key}`);
+      }
+    }
+    // Rebuild allBatches from deduplicated map
+    const dedupedBatches = Array.from(seenBatchKeys.values());
+
     // Build locked batch set (date+product keys that should not be recalculated)
     const lockedKeys = new Set();
-    for (const batch of allBatches) {
+    for (const batch of dedupedBatches) {
       if (batch.is_locked) {
         lockedKeys.add(`${batch.production_date}__${normalizeProductName(batch.product_name)}`);
       }
@@ -481,11 +503,17 @@ Deno.serve(async (req) => {
     }
 
     // ─── BUILD EXISTING BATCH LOOKUP (date+product -> batch record) ────────────
+    // IMPORTANT: Include ALL batches (including locked) so we never create duplicates.
+    // Locked batches will be found here and skipped at update time, not at lookup time.
     const existingBatchMap = {};
-    for (const batch of allBatches) {
-      if (batch.is_locked) continue;
+    for (const batch of dedupedBatches) {
       const key = `${batch.production_date}__${normalizeProductName(batch.product_name)}`;
-      existingBatchMap[key] = batch;
+      // If duplicate keys exist in DB, prefer the locked one, then the most recently updated
+      if (!existingBatchMap[key]) {
+        existingBatchMap[key] = batch;
+      } else if (batch.is_locked && !existingBatchMap[key].is_locked) {
+        existingBatchMap[key] = batch;
+      }
     }
 
     // ─── SAVE UPDATED ORDERS (fulfillments, assigned_delivery_date) ────────────
@@ -528,11 +556,15 @@ Deno.serve(async (req) => {
       };
 
       if (existing) {
+        delete existingBatchMap[key]; // mark as handled regardless of lock status
+        if (existing.is_locked) {
+          results.skipped++;
+          continue; // Never touch locked batches
+        }
         // Preserve the existing batch_id
         batchData.batch_id = existing.batch_id;
         await base44.asServiceRole.entities.ProductionBatch.update(existing.id, batchData);
         results.updated++;
-        delete existingBatchMap[key]; // mark as handled
       } else {
         // Create new batch
         const datePart = plan.productionDate.replace(/-/g, '');
