@@ -50,7 +50,8 @@ Deno.serve(async (req) => {
       orders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500);
       if (date_from || date_to) {
         orders = orders.filter(o => {
-          const orderDate = new Date(o.requested_delivery_date || o.created_date);
+          // Try all possible delivery date fields, fall back to created_date
+          const orderDate = new Date(o.requested_delivery_date || o.assigned_delivery_date || o.created_date);
           const from = date_from ? new Date(date_from) : null;
           const to = date_to ? new Date(date_to + 'T23:59:59') : null;
           if (from && orderDate < from) return false;
