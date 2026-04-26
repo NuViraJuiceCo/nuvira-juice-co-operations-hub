@@ -32,7 +32,7 @@ export default function ProductionPlanning() {
     let lastErr;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const res = await base44.functions.invoke("calculateIngredientDemandFixed", {
+        const res = await base44.functions.invoke("calculateIngredientNeeds", {
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined
         });
