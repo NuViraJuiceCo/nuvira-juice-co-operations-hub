@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
         const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
           incomingData: {
             shopify_order_id: orderId,
-            shopify_order_number: ord.shopify_order_number || ord.order_number || '',
+            shopify_order_number: ord.shopify_order_number || ord.order_number || `#APP-${orderId?.slice(-6) || Date.now()}`,
             customer_email: ord.customer_email || '',
             customer_name: customerName || '',
             customer_phone: ord.customer_phone || '',
@@ -170,9 +170,9 @@ Deno.serve(async (req) => {
         const action = safeResult?.data?.action || 'unknown';
         results.push({ order_id: orderId, action, reason: safeResult?.data?.status });
         } catch (err) {
-        console.error(`[PULL-ORDERS] Failed to sync order ${ord.shopify_order_id}:`, err.message);
+        console.error(`[PULL-ORDERS] Failed to sync order ${orderId}:`, err.message);
         results.push({
-         order_id: ord.shopify_order_id,
+         order_id: orderId,
          action: 'failed',
          error: err.message,
         });
