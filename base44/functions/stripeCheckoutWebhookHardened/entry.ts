@@ -93,10 +93,16 @@ async function findOrReconcileOrder(base44, event, rawData) {
     amount = amount / 100;
   }
 
-  // CRITICAL: Never process without valid email
+  // CRITICAL: Never process without valid email AND customer name
   if (!email || email === 'unknown@unknown.com') {
     console.warn('[STRIPE-HARDENED] Skipping event', eventId, '— no valid email in payload');
     return null;
+  }
+
+  if (!shippingName || shippingName === 'Unknown') {
+    // Quarantine incomplete orders instead of creating #UNKNOWN
+    console.warn('[STRIPE-HARDENED] Quarantining event', eventId, '— missing customer name');
+    return { quarantine: true, reason: 'missing_customer_name', eventId, email, amount };
   }
 
   // PHASE 1: Try to find existing order by all known Stripe IDs
@@ -256,6 +262,23 @@ Deno.serve(async (req) => {
               status: 'failed',
               failure_reason: 'No valid email or mapping failed',
             });
+          } else if (result.quarantine) {
+            // Quarantine incomplete orders for manual recovery
+            await base44.asServiceRole.entities.OrderReviewQueue.create({
+              incident_type: 'incomplete_payload',
+              customer_email: result.email || 'unknown@stripe.local',
+              customer_name: 'Stripe Payment (Missing Name)',
+              incoming_source: 'stripe_webhook',
+              incoming_payload: { event_id: result.eventId, amount: result.amount },
+              issue_description: `Stripe ${result.reason}: payment received but customer identity incomplete. Requires manual resolution.`,
+              recommended_action: 'manual_review',
+              status: 'pending',
+            });
+            await base44.asServiceRole.entities.StripeEventLog.update(alreadyProcessed[0].id, {
+              status: 'failed',
+              failure_reason: result.reason,
+            });
+            console.log(`[STRIPE-HARDENED] Quarantined incomplete order from event ${event.id} — ${result.reason}`);
           } else {
             await base44.asServiceRole.entities.StripeEventLog.update(alreadyProcessed[0].id, {
               status: 'processed',
