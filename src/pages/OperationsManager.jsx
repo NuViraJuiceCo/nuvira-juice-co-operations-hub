@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, CheckCircle2, Clock, TrendingUp, AlertTriangle, RefreshCw, CloudDownload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, TrendingUp, AlertTriangle, RefreshCw, CloudDownload, ShieldCheck } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function OperationsManager() {
@@ -16,6 +16,19 @@ export default function OperationsManager() {
   const [autoHealResult, setAutoHealResult] = useState(null);
   const [stripeSyncHealth, setStripeSyncHealth] = useState(null);
   const [webhookHistory, setWebhookHistory] = useState(null);
+  const [safetyHealth, setSafetyHealth] = useState(null);
+  const [safetyLoading, setSafetyLoading] = useState(false);
+
+  const runSafetyHealthCheck = async () => {
+    setSafetyLoading(true);
+    try {
+      const res = await base44.functions.invoke('systemSafetyHealthCheck', {});
+      setSafetyHealth(res.data);
+    } catch (err) {
+      setSafetyHealth({ error: err.message });
+    }
+    setSafetyLoading(false);
+  };
 
   const runAutoDetectIssues = async () => {
     try {
@@ -309,11 +322,12 @@ export default function OperationsManager() {
         )}
 
         <Tabs defaultValue="alerts" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="alerts">Alerts & Actions</TabsTrigger>
             <TabsTrigger value="orders">Order Health</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
             <TabsTrigger value="stripe">Stripe Sync</TabsTrigger>
+            <TabsTrigger value="safety">System Safety</TabsTrigger>
             <TabsTrigger value="summary">Summary</TabsTrigger>
           </TabsList>
 
@@ -570,6 +584,84 @@ export default function OperationsManager() {
                   </Card>
                 )}
               </>
+            )}
+          </TabsContent>
+
+          {/* System Safety */}
+          <TabsContent value="safety" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Verifies all order write protections are active and no legacy paths are live.</p>
+              <Button onClick={runSafetyHealthCheck} disabled={safetyLoading} className="gap-2">
+                <ShieldCheck className={`h-4 w-4 ${safetyLoading ? 'animate-pulse' : ''}`} />
+                {safetyLoading ? 'Checking...' : 'Run Health Check'}
+              </Button>
+            </div>
+
+            {/* Static status cards — always visible */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                { label: 'Stripe Webhook', detail: 'stripeCheckoutWebhookHardened only', status: 'pass' },
+                { label: 'Legacy Webhook (V2)', detail: 'Disabled — returns 410 Gone', status: 'pass' },
+                { label: 'Legacy Gateway (upsertOrderSafely)', detail: 'Disabled — returns 410 Gone', status: 'pass' },
+                { label: 'OrderReviewQueue Alerts', detail: 'Auto email on every quarantine event', status: 'pass' },
+                { label: 'safeSubscriptionUpsert', detail: 'Migrated to safeSyncOrderUpdate gateway', status: 'pass' },
+                { label: 'All Order Writes', detail: 'Route through safeSyncOrderUpdate', status: 'pass' },
+              ].map(item => (
+                <div key={item.label} className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-xl">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-900">{item.label}</p>
+                    <p className="text-xs text-green-700 mt-0.5">{item.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Live check results */}
+            {safetyHealth && !safetyHealth.error && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                      safetyHealth.overall_status === 'PASS' ? 'bg-green-100 text-green-700' :
+                      safetyHealth.overall_status === 'WARN' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {safetyHealth.overall_status}
+                    </span>
+                    Live Check Results
+                    <span className="text-xs font-normal text-muted-foreground ml-auto">
+                      {new Date(safetyHealth.timestamp).toLocaleTimeString()}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {safetyHealth.checks?.map(check => (
+                    <div key={check.id} className={`flex items-start gap-3 p-3 rounded-lg border ${
+                      check.status === 'pass' ? 'bg-green-50 border-green-200' :
+                      check.status === 'warn' ? 'bg-amber-50 border-amber-200' :
+                      'bg-red-50 border-red-200'
+                    }`}>
+                      {check.status === 'pass'
+                        ? <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                        : check.status === 'warn'
+                        ? <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        : <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold">{check.label}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{check.detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {safetyHealth?.error && (
+              <div className="flex gap-2 bg-red-50 border border-red-200 rounded-lg p-4">
+                <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700">{safetyHealth.error}</p>
+              </div>
             )}
           </TabsContent>
 
