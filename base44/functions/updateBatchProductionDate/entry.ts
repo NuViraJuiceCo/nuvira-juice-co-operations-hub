@@ -1,34 +1,11 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+// DELETED 2026-04-26 — One-time admin tool
+// Functionality available via Production Planning UI
 
 Deno.serve(async (req) => {
-  try {
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-
-    if (user?.role !== 'admin') {
-      return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
-    }
-
-    const { targetDate } = await req.json();
-
-    if (!targetDate) {
-      return Response.json({ error: 'targetDate required' }, { status: 400 });
-    }
-
-    // Fetch all batches
-    const allBatches = await base44.asServiceRole.entities.ProductionBatch.list('-created_date', 500);
-
-    // Update each batch
-    let updated = 0;
-    for (const batch of allBatches) {
-      await base44.asServiceRole.entities.ProductionBatch.update(batch.id, {
-        production_date: targetDate,
-      });
-      updated++;
-    }
-
-    return Response.json({ status: 'success', updated });
-  } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
-  }
+  console.log('[DELETED] updateBatchProductionDate called—use Production Planning UI');
+  return new Response(JSON.stringify({
+    error: 'DELETED_FUNCTION',
+    message: 'updateBatchProductionDate deleted—use Production Planning UI instead',
+    documentation: 'See FULL_APP_ARCHITECTURE_CLEANUP_FINAL_REPORT.md'
+  }), { status: 410, headers: { 'Content-Type': 'application/json' } });
 });
