@@ -263,8 +263,8 @@ export default function Orders() {
       )}
 
 
-      {/* Desktop Table — visible on sm+ screens */}
-      <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden">
+      {/* Desktop Table — visible on sm+ screens ONLY (hidden on mobile) */}
+      <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden" style={{display: 'none'}}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -402,8 +402,8 @@ export default function Orders() {
           </div>
           </div>
 
-          {/* Mobile Cards — visible only on small screens */}
-          <div className="sm:hidden space-y-3">
+          {/* Mobile Cards — ONLY LAYOUT BELOW 768px */}
+          <div className="sm:hidden space-y-3 w-full" style={{display: 'block'}}>
           {sorted.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <p>No orders match your filters.</p>

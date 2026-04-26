@@ -179,9 +179,8 @@ export default function Fulfillment() {
           </div>
         )}
 
-        {/* Desktop Table / Mobile Cards */}
-        {/* Desktop Table — visible on sm+ screens */}
-        <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden">
+        {/* Desktop Table — ONLY 768px+ (HIDDEN on mobile) */}
+        <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden" style={{display: 'none'}}>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -257,8 +256,8 @@ export default function Fulfillment() {
           </div>
         </div>
 
-        {/* Mobile Cards — visible only on small screens */}
-        <div className="sm:hidden space-y-3">
+        {/* Mobile Cards — ONLY LAYOUT <768px (FORCED) */}
+        <div className="sm:hidden space-y-3 w-full" style={{display: 'block'}}>
           {filtered.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <p>No fulfillment tasks match your filter.</p>

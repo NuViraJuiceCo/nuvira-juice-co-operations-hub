@@ -214,8 +214,8 @@ export default function Inventory() {
         onClearSelection={() => setSelected(new Set())}
       />
 
-      {/* Desktop Table */}
-      <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden">
+      {/* Desktop Table — ONLY 768px+ (HIDDEN on mobile) */}
+      <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden" style={{display: 'none'}}>
          <div className="overflow-x-auto">
            <table className="w-full text-sm">
              <thead>
@@ -297,8 +297,8 @@ export default function Inventory() {
          </div>
        </div>
 
-      {/* Mobile Cards */}
-      <div className="sm:hidden space-y-3">
+      {/* Mobile Cards — ONLY LAYOUT <768px (FORCED) */}
+      <div className="sm:hidden space-y-3 w-full" style={{display: 'block'}}>
         {sorted.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <p>No ingredients found.</p>
