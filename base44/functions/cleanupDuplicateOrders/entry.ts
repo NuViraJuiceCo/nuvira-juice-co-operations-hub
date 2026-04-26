@@ -9,7 +9,20 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    const { order_number } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { confirm_delete } = body;
+
+    // If no confirmation flag, return plan only
+    if (!confirm_delete) {
+      return Response.json({
+        success: true,
+        action: 'plan_only',
+        message: 'MANUAL APPROVAL REQUIRED: Call with confirm_delete=true to execute cleanup',
+        warning: 'This function requires explicit admin approval before deleting any orders'
+      }, { status: 200 });
+    }
+
+    const { order_number } = body;
 
     // Get all orders
     const allOrders = await base44.asServiceRole.entities.ShopifyOrder.list('', 1000);

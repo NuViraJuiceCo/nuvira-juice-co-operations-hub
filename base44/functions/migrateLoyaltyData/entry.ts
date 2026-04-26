@@ -9,6 +9,30 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
+    const body = await req.json().catch(() => ({}));
+    const { confirm_migrate } = body;
+
+    // If no confirmation flag, return plan only
+    if (!confirm_migrate) {
+      const loyaltyMembers = await base44.asServiceRole.entities.LoyaltyMember.list('', 1000);
+      let customerLoyalties = [];
+      try {
+        customerLoyalties = await base44.asServiceRole.entities.CustomerLoyalty.list('', 1000);
+      } catch (err) {
+        customerLoyalties = [];
+      }
+      return Response.json({
+        success: true,
+        action: 'plan_only',
+        message: 'MANUAL APPROVAL REQUIRED: Call with confirm_migrate=true to execute migration',
+        stats: {
+          loyalty_members_to_migrate: loyaltyMembers?.length || 0,
+          customer_loyalties_to_merge: customerLoyalties?.length || 0
+        },
+        warning: 'This is a data migration. Review carefully before executing.'
+      }, { status: 200 });
+    }
+
     // Fetch all LoyaltyMember and old CustomerLoyalty data
     const loyaltyMembers = await base44.asServiceRole.entities.LoyaltyMember.list('', 1000);
     
