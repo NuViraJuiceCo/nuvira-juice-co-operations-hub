@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Group line items by product and production date
+    // Group weekly fulfillment items by product and production date (NOT parent monthly totals)
     const batchGroups = {};
 
     for (const order of orders) {
@@ -48,7 +48,12 @@ Deno.serve(async (req) => {
         const prodDate = fulfillment.production_date;
         if (!prodDate) continue;
 
-        for (const item of fulfillment.items || []) {
+        // Use fulfillment.items (weekly quantities), fallback to parent line_items only if missing
+        const weeklyItems = fulfillment.items && fulfillment.items.length > 0
+          ? fulfillment.items
+          : order.line_items || [];
+
+        for (const item of weeklyItems) {
           const product = item.title;
           const key = `${prodDate}__${product}`;
 

@@ -47,8 +47,10 @@ Deno.serve(async (req) => {
 
       for (const fulfillment of order.fulfillments) {
         try {
-          // Build items summary
-          const itemsSummary = (fulfillment.items || [])
+          // Build items summary from WEEKLY fulfillment items, NOT parent monthly totals
+          const itemsSummary = (fulfillment.items && fulfillment.items.length > 0
+            ? fulfillment.items
+            : order.line_items || [])
             .map(item => `${item.quantity}x ${item.title}`)
             .join(', ');
 
