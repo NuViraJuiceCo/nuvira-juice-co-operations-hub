@@ -190,20 +190,25 @@ Deno.serve(async (req) => {
       finalData.fulfillments = fulfillments;
     }
 
-    // Save
-    let savedOrder;
-    if (existingOrder) {
-      await base44.asServiceRole.entities.ShopifyOrder.update(existingOrder.id, finalData);
-      savedOrder = { id: existingOrder.id, ...finalData };
-    } else {
-      savedOrder = await base44.asServiceRole.entities.ShopifyOrder.create(finalData);
+    // Route ALL writes through safeSyncOrderUpdate — never write directly
+    const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+      incomingData: finalData,
+      source: 'rebuild_subscriptions',
+      matchBy: existingOrder
+        ? { stripe_subscription_id: finalData.stripe_subscription_id }
+        : undefined,
+    });
+
+    if (safeResult?.data?.status === 'rejected') {
+      console.warn('[SAFE-SUB] Gateway rejected write:', safeResult.data.reason);
+      return Response.json({ action: 'rejected', reason: safeResult.data.reason });
     }
 
     return Response.json({
       success: true,
-      order_id: savedOrder.id,
-      fulfillments: (savedOrder.fulfillments || []).length,
-      action: existingOrder ? 'updated' : 'created',
+      order_id: safeResult?.data?.order_id,
+      fulfillments: (finalData.fulfillments || []).length,
+      action: safeResult?.data?.action || (existingOrder ? 'updated' : 'created'),
     });
 
   } catch (error) {
