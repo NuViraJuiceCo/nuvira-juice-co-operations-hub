@@ -261,13 +261,23 @@ Deno.serve(async (req) => {
           
           try {
             const subscriptionId = event.data.object.id;
+            const customerId = event.data.object.customer;
+            
+            // Update StripeEventLog with subscription details
+            const logUpdate = {
+              status: 'processing',
+              stripe_subscription_id: subscriptionId,
+              stripe_customer_id: customerId,
+            };
+            await base44.asServiceRole.entities.StripeEventLog.update(alreadyProcessed[0].id, logUpdate);
+            
             const genResult = await base44.asServiceRole.functions.invoke('generateSubscriptionFulfillments', {
               subscription_id: subscriptionId,
             });
 
             await base44.asServiceRole.entities.StripeEventLog.update(alreadyProcessed[0].id, {
               status: 'processed',
-              notes: `Generated ${genResult.data?.orders_created || 0} weekly delivery orders`,
+              notes: `Generated ${genResult.data?.orders_created || 0} weekly delivery orders, ${genResult.data?.fulfillment_tasks_created || 0} tasks, ${genResult.data?.production_batches_created || 0} batches`,
             });
             console.log(`[STRIPE-HARDENED] Generated ${genResult.data?.orders_created || 0} weekly orders for subscription ${subscriptionId}`);
           } catch (err) {

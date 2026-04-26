@@ -238,25 +238,21 @@ Deno.serve(async (req) => {
     // Generate 4 weekly order payloads
     const orderPayloads = await generateSubscriptionFulfillments(base44, subscription, customer);
 
-    // Write each order directly via Base44 SDK (service role already authenticated)
+    // Write each order via safeSyncOrderUpdate to ensure field ownership compliance
     const createdOrders = [];
     for (const payload of orderPayloads) {
       try {
-        // Check if order with this subscription already exists for this sequence
-        const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({
-          stripe_subscription_id: subscription_id,
-          fulfillment_sequence_number: payload.fulfillment_sequence_number,
+        // Route through safeSyncOrderUpdate for field ownership and lock enforcement
+        const syncResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+          incomingData: payload,
+          source: 'stripe_webhook',
+          matchBy: { stripe_subscription_id: subscription_id },
         });
 
-        let orderId;
-        if (existing && existing.length > 0) {
-          // Update existing
-          await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, payload);
-          orderId = existing[0].id;
-        } else {
-          // Create new
-          const created = await base44.asServiceRole.entities.ShopifyOrder.create(payload);
-          orderId = created.id;
+        const orderId = syncResult?.data?.order_id;
+        if (!orderId) {
+          console.error(`[GEN-SUB-FULFILLMENTS] safeSyncOrderUpdate failed for sequence ${payload.fulfillment_sequence_number}:`, syncResult?.data?.reason);
+          continue;
         }
 
         createdOrders.push({

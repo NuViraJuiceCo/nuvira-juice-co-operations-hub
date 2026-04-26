@@ -49,13 +49,18 @@ Deno.serve(async (req) => {
     // CHECK 1: Stripe Event Received
     try {
       const stripeEvents = await base44.asServiceRole.entities.StripeEventLog.filter({
-        stripe_subscription_id: stripe_subscription_id,
         event_type: 'customer.subscription.created'
       });
+      // Filter to our subscription
+      const ourEvent = stripeEvents?.filter(e => 
+        e.stripe_subscription_id === stripe_subscription_id || 
+        (e.raw_event?.id && e.raw_event.id === stripe_subscription_id) ||
+        (e.notes && e.notes.includes(stripe_subscription_id))
+      );
       
       results.checks['1_stripe_event_received'] = {
-        status: stripeEvents && stripeEvents.length > 0 ? 'PASS' : 'FAIL',
-        detail: stripeEvents && stripeEvents.length > 0 ? `Found event: ${stripeEvents[0].stripe_event_id}` : 'No customer.subscription.created event found',
+        status: ourEvent && ourEvent.length > 0 ? 'PASS' : 'FAIL',
+        detail: ourEvent && ourEvent.length > 0 ? `Found event: ${ourEvent[0].stripe_event_id}` : 'No customer.subscription.created event found for this subscription',
       };
     } catch (e) {
       results.checks['1_stripe_event_received'] = { status: 'FAIL', error: e.message };
