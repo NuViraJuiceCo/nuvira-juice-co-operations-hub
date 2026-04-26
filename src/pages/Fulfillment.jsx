@@ -1,10 +1,18 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import AdminGuide from "../components/shared/AdminGuide";
-import { Trash2 } from "lucide-react";
+import { Trash2, Edit2 } from "lucide-react";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import SelectMobile from "../components/SelectMobile";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import StatusBadge from "../components/shared/StatusBadge";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import moment from "moment";
@@ -15,6 +23,8 @@ export default function Fulfillment() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
+  const [editDriver, setEditDriver] = useState("");
 
   const handleRefresh = async () => {
     const data = await base44.entities.FulfillmentTask.list("-scheduled_date", 100);
@@ -49,6 +59,31 @@ export default function Fulfillment() {
       setSelected(new Set());
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleEditDriver = (task) => {
+    setEditingTask(task);
+    setEditDriver(task.assigned_driver || "");
+  };
+
+  const handleSaveDriver = async () => {
+    if (!editingTask) return;
+    try {
+      await base44.entities.FulfillmentTask.update(editingTask.id, {
+        assigned_driver: editDriver || null,
+      });
+      setTasks(
+        tasks.map((t) =>
+          t.id === editingTask.id
+            ? { ...t, assigned_driver: editDriver || null }
+            : t
+        )
+      );
+      setEditingTask(null);
+      setEditDriver("");
+    } catch (error) {
+      console.error("Failed to update driver:", error);
     }
   };
 
@@ -176,22 +211,78 @@ export default function Fulfillment() {
                         {moment(task.scheduled_date).format("MMM D")}
                       </td>
                       <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.time_window || '—'}</td>
-                      <td className="hidden md:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.assigned_driver || 'Unassigned'}</td>
-                      <td className="px-3 sm:px-5 py-3.5 text-center">
-                        <button
-                          onClick={() => handleDelete(task.id)}
-                          disabled={deleting === task.id}
-                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
+                      <td className="hidden md:table-cell px-3 sm:px-5 py-3.5 text-sm">
+                         <button
+                           onClick={() => handleEditDriver(task)}
+                           className="text-primary hover:text-primary/80 hover:underline"
+                         >
+                           {task.assigned_driver || 'Unassigned'}
+                         </button>
+                       </td>
+                       <td className="px-3 sm:px-5 py-3.5 text-center flex gap-2 justify-center">
+                         <button
+                           onClick={() => handleEditDriver(task)}
+                           className="text-blue-600 hover:text-blue-700"
+                           title="Assign driver"
+                         >
+                           <Edit2 className="h-4 w-4" />
+                         </button>
+                         <button
+                           onClick={() => handleDelete(task.id)}
+                           disabled={deleting === task.id}
+                           className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                         >
+                           <Trash2 className="h-4 w-4" />
+                         </button>
+                       </td>
                     </tr>
                   ))}
               </tbody>
             </table>
           </div>
         </div>
+
+        {/* Edit Driver Modal */}
+        <Dialog open={!!editingTask} onOpenChange={() => setEditingTask(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Assign Driver</DialogTitle>
+            </DialogHeader>
+            {editingTask && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Customer</p>
+                  <p className="font-medium">{editingTask.customer_name}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Scheduled Date</p>
+                  <p className="font-medium">
+                    {moment(editingTask.scheduled_date).format("MMM D, YYYY")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Items</p>
+                  <p className="text-sm">{editingTask.items_summary}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Driver Name</label>
+                  <Input
+                    value={editDriver}
+                    onChange={(e) => setEditDriver(e.target.value)}
+                    placeholder="Enter driver name"
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingTask(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveDriver}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </PullToRefresh>
   );
