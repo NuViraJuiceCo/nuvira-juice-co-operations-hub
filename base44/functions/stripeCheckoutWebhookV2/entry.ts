@@ -258,23 +258,36 @@ async function findOrCreateOrder(base44, event) {
     stripe_event_id_applied: event.id,
   };
 
-  // PART 5 Principle: Never downgrade a valid order to #unknown
-  // If we have an existing order but uncertain match, mark pending_reconciliation
-  if (order && !order.stripe_customer_id && orderPayload.stripe_customer_id) {
-    // Upgrading an incomplete order with Stripe linkage
-    orderPayload.sync_status = 'synced';
-    orderPayload.repair_status = 'reconciled';
-  } else if (order && !stripeId.startsWith('base44_')) {
-    // Existing order, valid Stripe linkage, preserve it
-    orderPayload.sync_status = 'synced';
-  }
-
-  if (order) {
-    await base44.asServiceRole.entities.ShopifyOrder.update(order.id, orderPayload);
+  // CRITICAL: For subscriptions, route through safeSubscriptionUpsert instead of direct write
+  if (isSubscription && subscriptionId) {
+    try {
+      const safeResult = await base44.functions.invoke('safeSubscriptionUpsert', {
+        orderData: orderPayload,
+        source: 'stripe_webhook',
+        event_id: event.id,
+      });
+      if (safeResult && safeResult.data) {
+        order = { id: safeResult.data.order_id };
+        created = safeResult.data.action === 'created';
+      }
+    } catch (err) {
+      console.error('[STRIPE-V2] Safe subscription upsert failed:', err.message);
+      // Fallback to direct create for one-time recovery
+      if (!order) {
+        const created_obj = await base44.asServiceRole.entities.ShopifyOrder.create(orderPayload);
+        order = created_obj;
+        created = true;
+      }
+    }
   } else {
-    const created_obj = await base44.asServiceRole.entities.ShopifyOrder.create(orderPayload);
-    order = created_obj;
-    created = true;
+    // One-time orders: direct write
+    if (order) {
+      await base44.asServiceRole.entities.ShopifyOrder.update(order.id, orderPayload);
+    } else {
+      const created_obj = await base44.asServiceRole.entities.ShopifyOrder.create(orderPayload);
+      order = created_obj;
+      created = true;
+    }
   }
 
   return order ? { order, created, eventId: event.id } : null;
