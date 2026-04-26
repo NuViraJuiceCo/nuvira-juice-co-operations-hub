@@ -215,22 +215,11 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Fallback: match by internal ID — used by operations/driver/recalc writes
-      // Filter by a known field to avoid fetching all records and hitting rate limits
+      // Fallback: match by internal ID — direct entity get, no list scan needed
       if (!existingOrder && matchBy.internal_id) {
         try {
-          const candidates = await base44.asServiceRole.entities.ShopifyOrder.filter({ sync_status: 'synced' });
-          existingOrder = candidates.find(o => o.id === matchBy.internal_id) || null;
-          // If not found in synced, try processing status
-          if (!existingOrder) {
-            const candidates2 = await base44.asServiceRole.entities.ShopifyOrder.filter({ sync_status: 'processing' });
-            existingOrder = candidates2.find(o => o.id === matchBy.internal_id) || null;
-          }
-          if (!existingOrder) {
-            // Last resort: small list fetch — only triggers for unusual sync_status values
-            const candidates3 = await base44.asServiceRole.entities.ShopifyOrder.list('-updated_date', 200);
-            existingOrder = candidates3.find(o => o.id === matchBy.internal_id) || null;
-          }
+          const found = await base44.asServiceRole.entities.ShopifyOrder.get(matchBy.internal_id);
+          existingOrder = found || null;
         } catch (err) {
           console.error('[SAFE-SYNC] internal_id lookup failed:', err.message);
         }
