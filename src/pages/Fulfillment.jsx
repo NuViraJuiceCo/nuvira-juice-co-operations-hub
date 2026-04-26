@@ -25,6 +25,8 @@ export default function Fulfillment() {
   const [deleting, setDeleting] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [editDriver, setEditDriver] = useState("");
+  const [savingDriver, setSavingDriver] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const handleRefresh = async () => {
     const data = await base44.entities.FulfillmentTask.list("-scheduled_date", 100);
@@ -69,14 +71,21 @@ export default function Fulfillment() {
 
   const handleSaveDriver = async () => {
     if (!editingTask) return;
+    setSavingDriver(true);
+    setSaveError("");
     try {
       await base44.entities.FulfillmentTask.update(editingTask.id, {
         assigned_driver: editDriver || null,
+        status: editDriver ? "Scheduled" : "Unassigned",
       });
       setTasks(
         tasks.map((t) =>
           t.id === editingTask.id
-            ? { ...t, assigned_driver: editDriver || null }
+            ? { 
+                ...t, 
+                assigned_driver: editDriver || null,
+                status: editDriver ? "Scheduled" : "Unassigned",
+              }
             : t
         )
       );
@@ -84,6 +93,9 @@ export default function Fulfillment() {
       setEditDriver("");
     } catch (error) {
       console.error("Failed to update driver:", error);
+      setSaveError("Failed to save driver assignment. Please try again.");
+    } finally {
+      setSavingDriver(false);
     }
   };
 
@@ -182,10 +194,10 @@ export default function Fulfillment() {
                      />
                    </th>
                    <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer</th>
+                   <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Fulfillment</th>
                    <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Items</th>
                    <th className="hidden sm:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
                    <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                   <th className="hidden sm:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
                    <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Driver</th>
                    <th className="px-3 sm:px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
                  </tr>
@@ -205,12 +217,12 @@ export default function Fulfillment() {
                         <p className="text-sm font-medium text-foreground">{task.customer_name}</p>
                         {task.address && <p className="text-xs text-muted-foreground">{task.address}</p>}
                       </td>
+                      <td className="px-3 sm:px-5 py-3.5 text-sm font-medium text-primary whitespace-nowrap">
+                        {moment(task.scheduled_date).format("MMM D")}
+                      </td>
                       <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.items_summary || '—'}</td>
                       <td className="hidden sm:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.fulfillment_type || '—'}</td>
                       <td className="px-3 sm:px-5 py-3.5"><StatusBadge status={task.status} /></td>
-                      <td className="hidden sm:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
-                        {moment(task.scheduled_date).format("MMM D")}
-                      </td>
                       <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm">
                         <button
                           onClick={() => handleEditDriver(task)}
@@ -276,10 +288,13 @@ export default function Fulfillment() {
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEditingTask(null)}>
+              {saveError && <p className="text-sm text-red-600 col-span-2">{saveError}</p>}
+              <Button variant="outline" onClick={() => setEditingTask(null)} disabled={savingDriver}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveDriver}>Save</Button>
+              <Button onClick={handleSaveDriver} disabled={savingDriver}>
+                {savingDriver ? "Saving..." : "Save"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
