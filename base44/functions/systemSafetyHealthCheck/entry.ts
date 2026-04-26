@@ -92,12 +92,12 @@ Deno.serve(async (req) => {
     }
 
     // CHECK 4: No #unknown orders in active production statuses
-    const allOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-updated_date', 500);
+    // Filter directly by shopify_order_id to avoid fetching all records
+    const unknownOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({ shopify_order_id: 'base44_unknown' });
+    const unknownByNumber = await base44.asServiceRole.entities.ShopifyOrder.filter({ shopify_order_number: '#unknown' });
     const activeStatuses = ['awaiting_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage', 'assigned_for_delivery', 'assigned_for_pickup'];
-    const unknownInProduction = allOrders.filter(o =>
-      (o.shopify_order_number === '#unknown' || o.shopify_order_id === 'base44_unknown') &&
-      activeStatuses.includes(o.production_status)
-    );
+    const allUnknown = [...(unknownOrders || []), ...(unknownByNumber || [])];
+    const unknownInProduction = allUnknown.filter(o => activeStatuses.includes(o.production_status));
     checks.push({
       id: 'no_unknown_in_production',
       label: 'No #Unknown Orders in Production',
