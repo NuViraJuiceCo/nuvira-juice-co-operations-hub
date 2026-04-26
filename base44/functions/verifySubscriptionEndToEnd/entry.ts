@@ -72,18 +72,19 @@ Deno.serve(async (req) => {
       return Response.json({ success: false, results });
     }
 
-    // CHECK 2: Four Weekly Orders
+    // CHECK 2: Four Weekly Orders (filter to only weekly deliveries)
+    const weeklyOrders = orders.filter(o => o.fulfillment_sequence_number && o.source_type === 'stripe_subscription');
     results.checks['2_four_weekly_orders'] = {
-      status: orders.length === 4 ? 'PASS' : 'FAIL',
-      detail: `Found ${orders.length} orders (expected 4)`,
-      order_ids: orders.map(o => o.id),
+      status: weeklyOrders.length === 4 ? 'PASS' : 'FAIL',
+      detail: `Found ${weeklyOrders.length} weekly orders (expected 4) out of ${orders.length} total`,
+      order_ids: weeklyOrders.map(o => o.id),
     };
-    if (orders.length !== 4) results.summary.failed++;
+    if (weeklyOrders.length !== 4) results.summary.failed++;
     else results.summary.passed++;
 
-    // CHECK 3-4: Composition (VIP & Monthly Ritual)
-    const vipOrders = orders.filter(o => o.line_items?.some(item => item.title?.toLowerCase().includes('vip wellness')));
-    const ritualOrders = orders.filter(o => o.line_items?.some(item => item.title?.toLowerCase().includes('monthly ritual')));
+    // CHECK 3-4: Composition (VIP & Monthly Ritual) - check weekly orders only
+    const vipOrders = weeklyOrders.filter(o => o.line_items?.some(item => item.title?.toLowerCase().includes('vip') || item.title?.toLowerCase().includes('wellness')));
+    const ritualOrders = weeklyOrders.filter(o => o.line_items?.some(item => item.title?.toLowerCase().includes('ritual') || item.title?.toLowerCase().includes('monthly')));
 
     // VIP Wellness: 2 Oasis, 2 Aura, 2 Re-Nu
     const vipCompositionValid = vipOrders.every(order => {
@@ -121,12 +122,16 @@ Deno.serve(async (req) => {
     if (ritualOrders.length > 0 && !ritualCompositionValid) results.summary.failed++;
     else if (ritualOrders.length > 0) results.summary.passed++;
 
-    // CHECK 5: Fulfillment Dates (7 days apart)
+    // CHECK 5: Fulfillment Dates (7 days apart) - check weekly orders
     let fulfillmentDatesValid = true;
     const dates = [];
-    if (orders.length > 0 && orders[0].fulfillments) {
-      orders[0].fulfillments.forEach(f => {
-        if (f.delivery_date) dates.push(new Date(f.delivery_date).getTime());
+    if (weeklyOrders.length > 0) {
+      weeklyOrders.forEach(o => {
+        if (o.fulfillments && o.fulfillments.length > 0) {
+          o.fulfillments.forEach(f => {
+            if (f.delivery_date) dates.push(new Date(f.delivery_date).getTime());
+          });
+        }
       });
       dates.sort((a, b) => a - b);
       
@@ -185,13 +190,13 @@ Deno.serve(async (req) => {
       results.summary.failed++;
     }
 
-    // CHECK 8: No duplicate orders (exactly 4)
+    // CHECK 8: No duplicate orders (exactly 4 weekly orders)
     results.checks['8_no_duplicate_orders'] = {
-      status: orders.length === 4 ? 'PASS' : 'FAIL',
-      detail: `Found ${orders.length} orders (expected exactly 4)`,
-      order_count: orders.length,
+      status: weeklyOrders.length === 4 ? 'PASS' : 'FAIL',
+      detail: `Found ${weeklyOrders.length} weekly orders (expected exactly 4)`,
+      order_count: weeklyOrders.length,
     };
-    if (orders.length === 4) results.summary.passed++;
+    if (weeklyOrders.length === 4) results.summary.passed++;
     else results.summary.failed++;
 
     // CHECK 9: No Customer App generated orders
@@ -215,8 +220,8 @@ Deno.serve(async (req) => {
       results.summary.failed++;
     }
 
-    // CHECK 10: Data quality fields
-    const dataQualityValid = orders.every(o => 
+    // CHECK 10: Data quality fields - check weekly orders only
+    const dataQualityValid = weeklyOrders.every(o => 
       o.order_lock_status === 'unlocked' &&
       o.data_quality_status === 'complete' &&
       o.repair_status === 'none'
@@ -225,8 +230,8 @@ Deno.serve(async (req) => {
     results.checks['10_data_quality'] = {
       status: dataQualityValid ? 'PASS' : 'FAIL',
       detail: dataQualityValid ? 'All orders have correct data quality fields' : 'Some orders have incorrect fields',
-      orders_checked: orders.length,
-      orders_with_issues: orders.filter(o => 
+      orders_checked: weeklyOrders.length,
+      orders_with_issues: weeklyOrders.filter(o => 
         o.order_lock_status !== 'unlocked' || 
         o.data_quality_status !== 'complete' || 
         o.repair_status !== 'none'

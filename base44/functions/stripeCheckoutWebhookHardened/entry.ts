@@ -93,6 +93,10 @@ async function findOrReconcileOrder(base44, event, rawData) {
     amount = amount / 100;
   }
 
+  // PHASE 3: Build address from Stripe (do this FIRST)
+  const shippingDetails = rawData.shipping_details?.address || rawData.billing_details?.address || rawData.customer_details?.address || {};
+  const shippingName = rawData.shipping_details?.name || rawData.customer_name || rawData.billing_details?.name || rawData.customer_details?.name || 'Unknown';
+
   // CRITICAL: Never process without valid email AND customer name
   if (!email || email === 'unknown@unknown.com') {
     console.warn('[STRIPE-HARDENED] Skipping event', eventId, '— no valid email in payload');
@@ -148,10 +152,6 @@ async function findOrReconcileOrder(base44, event, rawData) {
       console.warn('[STRIPE-HARDENED] Failed to fetch line items:', err.message);
     }
   }
-
-  // PHASE 3: Build address from Stripe
-  const shippingDetails = rawData.shipping_details?.address || rawData.billing_details?.address || rawData.customer_details?.address || {};
-  const shippingName = rawData.shipping_details?.name || rawData.customer_name || rawData.billing_details?.name || rawData.customer_details?.name || 'Unknown';
 
   // PHASE 4: Build order payload with full Stripe linkage
   const orderPayload = {
@@ -255,7 +255,29 @@ Deno.serve(async (req) => {
         }
 
         // Process event
-        if (event.type.includes('checkout') || event.type.includes('payment_intent') || event.type.includes('invoice')) {
+        if (event.type === 'customer.subscription.created') {
+          // SUBSCRIPTION FULFILLMENT GENERATION
+          console.log('[STRIPE-HARDENED] Processing subscription creation event:', event.id);
+          
+          try {
+            const subscriptionId = event.data.object.id;
+            const genResult = await base44.asServiceRole.functions.invoke('generateSubscriptionFulfillments', {
+              subscription_id: subscriptionId,
+            });
+
+            await base44.asServiceRole.entities.StripeEventLog.update(alreadyProcessed[0].id, {
+              status: 'processed',
+              notes: `Generated ${genResult.data?.orders_created || 0} weekly delivery orders`,
+            });
+            console.log(`[STRIPE-HARDENED] Generated ${genResult.data?.orders_created || 0} weekly orders for subscription ${subscriptionId}`);
+          } catch (err) {
+            await base44.asServiceRole.entities.StripeEventLog.update(alreadyProcessed[0].id, {
+              status: 'failed',
+              failure_reason: `Subscription fulfillment generation failed: ${err.message}`,
+            });
+            console.error('[STRIPE-HARDENED] Subscription generation error:', err.message);
+          }
+        } else if (event.type.includes('checkout') || event.type.includes('payment_intent') || event.type.includes('invoice')) {
           const result = await findOrReconcileOrder(base44, event, event.data.object);
           if (!result) {
             await base44.asServiceRole.entities.StripeEventLog.update(alreadyProcessed[0].id, {
