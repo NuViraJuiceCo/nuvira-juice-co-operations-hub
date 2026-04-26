@@ -62,55 +62,57 @@ export default function Reporting() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 w-full overflow-x-hidden pb-24 sm:pb-20 lg:pb-6">
+      <div className="space-y-4">
          <div>
-           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Reporting</h1>
-           <p className="text-muted-foreground mt-1">Financial summaries and operational analytics</p>
+           <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground">Reporting</h1>
+           <p className="text-xs sm:text-sm text-muted-foreground mt-1">Financial & analytics</p>
          </div>
-         <Button onClick={exportCSV} className="gap-2 w-full sm:w-auto justify-center sm:justify-start">
-           <Download className="h-4 w-4" /> <span className="hidden sm:inline">Export CSV</span><span className="sm:hidden">Export</span>
+         <Button onClick={exportCSV} className="gap-2 w-full sm:w-auto text-xs sm:text-sm">
+           <Download className="h-4 w-4" /> Export
          </Button>
        </div>
 
       {/* Filters */}
-       <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-card border border-border rounded-xl p-4">
-         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-1 sm:flex-none">
-           <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">From</span>
-           <input
-             type="date"
-             value={dateFrom}
-             onChange={(e) => setDateFrom(e.target.value)}
-             className="px-3 py-1.5 text-xs sm:text-sm border border-border rounded-lg bg-background w-full sm:w-auto"
-           />
-         </div>
-         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-1 sm:flex-none">
-           <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">To</span>
-           <input
-             type="date"
-             value={dateTo}
-             onChange={(e) => setDateTo(e.target.value)}
-             className="px-3 py-1.5 text-xs sm:text-sm border border-border rounded-lg bg-background w-full sm:w-auto"
-           />
+       <div className="space-y-3 bg-card border border-border rounded-xl p-3 sm:p-4">
+         <div className="grid grid-cols-2 gap-2">
+           <div className="flex flex-col gap-1">
+             <span className="text-xs text-muted-foreground">From</span>
+             <input
+               type="date"
+               value={dateFrom}
+               onChange={(e) => setDateFrom(e.target.value)}
+               className="px-2 sm:px-3 py-2 text-xs border border-border rounded-lg bg-background w-full"
+             />
+           </div>
+           <div className="flex flex-col gap-1">
+             <span className="text-xs text-muted-foreground">To</span>
+             <input
+               type="date"
+               value={dateTo}
+               onChange={(e) => setDateTo(e.target.value)}
+               className="px-2 sm:px-3 py-2 text-xs border border-border rounded-lg bg-background w-full"
+             />
+           </div>
          </div>
          <Select value={channelFilter} onValueChange={setChannelFilter}>
-           <SelectTrigger className="w-full sm:w-44">
+           <SelectTrigger className="w-full text-xs sm:text-sm">
              <SelectValue placeholder="All Channels" />
            </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Channels</SelectItem>
+            <SelectItem value="all">All</SelectItem>
             <SelectItem value="online">Online</SelectItem>
             <SelectItem value="pos">POS</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="subscription">Subscription</SelectItem>
-            <SelectItem value="wholesale">Wholesale</SelectItem>
+            <SelectItem value="subscription">Sub</SelectItem>
+            <SelectItem value="wholesale">Whole</SelectItem>
             <SelectItem value="event">Event</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* KPI */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
         <StatCard label="Total Revenue" value={`$${totalRevenue.toFixed(2)}`} icon={DollarSign} />
         <StatCard label="Orders" value={filtered.length} icon={ShoppingCart} />
         <StatCard label="Avg Order" value={`$${avgOrder.toFixed(2)}`} icon={TrendingUp} />
@@ -120,7 +122,7 @@ export default function Reporting() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
         <RevenueChart orders={filtered} />
         <ChannelChart orders={filtered} />
       </div>

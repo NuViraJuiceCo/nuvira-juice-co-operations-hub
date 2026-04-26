@@ -234,62 +234,72 @@ export default function LoyaltyAdmin() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-4 sm:p-6 lg:p-8 w-full overflow-x-hidden pb-24 sm:pb-20 lg:pb-6">
+      <div className="space-y-4">
         <div>
-          <h1 className="text-3xl font-bold">Loyalty Dashboard</h1>
-          <p className="text-muted-foreground mt-1">{customers.length} customers tracked</p>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground">Loyalty Dashboard</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">{customers.length} customers</p>
         </div>
-        <div className="flex gap-2">
-          {selectedCustomers.size > 0 && (
-            <>
-              <Button onClick={addBonusToSelected} disabled={processingBonus} className="gap-2 bg-green-600 hover:bg-green-700">
-                +100 pts ({selectedCustomers.size})
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            {selectedCustomers.size > 0 && (
+              <>
+                <Button onClick={addBonusToSelected} disabled={processingBonus} className="gap-1 flex-1 sm:flex-none text-xs sm:text-sm bg-green-600 hover:bg-green-700">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">+100 pts</span>
+                  <span className="sm:hidden">+100</span>
+                </Button>
+                <Button onClick={deleteSelected} variant="destructive" className="gap-1 flex-1 sm:flex-none text-xs sm:text-sm">
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Delete</span>
+                </Button>
+              </>
+            )}
+            {customers.some(c => c.email?.toLowerCase().includes('test')) && (
+              <Button onClick={deleteTestUsers} variant="destructive" className="gap-1 flex-1 sm:flex-none text-xs sm:text-sm">
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Delete Tests</span>
               </Button>
-              <Button onClick={deleteSelected} variant="destructive" className="gap-2">
-                Delete ({selectedCustomers.size})
-              </Button>
-            </>
-          )}
-          {customers.some(c => c.email?.toLowerCase().includes('test')) && (
-            <Button onClick={deleteTestUsers} variant="destructive" className="gap-2">
-              Delete Test Users
+            )}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={syncFromCustomerApp} disabled={syncing} className="gap-2 flex-1 sm:flex-none text-xs sm:text-sm">
+              <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Sync Now</span>
+              <span className="sm:hidden">Sync</span>
             </Button>
-          )}
-          <Button variant="outline" onClick={syncFromCustomerApp} disabled={syncing} className="gap-2">
-            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-            Sync Now
-          </Button>
-          <Button variant="outline" onClick={exportCSV} className="gap-2">
-            <Download className="h-4 w-4" /> Export
-          </Button>
+            <Button variant="outline" onClick={exportCSV} className="gap-2 flex-1 sm:flex-none text-xs sm:text-sm">
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
         <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total Customers</p>
-            <p className="text-3xl font-bold mt-2">{customers.length}</p>
+          <CardContent className="pt-4 sm:pt-6">
+            <p className="text-xs sm:text-sm text-muted-foreground">Customers</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-2">{customers.length}</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total Points Issued</p>
-            <p className="text-3xl font-bold mt-2">{customers.reduce((sum, c) => sum + (c?.lifetime_points || 0), 0).toLocaleString()}</p>
+          <CardContent className="pt-4 sm:pt-6">
+            <p className="text-xs sm:text-sm text-muted-foreground">Issued</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-2">{(customers.reduce((sum, c) => sum + (c?.lifetime_points || 0), 0) / 1000).toFixed(0)}k</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total Points Redeemed</p>
-            <p className="text-3xl font-bold mt-2">{customers.reduce((sum, c) => sum + (c?.redeemed_points || 0), 0).toLocaleString()}</p>
+          <CardContent className="pt-4 sm:pt-6">
+            <p className="text-xs sm:text-sm text-muted-foreground">Redeemed</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-2">{(customers.reduce((sum, c) => sum + (c?.redeemed_points || 0), 0) / 1000).toFixed(0)}k</p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Avg Points/Customer</p>
-            <p className="text-3xl font-bold mt-2">{customers.length > 0 ? Math.round(customers.reduce((sum, c) => sum + (c?.total_points || 0), 0) / customers.length) : 0}</p>
+          <CardContent className="pt-4 sm:pt-6">
+            <p className="text-xs sm:text-sm text-muted-foreground">Avg/Cust</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-2">{customers.length > 0 ? Math.round(customers.reduce((sum, c) => sum + (c?.total_points || 0), 0) / customers.length) : 0}</p>
           </CardContent>
         </Card>
       </div>
@@ -298,10 +308,10 @@ export default function LoyaltyAdmin() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search by email..."
+          placeholder="Search email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
+          className="pl-10 w-full text-sm"
         />
       </div>
 
@@ -343,86 +353,80 @@ export default function LoyaltyAdmin() {
                 onClick={() => toggleCustomer(customer.id)}
               >
                 <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <input 
-                          type="checkbox" 
-                          checked={isSelected}
-                          onChange={() => {}}
-                          className="w-4 h-4 cursor-pointer"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <div>
-                          <CardTitle className="text-lg">{customer.email}</CardTitle>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Member since {moment(customer.created_date).format('MMM D, YYYY')}
-                          </p>
-                          <div className="flex gap-2 mt-2">
-                            {getAvailableRewards(customer).length > 0 && (
-                              <Badge className="bg-green-100 text-green-700 border border-green-300">
-                                <Gift className="w-3 h-3 mr-1" />
-                                {getAvailableRewards(customer).length} Unlocked
-                              </Badge>
-                            )}
-                            {getRedemptionsByOrder(customer).length > 0 && (
-                              <Badge className="bg-blue-100 text-blue-700 border border-blue-300">
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                {getRedemptionsByOrder(customer).length} Redeemed
-                              </Badge>
-                            )}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start gap-2">
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="w-4 h-4 cursor-pointer flex-shrink-0 mt-1"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <CardTitle className="text-sm sm:text-lg truncate">{customer.email}</CardTitle>
+                            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                              {moment(customer.created_date).format('MMM D, YY')}
+                            </p>
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {getAvailableRewards(customer).length > 0 && (
+                                <Badge className="bg-green-100 text-green-700 border border-green-300 text-xs">
+                                  <Gift className="w-2.5 h-2.5 mr-0.5" />
+                                  {getAvailableRewards(customer).length}
+                                </Badge>
+                              )}
+                              {getRedemptionsByOrder(customer).length > 0 && (
+                                <Badge className="bg-blue-100 text-blue-700 border border-blue-300 text-xs">
+                                  <CheckCircle className="w-2.5 h-2.5 mr-0.5" />
+                                  {getRedemptionsByOrder(customer).length}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Badge variant="outline" className="text-xs sm:text-lg font-bold whitespace-nowrap">
+                          {customer.total_points}
+                        </Badge>
+                        <button
+                          onClick={(e) => deleteSingle(e, customer.id)}
+                          className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors flex-shrink-0"
+                          title="Delete member"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-lg font-bold">
-                        {customer.total_points} pts
-                      </Badge>
-                      <button
-                        onClick={(e) => deleteSingle(e, customer.id)}
-                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
-                        title="Delete member"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </CardHeader>
+                  </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Points Summary */}
-                  <div className="grid grid-cols-3 gap-3 p-3 bg-muted rounded-lg">
+                  <div className="grid grid-cols-3 gap-2 p-2 sm:p-3 bg-muted rounded-lg text-xs sm:text-sm">
                     <div>
-                      <p className="text-xs text-muted-foreground">Lifetime</p>
-                      <p className="font-bold text-sm">{customer.lifetime_points}</p>
+                      <p className="text-xs text-muted-foreground">Life</p>
+                      <p className="font-bold">{customer.lifetime_points}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Redeemed</p>
-                      <p className="font-bold text-sm">{customer.redeemed_points}</p>
+                      <p className="text-xs text-muted-foreground">Used</p>
+                      <p className="font-bold">{customer.redeemed_points}</p>
                     </div>
                     <div className="relative">
-                      <p className="text-xs text-muted-foreground">Remaining</p>
+                      <p className="text-xs text-muted-foreground">Left</p>
                       {editingPointsId === customer.id ? (
-                        <div className="flex gap-2 mt-2">
+                        <div className="flex gap-1 mt-1">
                           <input
                             type="number"
                             value={editPointsValue}
                             onChange={(e) => setEditPointsValue(e.target.value)}
-                            className="flex-1 bg-white border border-primary rounded px-2 py-1 text-sm font-bold"
+                            className="flex-1 bg-white border border-primary rounded px-1 py-0.5 text-xs font-bold"
                             autoFocus
                           />
                           <button
                             onClick={() => updatePointsMutation.mutate({ customerId: customer.id, customerEmail: customer.email, newPoints: editPointsValue })}
                             disabled={updatePointsMutation.isPending}
-                            className="px-2 py-1 bg-primary text-white rounded text-xs font-bold"
+                            className="px-2 py-0.5 bg-primary text-white rounded text-xs font-bold"
                           >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingPointsId(null)}
-                            className="px-2 py-1 border border-muted-foreground rounded text-xs"
-                          >
-                            Cancel
+                            ✓
                           </button>
                         </div>
                       ) : (
@@ -431,7 +435,7 @@ export default function LoyaltyAdmin() {
                             setEditingPointsId(customer.id);
                             setEditPointsValue(String(customer.total_points));
                           }}
-                          className="font-bold text-sm text-primary hover:underline"
+                          className="font-bold text-primary hover:underline"
                         >
                           {customer.total_points}
                         </button>
@@ -442,24 +446,24 @@ export default function LoyaltyAdmin() {
                   {/* Available Rewards */}
                   {availableRewards.length > 0 && (
                     <div>
-                      <p className="text-sm font-semibold mb-2 flex items-center gap-2">
-                        <Gift className="w-4 h-4" /> Available Rewards ({availableRewards.length})
+                      <p className="text-xs sm:text-sm font-semibold mb-2 flex items-center gap-2">
+                        <Gift className="w-3.5 h-3.5" /> {availableRewards.length} Unlocked
                       </p>
                       <div className="space-y-2">
                         {availableRewards.map(reward => (
-                          <div key={reward.id} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                            <div>
-                              <p className="text-sm font-semibold text-green-700">{reward.title}</p>
+                          <div key={reward.id} className="flex items-center justify-between gap-2 bg-green-50 border border-green-200 rounded-lg px-2 sm:px-3 py-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs sm:text-sm font-semibold text-green-700 truncate">{reward.title}</p>
                               <p className="text-xs text-green-600">{reward.points_required} pts</p>
                             </div>
                             <Button
                               onClick={() => redeemMutation.mutate({ customer_id: customer.id, reward_id: reward.id })}
                               disabled={redeemMutation.isPending}
                               size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white gap-1"
+                              className="bg-green-600 hover:bg-green-700 text-white gap-1 text-xs flex-shrink-0"
                             >
-                              <CheckCircle className="w-3.5 h-3.5" />
-                              {redeemMutation.isPending ? 'Redeeming...' : 'Claim'}
+                              <CheckCircle className="w-3 h-3" />
+                              <span className="hidden sm:inline">Claim</span>
                             </Button>
                           </div>
                         ))}
@@ -470,20 +474,17 @@ export default function LoyaltyAdmin() {
                   {/* Redemption History */}
                   {redemptions.length > 0 && (
                     <div>
-                      <p className="text-sm font-semibold mb-2 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4" /> Redemptions ({redemptions.length})
+                      <p className="text-xs sm:text-sm font-semibold mb-2 flex items-center gap-2">
+                        <CheckCircle className="w-3.5 h-3.5" /> {redemptions.length} Redeemed
                       </p>
-                      <div className="space-y-2">
-                        {redemptions.map((redemption, idx) => (
-                          <div key={idx} className="text-xs p-3 bg-primary/10 rounded border border-primary/20">
-                            <div className="flex justify-between">
-                              <span className="font-semibold text-primary">-{redemption.amount} points</span>
-                              <span className="text-muted-foreground text-[11px]">{moment(redemption.timestamp).format('MMM D, h:mm A')}</span>
+                      <div className="space-y-1.5">
+                        {redemptions.slice(0, 3).map((redemption, idx) => (
+                          <div key={idx} className="text-xs p-2 bg-primary/10 rounded border border-primary/20">
+                            <div className="flex justify-between gap-2">
+                              <span className="font-semibold text-primary">-{redemption.amount}</span>
+                              <span className="text-muted-foreground text-[10px]">{moment(redemption.timestamp).format('MMM D')}</span>
                             </div>
-                            <p className="text-foreground/80 mt-1 font-medium">{redemption.description}</p>
-                            {redemption.order_id && (
-                              <p className="text-primary/70 mt-1.5 text-[11px]">Order ID: {redemption.order_id}</p>
-                            )}
+                            {redemption.description && <p className="text-foreground/80 mt-0.5 truncate">{redemption.description}</p>}
                           </div>
                         ))}
                       </div>

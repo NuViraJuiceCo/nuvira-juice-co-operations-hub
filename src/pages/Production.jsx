@@ -134,7 +134,7 @@ export default function Production() {
   return (
     <>
       <PullToRefresh onRefresh={load}>
-        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8 w-full overflow-x-hidden pb-24 sm:pb-20 lg:pb-6">
           <AdminGuide
             title="Admin Guide — Production Planning"
             steps={[
@@ -154,41 +154,40 @@ export default function Production() {
           {/* Header */}
           <div className="space-y-4">
             <div>
-              <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
-              <p className="text-muted-foreground mt-1">
-                {activeBatches.length} active batches · {totalUnits} total units needed
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                {activeBatches.length} active · {totalUnits} units
               </p>
               {lastCalc && (
                 <p className="text-xs text-green-600 mt-1">{lastCalc}</p>
               )}
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <SelectMobile value={categoryFilter} onValueChange={setCategoryFilter} placeholder="All Categories" triggerClassName="w-full">
+            <div className="flex flex-col gap-2">
+              <SelectMobile value={categoryFilter} onValueChange={setCategoryFilter} placeholder="Category" triggerClassName="flex-1">
                 <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="juice">Juice</SelectItem>
                   <SelectItem value="shot">Shot</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </SelectMobile>
-              <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-full">
+              <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="Status" triggerClassName="flex-1">
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="Planned">Planned</SelectItem>
-                  <SelectItem value="Awaiting Ingredients">Awaiting Ingredients</SelectItem>
-                  <SelectItem value="In Production">In Production</SelectItem>
-                  <SelectItem value="In Packing">In Packing</SelectItem>
-                  <SelectItem value="Completed">Completed</SelectItem>
+                  <SelectItem value="Awaiting Ingredients">Await Ing</SelectItem>
+                  <SelectItem value="In Production">Produc</SelectItem>
+                  <SelectItem value="In Packing">Pack</SelectItem>
+                  <SelectItem value="Completed">Done</SelectItem>
                 </SelectContent>
               </SelectMobile>
               <Button
                 onClick={handleRecalculate}
                 disabled={recalculating}
-                className="gap-2 w-full sm:w-auto"
+                className="gap-2 flex-1 sm:flex-none text-xs sm:text-sm"
               >
                 <RefreshCw className={`h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">{recalculating ? 'Recalculating...' : 'Recalculate'}</span>
-                <span className="sm:hidden text-xs">{recalculating ? 'Recalc...' : 'Recalc'}</span>
+                <span>{recalculating ? 'Calc...' : 'Calc'}</span>
               </Button>
             </div>
           </div>
