@@ -293,9 +293,8 @@ export default function Orders() {
                   </tr>
             </thead>
             <tbody>
-              {sorted.map((order) => (
-                <React.Fragment key={order.id}>
-                  <tr className="border-b border-border/50 hover:bg-muted/30 transition-colors min-h-touch cursor-pointer" onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}>
+              {sorted.map((order) => [
+                  <tr key={`${order.id}-main`} className="border-b border-border/50 hover:bg-muted/30 transition-colors min-h-touch cursor-pointer" onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}>
                     <td className="px-5 py-3.5 w-10">
                       <input
                         type="checkbox"
@@ -343,9 +342,9 @@ export default function Orders() {
                        </button>
                       </div>
                     </td>
-                  </tr>
-                  {expandedOrderId === order.id && order.line_items && order.line_items.length > 0 && (
-                    <tr className="border-b border-border/50 last:border-0 bg-muted/20">
+                  </tr>,
+                  expandedOrderId === order.id && order.line_items && order.line_items.length > 0 && (
+                    <tr key={`${order.id}-expanded`} className="border-b border-border/50 last:border-0 bg-muted/20">
                       <td colSpan="11" className="px-5 py-4">
                         <div className="space-y-4">
                           {order.address_line1 && (
@@ -393,10 +392,9 @@ export default function Orders() {
                         </div>
                       </td>
                     </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
+                    ),
+                    ].filter(Boolean))}
+                    </tbody>
           </table>
         </div>
       </div>
