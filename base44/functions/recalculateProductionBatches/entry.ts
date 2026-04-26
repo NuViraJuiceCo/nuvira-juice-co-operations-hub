@@ -330,9 +330,15 @@ Deno.serve(async (req) => {
 
       // For subscriptions, detect how many fulfillments are in this order
       // and split the total quantity evenly across that many weekly production dates.
-      // First, try to get fulfillment count from Bundle metadata
+      // Priority: existing fulfillments array > Bundle metadata > customer_notes > default 1
       let fulfillmentCount = 1;
-      if (order.source_channel === 'subscription' && order.line_items && order.line_items.length > 0) {
+      
+      // FIRST: Check if order already has fulfillments array (highest priority)
+      if (order.source_channel === 'subscription' && order.fulfillments && order.fulfillments.length > 0) {
+        fulfillmentCount = order.fulfillments.length;
+        console.log(`[RECALC] Order ${order.shopify_order_number} already has ${fulfillmentCount} fulfillments`);
+      } else if (order.source_channel === 'subscription' && order.line_items && order.line_items.length > 0) {
+        // SECOND: Try to get fulfillment count from Bundle metadata
         for (const item of order.line_items) {
           // Try to find bundle by exact name first
           for (const bKey of Object.keys(bundleFullData)) {
@@ -349,7 +355,7 @@ Deno.serve(async (req) => {
           if (fulfillmentCount > 1) break;
         }
       }
-      // If no bundle match, fall back to customer_notes or default to 1
+      // THIRD: If no bundle match, fall back to customer_notes or default to 1
       if (fulfillmentCount === 1) {
         fulfillmentCount = detectFulfillmentCount(order, bundleMap);
       }
