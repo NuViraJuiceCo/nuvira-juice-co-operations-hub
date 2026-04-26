@@ -27,44 +27,51 @@ async function callCustomerApp(path, method = 'POST', body = {}) {
 async function syncOrders(base44) {
   const data = await callCustomerApp('getOrdersForSync');
   const orders = data.orders || [];
-  let created = 0, updated = 0, failed = 0;
+  let created = 0, updated = 0, failed = 0, skipped = 0;
   for (const ord of orders) {
     try {
-      const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({ shopify_order_id: ord.shopify_order_id || ord.id });
-      const hubOrder = {
-        shopify_order_id: ord.shopify_order_id || ord.id || '',
-        shopify_order_number: ord.shopify_order_number || ord.order_number || '',
-        customer_email: ord.customer_email || '',
-        customer_phone: ord.customer_phone || '',
-        source_channel: ord.source_channel || ord.channel || 'online',
-        line_items: ord.line_items || ord.items || [],
-        fulfillment_method: ord.fulfillment_method || ord.fulfillment_type || 'delivery',
-        delivery_address: ord.delivery_address || '',
-        requested_delivery_date: ord.requested_delivery_date || ord.delivery_date || '',
-        payment_status: ord.payment_status || 'pending',
-        fulfillment_status: ord.fulfillment_status || '',
-        subtotal: ord.subtotal || 0,
-        total_price: ord.total_price || ord.total || 0,
-        customer_notes: ord.customer_notes || ord.notes || '',
-        production_status: ord.production_status || 'new',
-        tags: ord.tags || [],
-        assigned_delivery_date: ord.assigned_delivery_date || '',
-        sync_status: 'synced',
-        last_sync_at: new Date().toISOString(),
-      };
-      if (existing?.length > 0) {
-        await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, hubOrder);
-        updated++;
-      } else {
-        await base44.asServiceRole.entities.ShopifyOrder.create(hubOrder);
-        created++;
-      }
-      } catch (err) { 
+      const orderId = ord.shopify_order_id || ord.id || '';
+      if (!orderId || !ord.customer_email) { skipped++; continue; }
+
+      // Route ALL writes through safeSyncOrderUpdate
+      const result = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+        incomingData: {
+          shopify_order_id: orderId,
+          shopify_order_number: ord.shopify_order_number || ord.order_number || '',
+          customer_email: ord.customer_email || '',
+          customer_name: ord.customer_name || ord.full_name || '',
+          customer_phone: ord.customer_phone || '',
+          line_items: ord.line_items || ord.items || [],
+          fulfillment_method: ord.fulfillment_method || ord.fulfillment_type || 'delivery',
+          requested_delivery_date: ord.requested_delivery_date || ord.delivery_date || '',
+          payment_status: ord.payment_status || 'pending',
+          subtotal: ord.subtotal || 0,
+          total_price: ord.total_price || ord.total || 0,
+          customer_notes: ord.customer_notes || ord.notes || '',
+          tags: ord.tags || [],
+          sync_status: 'synced',
+          last_sync_at: new Date().toISOString(),
+          address_line1: ord.address_line1 || '',
+          address_line2: ord.address_line2 || '',
+          address_city: ord.address_city || '',
+          address_state: ord.address_state || '',
+          address_postal_code: ord.address_postal_code || '',
+          address_country: ord.address_country || 'US',
+          delivery_notes: ord.delivery_notes || ord.customer_notes || '',
+        },
+        source: 'customer_app',
+        matchBy: { shopify_order_id: orderId },
+      });
+      const action = result?.data?.action;
+      if (action === 'created') created++;
+      else if (action === 'updated') updated++;
+      else skipped++;
+    } catch (err) {
       console.error(`[FULL-SYNC] Order sync error for ${ord.shopify_order_id}:`, err.message);
-      failed++; 
-      }
-      }
-      return { total: orders.length, created, updated, failed };
+      failed++;
+    }
+  }
+  return { total: orders.length, created, updated, failed, skipped };
 }
 
 async function syncProducts(base44) {

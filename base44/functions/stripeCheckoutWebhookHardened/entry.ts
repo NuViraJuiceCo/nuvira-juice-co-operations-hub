@@ -188,20 +188,23 @@ async function findOrReconcileOrder(base44, event, rawData) {
     address_last_synced_at: new Date().toISOString(),
   };
 
-  // PHASE 5: Write or update order
-  // CRITICAL: Never downgrade valid linkage to #unknown
-  if (order && order.stripe_customer_id && !orderPayload.stripe_customer_id) {
-    // Preserve existing valid linkage
-    orderPayload.stripe_customer_id = order.stripe_customer_id;
-  }
+  // PHASE 5: Route through safe gateway — enforces locks, subscription protection, field ownership
+  const matchBy = {};
+  if (rawData.subscription) matchBy.stripe_subscription_id = rawData.subscription;
+  if (eventType.includes('checkout')) matchBy.stripe_checkout_session_id = stripeId;
+  if (rawData.payment_intent) matchBy.stripe_payment_intent_id = rawData.payment_intent;
+  if (rawData.invoice) matchBy.stripe_invoice_id = rawData.invoice;
 
-  if (order) {
-    await base44.asServiceRole.entities.ShopifyOrder.update(order.id, orderPayload);
-    return { order: { id: order.id, ...orderPayload }, created: false, eventId };
-  } else {
-    const newOrder = await base44.asServiceRole.entities.ShopifyOrder.create(orderPayload);
-    return { order: newOrder, created: true, eventId };
-  }
+  const result = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+    incomingData: orderPayload,
+    source: 'stripe_webhook',
+    stripeEventId: eventId,
+    matchBy,
+  });
+
+  const savedId = result?.data?.order_id;
+  const wasCreated = result?.data?.action === 'created';
+  return { order: { id: savedId, ...orderPayload }, created: wasCreated, eventId };
 }
 
 Deno.serve(async (req) => {

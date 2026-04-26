@@ -125,13 +125,21 @@ async function reconcileOrderFromStripeObject(base44, stripeObj, objectType) {
     repair_method: 'stripe_' + objectType + '_lookup',
   };
 
-  if (order) {
-    await base44.asServiceRole.entities.ShopifyOrder.update(order.id, payload);
-    return { repaired: true, action: 'updated', order_id: order.id };
-  } else {
-    const newOrder = await base44.asServiceRole.entities.ShopifyOrder.create(payload);
-    return { repaired: true, action: 'created', order_id: newOrder.id };
-  }
+  // Route through safe gateway — preserve lock/subscription protections
+  const matchBy = {};
+  if (objectType === 'checkout.session') matchBy.stripe_checkout_session_id = stripeId;
+  else if (objectType === 'invoice') matchBy.stripe_invoice_id = stripeId;
+  else if (stripeObj.subscription) matchBy.stripe_subscription_id = stripeObj.subscription;
+  if (order) matchBy.internal_id = order.id;
+
+  const result = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+    incomingData: payload,
+    source: 'manual_recovery',
+    matchBy,
+  });
+
+  const savedId = result?.data?.order_id || order?.id;
+  return { repaired: true, action: result?.data?.action || 'updated', order_id: savedId };
 }
 
 Deno.serve(async (req) => {

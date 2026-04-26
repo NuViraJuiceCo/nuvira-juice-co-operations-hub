@@ -43,43 +43,34 @@
     },
     "delivery_address": {
       "type": "string",
-      "description": "DEPRECATED: use address_* fields instead. Full formatted address for display."
+      "description": "DEPRECATED: use address_* fields instead."
     },
     "address_line1": {
-      "type": "string",
-      "description": "Street address line 1"
+      "type": "string"
     },
     "address_line2": {
-      "type": "string",
-      "description": "Street address line 2 (apt, suite, etc)"
+      "type": "string"
     },
     "address_city": {
-      "type": "string",
-      "description": "City"
+      "type": "string"
     },
     "address_state": {
-      "type": "string",
-      "description": "State / province"
+      "type": "string"
     },
     "address_postal_code": {
-      "type": "string",
-      "description": "ZIP / postal code"
+      "type": "string"
     },
     "address_country": {
-      "type": "string",
-      "description": "Country (e.g., US)"
+      "type": "string"
     },
     "delivery_notes": {
-      "type": "string",
-      "description": "Special delivery instructions from customer"
+      "type": "string"
     },
     "address_last_synced_from": {
-      "type": "string",
-      "description": "Source of address: stripe_checkout, stripe_customer, customer_app, manual, etc"
+      "type": "string"
     },
     "address_last_synced_at": {
-      "type": "string",
-      "description": "ISO timestamp when address was last synced/updated"
+      "type": "string"
     },
     "line_items": {
       "type": "array",
@@ -105,18 +96,15 @@
         "type": "object",
         "properties": {
           "fulfillment_number": {
-            "type": "number",
-            "description": "Week/fulfillment number (1, 2, 3, 4, etc)"
+            "type": "number"
           },
           "production_date": {
             "type": "string",
-            "format": "date",
-            "description": "Date this fulfillment will be produced"
+            "format": "date"
           },
           "delivery_date": {
             "type": "string",
-            "format": "date",
-            "description": "Expected delivery date (3 days after production)"
+            "format": "date"
           },
           "items": {
             "type": "array",
@@ -147,8 +135,7 @@
             "default": "pending"
           },
           "address_line1": {
-            "type": "string",
-            "description": "Delivery address - inherited from parent order at fulfillment generation"
+            "type": "string"
           },
           "address_line2": {
             "type": "string"
@@ -191,8 +178,7 @@
         "paid",
         "authorized",
         "refunded"
-      ],
-      "description": "Payment status"
+      ]
     },
     "fulfillment_status": {
       "type": "string"
@@ -228,6 +214,19 @@
       ],
       "default": "new"
     },
+    "order_lock_status": {
+      "type": "string",
+      "enum": [
+        "unlocked",
+        "verified",
+        "production_scheduled",
+        "in_production",
+        "out_for_delivery",
+        "fulfilled"
+      ],
+      "default": "unlocked",
+      "description": "Lifecycle lock controlling what future syncs are allowed to overwrite"
+    },
     "tags": {
       "type": "array",
       "items": {
@@ -246,48 +245,37 @@
         "pending_reconciliation",
         "failed"
       ],
-      "default": "synced",
-      "description": "Sync status: synced (complete), pending_reconciliation (awaiting Stripe verification), processing (in progress), failed (needs review)"
+      "default": "synced"
     },
     "last_sync_at": {
-      "type": "string",
-      "description": "Timestamp of last sync from customer app"
+      "type": "string"
     },
     "stripe_customer_id": {
-      "type": "string",
-      "description": "Stripe customer ID for canonical customer lookup"
+      "type": "string"
     },
     "stripe_checkout_session_id": {
-      "type": "string",
-      "description": "Stripe checkout session ID if from online checkout"
+      "type": "string"
     },
     "stripe_payment_intent_id": {
-      "type": "string",
-      "description": "Stripe payment intent ID for payment matching"
+      "type": "string"
     },
     "stripe_invoice_id": {
-      "type": "string",
-      "description": "Stripe invoice ID if applicable"
+      "type": "string"
     },
     "stripe_subscription_id": {
-      "type": "string",
-      "description": "Stripe subscription ID if recurring/subscription order"
+      "type": "string"
     },
     "stripe_charge_id": {
-      "type": "string",
-      "description": "Stripe charge ID if applicable"
+      "type": "string"
     },
     "stripe_event_id_applied": {
-      "type": "string",
-      "description": "Most recent Stripe event ID that was successfully processed for this order"
+      "type": "string"
     },
     "stripe_created_event_type": {
-      "type": "string",
-      "description": "Original webhook event type that created this order (checkout.session.completed, payment_intent.succeeded, etc)"
+      "type": "string"
     },
     "last_reconciliation_at": {
-      "type": "string",
-      "description": "ISO timestamp when last reconciled against Stripe"
+      "type": "string"
     },
     "source_type": {
       "type": "string",
@@ -298,8 +286,7 @@
         "manual_repair",
         "customer_app",
         "admin_create"
-      ],
-      "description": "How this order was originally sourced"
+      ]
     },
     "repair_status": {
       "type": "string",
@@ -310,16 +297,13 @@
         "repaired_from_event",
         "needs_review"
       ],
-      "default": "none",
-      "description": "Whether this record has been repaired and how"
+      "default": "none"
     },
     "repair_timestamp": {
-      "type": "string",
-      "description": "When the last repair action occurred"
+      "type": "string"
     },
     "repair_method": {
-      "type": "string",
-      "description": "Which repair method was used (e.g., canonical_checkout_session_lookup, event_replay)"
+      "type": "string"
     },
     "subscription_parent_id": {
       "type": "string",
@@ -327,16 +311,29 @@
     },
     "fulfillment_instance_date": {
       "type": "string",
-      "format": "date",
-      "description": "For fulfillment-derived orders: the date this fulfillment instance represents"
+      "format": "date"
     },
     "fulfillment_sequence_number": {
-      "type": "number",
-      "description": "For fulfillment-derived orders: which fulfillment instance in the subscription (1, 2, 3, ...)"
+      "type": "number"
     },
     "source_invoice_id": {
+      "type": "string"
+    },
+    "data_quality_status": {
       "type": "string",
-      "description": "For fulfillment-derived orders: source Stripe invoice ID"
+      "enum": [
+        "incomplete",
+        "complete",
+        "verified",
+        "production_scheduled",
+        "needs_review",
+        "quarantined"
+      ],
+      "default": "incomplete",
+      "description": "Quality/verification level of this order record"
+    },
+    "last_verified_at": {
+      "type": "string"
     },
     "delivery_photo_url": {
       "type": "string"

@@ -92,49 +92,32 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Clean up duplicate placeholder orders (keep most recent)
-    const allOrdersAgain = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 100);
-    const byEmail = {};
-    
+    // 3. Clean up ONLY exact shopify_order_id duplicates (same ID = true duplicate)
+    // NEVER delete by price bucket or email — that erases legitimate separate orders
+    const allOrdersAgain = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 200);
+    const byOrderId = {};
     for (const o of allOrdersAgain) {
-      if (!o.customer_email) continue;
-      if (!byEmail[o.customer_email]) byEmail[o.customer_email] = [];
-      byEmail[o.customer_email].push(o);
+      if (!o.shopify_order_id || o.shopify_order_id === 'base44_unknown') continue;
+      if (!byOrderId[o.shopify_order_id]) byOrderId[o.shopify_order_id] = [];
+      byOrderId[o.shopify_order_id].push(o);
     }
 
-    for (const [email, orders] of Object.entries(byEmail)) {
-      if (orders.length <= 1) continue;
-      
-      // Filter to duplicates (same customer_email, similar amounts)
-      const grouped = {};
-      for (const o of orders) {
-        const key = `${Math.floor((o.total_price || 0) / 10)}`; // group by $10
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(o);
-      }
-
-      // For each price group with duplicates, keep newest, delete rest
-      for (const [priceKey, dupes] of Object.entries(grouped)) {
-        if (dupes.length <= 1) continue;
-        
-        dupes.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-        const keepId = dupes[0].id;
-        
-        for (let i = 1; i < dupes.length; i++) {
-          try {
-            await base44.asServiceRole.entities.ShopifyOrder.delete(dupes[i].id);
-            result.actions.push({
-              action: 'deleted_duplicate',
-              deleted_id: dupes[i].id,
-              kept_id: keepId,
-              customer_email: email,
-            });
-          } catch (err) {
-            result.issues.push({
-              order_id: dupes[i].id,
-              problem: `Failed to delete duplicate: ${err.message}`,
-            });
-          }
+    for (const [orderId, dupes] of Object.entries(byOrderId)) {
+      if (dupes.length <= 1) continue;
+      // Keep the one with highest completeness (most fields populated), then newest
+      dupes.sort((a, b) => {
+        const scoreA = (a.customer_name ? 1 : 0) + (a.line_items?.length > 0 ? 1 : 0) + (a.fulfillments?.length > 0 ? 2 : 0) + (a.stripe_subscription_id ? 1 : 0);
+        const scoreB = (b.customer_name ? 1 : 0) + (b.line_items?.length > 0 ? 1 : 0) + (b.fulfillments?.length > 0 ? 2 : 0) + (b.stripe_subscription_id ? 1 : 0);
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date);
+      });
+      const keepId = dupes[0].id;
+      for (let i = 1; i < dupes.length; i++) {
+        try {
+          await base44.asServiceRole.entities.ShopifyOrder.delete(dupes[i].id);
+          result.actions.push({ action: 'deleted_exact_duplicate', deleted_id: dupes[i].id, kept_id: keepId, shopify_order_id: orderId });
+        } catch (err) {
+          result.issues.push({ order_id: dupes[i].id, problem: `Failed to delete duplicate: ${err.message}` });
         }
       }
     }
