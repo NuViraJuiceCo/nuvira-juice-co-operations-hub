@@ -202,20 +202,20 @@ Deno.serve(async (req) => {
           ...addressFields,
         };
 
-        if (existingOrders && existingOrders.length > 0) {
-          const existing = existingOrders[0];
-          const meaningfulStatuses = ['awaiting_production','in_production','bottled','labeled','qc_checked','packed','in_cold_storage','assigned_for_pickup','assigned_for_delivery','fulfilled','canceled','refunded'];
-          if (meaningfulStatuses.includes(existing.production_status)) {
-            orderData.production_status = existing.production_status;
-          }
-          if (existing.internal_notes) {
-            orderData.internal_notes = existing.internal_notes;
-          }
-          await base44.asServiceRole.entities.ShopifyOrder.update(existing.id, orderData);
+        // Route ALL writes through safeSyncOrderUpdate — enforces locks, subscription protection, field ownership
+        const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+          incomingData: orderData,
+          source: 'rebuild_subscriptions',
+          matchBy: { stripe_subscription_id: sub.id },
+        });
+
+        const action = safeResult?.data?.action || safeResult?.data?.status;
+        if (action === 'created') {
+          results.created.push({ email, sub_id: sub.id, order_number: orderNumber, fulfillments: fulfillments.length });
+        } else if (action === 'updated') {
           results.updated.push({ email, sub_id: sub.id, order_number: orderNumber, fulfillments: fulfillments.length });
         } else {
-          await base44.asServiceRole.entities.ShopifyOrder.create(orderData);
-          results.created.push({ email, sub_id: sub.id, order_number: orderNumber, fulfillments: fulfillments.length });
+          results.skipped.push({ email, sub_id: sub.id, reason: safeResult?.data?.reason || 'gateway_rejected' });
         }
       } catch (err) {
         console.error(`[REBUILD-SUBS] Failed for ${sub.id}: ${err.message}`);

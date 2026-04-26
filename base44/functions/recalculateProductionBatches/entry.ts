@@ -523,19 +523,24 @@ Deno.serve(async (req) => {
     }
 
     // ─── SAVE UPDATED ORDERS (fulfillments, assigned_delivery_date) ────────────
-    // Persist fulfillment breakdowns and delivery date assignments back to the database
+    // Route ALL order writes through safeSyncOrderUpdate to enforce locks and field ownership
     const ordersToUpdate = allOrders.filter(o => o.fulfillments || o._deliveryDateAssigned);
     for (const order of ordersToUpdate) {
-      if (order.fulfillments || (order._deliveryDateAssigned && !order.assigned_delivery_date)) {
-        const updateData = {};
-        if (order.fulfillments && order.fulfillments.length > 0) {
-          updateData.fulfillments = order.fulfillments;
-        }
-        if (order._deliveryDateAssigned && !order.assigned_delivery_date) {
-          updateData.assigned_delivery_date = order._deliveryDateAssigned;
-        }
-        if (Object.keys(updateData).length > 0) {
-          await base44.asServiceRole.entities.ShopifyOrder.update(order.id, updateData);
+      const updateData = {};
+      if (order.fulfillments && order.fulfillments.length > 0) {
+        updateData.fulfillments = order.fulfillments;
+      }
+      if (order._deliveryDateAssigned && !order.assigned_delivery_date) {
+        updateData.assigned_delivery_date = order._deliveryDateAssigned;
+      }
+      if (Object.keys(updateData).length > 0) {
+        const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+          incomingData: updateData,
+          source: 'operations',
+          matchBy: { internal_id: order.id },
+        });
+        if (safeResult?.data?.status === 'rejected') {
+          console.warn(`[RECALC] Gateway rejected fulfillment write for order ${order.id}: ${safeResult.data.reason}`);
         }
       }
     }

@@ -642,17 +642,17 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const handleMarkDelivered = async (order, proofPhotoUrl, dropLocation) => {
     setUpdatingId(order.id);
     const deliveredAt = new Date().toISOString();
-    const newHistory = [
-      ...(order.status_history || []),
-      { status: 'delivered', timestamp: deliveredAt, message: `Delivered · ${dropLocation}` },
-    ];
     try {
-       await base44.entities.ShopifyOrder.update(order.id, {
-         production_status: 'fulfilled',
-         delivery_photo_url: proofPhotoUrl,
-         delivery_drop_location: dropLocation,
-         delivered_by: user?.email,
-         delivered_at: deliveredAt,
+       await base44.functions.invoke('safeSyncOrderUpdate', {
+         incomingData: {
+           production_status: 'fulfilled',
+           delivery_photo_url: proofPhotoUrl,
+           delivery_drop_location: dropLocation,
+           delivered_by: user?.email,
+           delivered_at: deliveredAt,
+         },
+         source: 'operations',
+         matchBy: { internal_id: order.id },
        });
       const itemsList = order.items?.map(i => `${i.title} ×${i.quantity}`).join(', ') || '';
       const deliveredTime = new Date(deliveredAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' });
@@ -673,14 +673,14 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
   const handleMarkUnableToDeliver = async (order, reason, notes) => {
     setUpdatingId(order.id);
-    const newHistory = [
-      ...(order.status_history || []),
-      { status: 'order_received', timestamp: new Date().toISOString(), message: `Unable to deliver: ${reason}${notes ? ` — ${notes}` : ''}` },
-    ];
     try {
-       await base44.entities.ShopifyOrder.update(order.id, {
-         production_status: 'new',
-         customer_notes: `Unable to deliver on ${new Date().toLocaleDateString()} — Reason: ${reason}${notes ? `. ${notes}` : ''}`,
+      await base44.functions.invoke('safeSyncOrderUpdate', {
+         incomingData: {
+           production_status: 'new',
+           internal_notes: `Unable to deliver on ${new Date().toLocaleDateString()} — Reason: ${reason}${notes ? `. ${notes}` : ''}`,
+         },
+         source: 'operations',
+         matchBy: { internal_id: order.id },
        });
       const linkedReturn = bagReturns.find(r => r.customer_email === order.customer_email && r.verification_status === 'requested');
       if (linkedReturn) {
@@ -704,13 +704,16 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
   const handleMarkStage = async (order, nextStage) => {
     setUpdatingId(order.id);
-    const newHistory = [...(order.status_history || []), { status: nextStage.key, timestamp: new Date().toISOString(), message: nextStage.label }];
     try {
-       await base44.entities.ShopifyOrder.update(order.id, { production_status: nextStage.key });
+       await base44.functions.invoke('safeSyncOrderUpdate', {
+         incomingData: { production_status: nextStage.key },
+         source: 'operations',
+         matchBy: { internal_id: order.id },
+       });
       if (routeData?.optimized_orders) {
-        const updated = routeData.optimized_orders.map(o => 
-          o.id === order.id ? { ...o, status: nextStage.key, status_history: newHistory } : o
-        );
+       const updated = routeData.optimized_orders.map(o => 
+         o.id === order.id ? { ...o, status: nextStage.key } : o
+       );
         setRouteData({ ...routeData, optimized_orders: updated });
       }
       toast.success(`Marked ${nextStage.label}`);
@@ -722,7 +725,11 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   const handleDeleteOrder = async (order) => {
-    console.log('Delete order:', order.id, order);
+    // Delete is admin-only — deletion is not an order write, it's a removal
+    if (user?.role !== 'admin') {
+      toast.error('Only admins can delete orders');
+      return;
+    }
     setDeletingId(order.id);
     try {
       await base44.asServiceRole.entities.ShopifyOrder.delete(order.id);

@@ -66,6 +66,7 @@ const FIELD_OWNERSHIP = {
     'production_status', 'fulfillment_status', 'assigned_delivery_date',
     'internal_notes', 'tags', 'sync_status', 'order_lock_status',
     'fulfillments', 'delivery_photo_url', 'delivery_drop_location', 'delivered_by', 'delivered_at',
+    'fulfillment_method',
   ],
   admin: [
     // Admin can write anything
@@ -97,12 +98,25 @@ function normalizeTitle(title) {
   return t;
 }
 
+// Operational-only fields — these are legitimate targeted writes from operations/driver
+// and should NEVER be flagged as unknown quality
+const OPERATIONAL_FIELDS = new Set([
+  'production_status', 'fulfillment_status', 'order_lock_status', 'assigned_delivery_date',
+  'internal_notes', 'tags', 'sync_status', 'fulfillments', 'fulfillment_method',
+  'delivery_photo_url', 'delivery_drop_location', 'delivered_by', 'delivered_at',
+]);
+
 function isUnknownQuality(data) {
   // Only flag as unknown quality if there are explicit signs of corruption/incomplete data
-  // A small targeted update (e.g. only payment_status) is NOT unknown quality
+  // A small targeted update (e.g. only production_status) is NOT unknown quality
   const hasAnyIdentity = data.customer_email || data.stripe_subscription_id || data.stripe_checkout_session_id || data.customer_name;
   const hasExplicitUnknown = data.shopify_order_number === '#unknown' || data.shopify_order_number === '#UNKNOWN';
-  const isEmptyIdentityPayload = !hasAnyIdentity && Object.keys(data).length > 3; // More than 3 fields but no identity
+  
+  // If ALL fields in the payload are operational fields, it's a legitimate targeted update
+  const allFieldsAreOperational = Object.keys(data).every(k => OPERATIONAL_FIELDS.has(k));
+  if (allFieldsAreOperational) return false;
+
+  const isEmptyIdentityPayload = !hasAnyIdentity && Object.keys(data).length > 3; // More than 3 non-identity fields but no identity
   return hasExplicitUnknown || isEmptyIdentityPayload;
 }
 
@@ -201,10 +215,15 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Fallback: match by internal ID
+      // Fallback: match by internal ID — used by operations/driver/recalc writes
       if (!existingOrder && matchBy.internal_id) {
-        const all = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 1000);
-        existingOrder = all.find(o => o.id === matchBy.internal_id) || null;
+        try {
+          // Attempt direct single-record fetch first (efficient)
+          const all = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 2000);
+          existingOrder = all.find(o => o.id === matchBy.internal_id) || null;
+        } catch (err) {
+          console.error('[SAFE-SYNC] internal_id lookup failed:', err.message);
+        }
       }
     }
 

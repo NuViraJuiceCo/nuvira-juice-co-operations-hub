@@ -199,8 +199,20 @@ async function reconcileAndRepairOrder(base44, order) {
       }
     }
 
-    // PHASE 5: Apply repair
-    await base44.asServiceRole.entities.ShopifyOrder.update(order.id, repairPayload);
+    // PHASE 5: Apply repair — route through safeSyncOrderUpdate to enforce locks and ownership
+    const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+      incomingData: repairPayload,
+      source: 'manual_recovery',
+      matchBy: { internal_id: order.id },
+    });
+
+    if (safeResult?.data?.status === 'rejected') {
+      repairLog.error = `Gateway rejected repair: ${safeResult.data.reason}`;
+      repairLog.repairs_applied.push(`BLOCKED: ${safeResult.data.reason}`);
+      console.warn(`[REPAIR] Gateway rejected repair for order ${order.id}: ${safeResult.data.reason}`);
+      return repairLog;
+    }
+
     repairLog.final_state = repairPayload;
 
     console.log(`[REPAIR] Successfully repaired order ${order.id}:`, repairLog.repairs_applied.join(', '));

@@ -258,37 +258,22 @@ async function findOrCreateOrder(base44, event) {
     stripe_event_id_applied: event.id,
   };
 
-  // CRITICAL: For subscriptions, route through safeSubscriptionUpsert instead of direct write
-  if (isSubscription && subscriptionId) {
-    try {
-      const safeResult = await base44.functions.invoke('safeSubscriptionUpsert', {
-        orderData: orderPayload,
-        source: 'stripe_webhook',
-        event_id: event.id,
-      });
-      if (safeResult && safeResult.data) {
-        order = { id: safeResult.data.order_id };
-        created = safeResult.data.action === 'created';
-      }
-    } catch (err) {
-      console.error('[STRIPE-V2] Safe subscription upsert failed:', err.message);
-      // Fallback to direct create for one-time recovery
-      if (!order) {
-        const created_obj = await base44.asServiceRole.entities.ShopifyOrder.create(orderPayload);
-        order = created_obj;
-        created = true;
-      }
-    }
-  } else {
-    // One-time orders: direct write
-    if (order) {
-      await base44.asServiceRole.entities.ShopifyOrder.update(order.id, orderPayload);
-    } else {
-      const created_obj = await base44.asServiceRole.entities.ShopifyOrder.create(orderPayload);
-      order = created_obj;
-      created = true;
-    }
-  }
+  // ALL writes route through safeSyncOrderUpdate — no direct writes, no fallback bypasses
+  const matchBy = {};
+  if (subscriptionId) matchBy.stripe_subscription_id = subscriptionId;
+  if (event.type === 'checkout.session.completed') matchBy.stripe_checkout_session_id = stripeId;
+  if (data.payment_intent) matchBy.stripe_payment_intent_id = data.payment_intent;
+
+  const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+    incomingData: orderPayload,
+    source: 'stripe_webhook',
+    stripeEventId: event.id,
+    matchBy,
+  });
+
+  const savedId = safeResult?.data?.order_id;
+  created = safeResult?.data?.action === 'created';
+  order = savedId ? { id: savedId } : null;
 
   return order ? { order, created, eventId: event.id } : null;
 }
