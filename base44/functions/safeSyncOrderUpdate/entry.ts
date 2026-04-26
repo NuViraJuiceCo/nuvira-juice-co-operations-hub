@@ -36,10 +36,15 @@ const LOCK_FROZEN_FIELDS = {
 // Only these sources can write these fields. All others are ignored.
 const FIELD_OWNERSHIP = {
   stripe_webhook: [
+    'shopify_order_id', 'shopify_order_number',
     'payment_status', 'stripe_customer_id', 'stripe_subscription_id', 'stripe_invoice_id',
     'stripe_checkout_session_id', 'stripe_payment_intent_id', 'stripe_charge_id',
     'stripe_created_event_type', 'stripe_event_id_applied', 'last_reconciliation_at',
     'sync_status', 'last_sync_at', 'customer_order_date', 'source_type',
+    'customer_name', 'customer_email', 'customer_phone', 'source_channel',
+    'line_items', 'total_price', 'subtotal', 'fulfillment_method',
+    'address_line1', 'address_line2', 'address_city', 'address_state',
+    'address_postal_code', 'address_country', 'address_last_synced_from', 'address_last_synced_at',
   ],
   customer_app: [
     'customer_name', 'customer_email', 'customer_phone',
@@ -49,11 +54,13 @@ const FIELD_OWNERSHIP = {
     'line_items', 'total_price', 'subtotal', 'tags', 'sync_status', 'last_sync_at',
   ],
   rebuild_subscriptions: [
+    'shopify_order_id', 'shopify_order_number',
     'customer_name', 'customer_email', 'customer_phone', 'source_channel', 'source_type',
     'stripe_subscription_id', 'stripe_customer_id', 'line_items', 'fulfillments',
     'total_price', 'subtotal', 'payment_status', 'fulfillment_method',
     'address_line1', 'address_line2', 'address_city', 'address_state',
     'address_postal_code', 'address_country', 'sync_status', 'last_sync_at', 'customer_order_date',
+    'production_status', 'order_lock_status',
   ],
   operations: [
     'production_status', 'fulfillment_status', 'assigned_delivery_date',
@@ -66,6 +73,7 @@ const FIELD_OWNERSHIP = {
   ],
   manual_recovery: [
     // Recovery can write most fields when repairing broken orders
+    'shopify_order_id', 'shopify_order_number',
     'customer_name', 'customer_email', 'customer_phone', 'source_channel', 'source_type',
     'stripe_subscription_id', 'stripe_customer_id', 'stripe_checkout_session_id',
     'stripe_payment_intent_id', 'stripe_invoice_id', 'line_items', 'fulfillments',
@@ -73,7 +81,7 @@ const FIELD_OWNERSHIP = {
     'address_line1', 'address_line2', 'address_city', 'address_state',
     'address_postal_code', 'address_country', 'sync_status', 'repair_status',
     'repair_timestamp', 'repair_method', 'last_reconciliation_at', 'last_sync_at',
-    'shopify_order_number', 'customer_order_date',
+    'customer_order_date', 'production_status', 'order_lock_status',
   ],
 };
 
