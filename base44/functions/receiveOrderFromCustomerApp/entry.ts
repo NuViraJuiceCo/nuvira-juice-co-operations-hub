@@ -1,62 +1,21 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+// DEPRECATED WEBHOOK — DISABLED 2026-04-26
+// This endpoint is unsafe because it bypasses safeSyncOrderUpdate protections
+// All Customer App order syncs must use pullOrdersFromCustomerApp instead
 
 Deno.serve(async (req) => {
-  try {
-    // Verify shared secret from Authorization header
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      return Response.json({ error: 'Missing authorization header' }, { status: 401 });
-    }
-    const secret = authHeader.replace('Bearer ', '').trim();
-    if (secret !== Deno.env.get('CUSTOMER_APP_SYNC_SECRET')) {
-      return Response.json({ error: 'Invalid authorization token' }, { status: 401 });
-    }
-
-    const base44 = createClientFromRequest(req);
-    const body = await req.json();
-
-    // Support wrapped payloads: { event, order: {...} } or { event, data: {...} } or flat
-    const order = body.order || body.data || body;
-
-    const hubPayload = {
-      shopify_order_id: `base44_${order.id || 'unknown'}`,
-      shopify_order_number: order.order_number || (order.id ? `#${order.id.slice(-6).toUpperCase()}` : '#UNKNOWN'),
-      base44_order_id: order.id,
-      source_channel: 'online',
-      customer_email: order.customer_email || '',
-      customer_phone: order.contact_phone || '',
-      line_items: (order.items || []).map(item => ({
-        title: item.title || '',
-        quantity: item.quantity || 1,
-        price: item.price || 0,
-      })),
-      fulfillment_method: order.fulfillment_type || 'delivery',
-      delivery_address: order.delivery_address || '',
-      requested_delivery_date: order.estimated_delivery_date || '',
-      payment_status: order.payment_captured ? 'paid' : 'pending',
-      fulfillment_status: order.status || 'order_received',
-      subtotal: order.subtotal || 0,
-      total_price: order.total || 0,
-      customer_notes: order.notes || '',
-      production_status: 'new',
-      assigned_delivery_date: order.estimated_delivery_date || '',
-      tags: order.is_preorder ? ['preorder'] : [],
-      internal_notes: order.is_preorder ? `Pre-order — fulfillment: ${order.preorder_fulfillment_date || 'TBD'}` : '',
-      sync_status: 'synced',
-      last_sync_at: new Date().toISOString(),
-    };
-
-    const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({ base44_order_id: order.id });
-    let result;
-    if (existing?.length > 0) {
-      result = await base44.asServiceRole.entities.ShopifyOrder.update(existing[0].id, hubPayload);
-    } else {
-      result = await base44.asServiceRole.entities.ShopifyOrder.create(hubPayload);
-    }
-
-    return Response.json({ success: true, id: result.id, synced_at: new Date().toISOString() });
-  } catch (error) {
-    console.error('receiveOrderFromCustomerApp error:', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+  if (req.method === 'POST') {
+    return new Response(JSON.stringify({ 
+      error: 'DEPRECATED_ENDPOINT',
+      message: 'receiveOrderFromCustomerApp webhook is disabled',
+      reason: 'Direct writes bypass safeSyncOrderUpdate gateway and safety protections',
+      replacement: 'Use POST /functions/pullOrdersFromCustomerApp instead',
+      deprecated_since: '2026-04-26',
+      documentation: 'See FULL_APP_ARCHITECTURE_CLEANUP report for details'
+    }), { 
+      status: 410,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
+
+  return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
 });

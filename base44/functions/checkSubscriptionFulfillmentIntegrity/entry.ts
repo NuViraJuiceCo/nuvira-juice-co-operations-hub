@@ -115,9 +115,17 @@ Deno.serve(async (req) => {
             });
           }
 
-          await base44.asServiceRole.entities.ShopifyOrder.update(order.id, {
-            fulfillments,
+          // Route through safeSyncOrderUpdate to enforce locks and ownership
+          const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+            incomingData: { fulfillments },
+            source: 'subscription_integrity_check',
+            matchBy: { internal_id: order.id },
           });
+
+          if (safeResult?.data?.status === 'rejected') {
+            console.warn('[FULFILLMENT-INTEGRITY] Update rejected by gateway for order', order.id, ':', safeResult.data.reason);
+            continue;
+          }
 
           result.backfilled++;
         } catch (err) {
