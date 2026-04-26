@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, CheckCircle, XCircle, Clock } from "lucide-react";
+import { AlertCircle, CheckCircle, XCircle, Clock, ShieldAlert, TrendingUp } from "lucide-react";
 import StatusBadge from "../components/shared/StatusBadge";
 import moment from "moment";
 
@@ -57,12 +57,66 @@ export default function OrderReviewQueue() {
     );
   }
 
+  const pending = queue.filter(q => q.status === "pending");
+  const ALERT_THRESHOLD = 20;
+
+  // Incident type breakdown of pending items
+  const incidentBreakdown = pending.reduce((acc, item) => {
+    const t = item.incident_type || 'unknown';
+    acc[t] = (acc[t] || 0) + 1;
+    return acc;
+  }, {});
+
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <div>
         <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Order Review Queue</h1>
         <p className="text-muted-foreground mt-1">Suspicious orders flagged for manual review</p>
       </div>
+
+      {/* Summary Dashboard */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-card border rounded-lg p-4 text-center">
+          <p className={`text-3xl font-bold ${pending.length >= ALERT_THRESHOLD ? 'text-red-600' : pending.length > 0 ? 'text-amber-600' : 'text-primary'}`}>
+            {pending.length}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Pending Review</p>
+          {pending.length >= ALERT_THRESHOLD && (
+            <p className="text-[10px] text-red-600 font-semibold mt-1 flex items-center justify-center gap-1">
+              <ShieldAlert className="w-3 h-3" /> Above threshold
+            </p>
+          )}
+        </div>
+        <div className="bg-card border rounded-lg p-4 text-center">
+          <p className="text-3xl font-bold text-green-600">{queue.filter(q => q.status === 'resolved').length}</p>
+          <p className="text-xs text-muted-foreground mt-1">Resolved</p>
+        </div>
+        <div className="bg-card border rounded-lg p-4 text-center">
+          <p className="text-3xl font-bold text-foreground">{queue.length}</p>
+          <p className="text-xs text-muted-foreground mt-1">Total All Time</p>
+        </div>
+        <div className="bg-card border rounded-lg p-4 text-center">
+          <p className="text-3xl font-bold text-muted-foreground">{ALERT_THRESHOLD}</p>
+          <p className="text-xs text-muted-foreground mt-1">Alert Threshold</p>
+        </div>
+      </div>
+
+      {/* Incident Type Breakdown */}
+      {pending.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="w-4 h-4 text-amber-700" />
+            <p className="text-sm font-semibold text-amber-800">Pending Breakdown by Type</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(incidentBreakdown).map(([type, count]) => (
+              <span key={type} className={`text-xs font-medium px-2.5 py-1 rounded-full border ${incidentColors[type] || 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+                {type.replace(/_/g, ' ')} · {count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 flex-wrap">
         <Button

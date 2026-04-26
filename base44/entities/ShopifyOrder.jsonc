@@ -158,6 +158,30 @@
         }
       }
     },
+    "production_snapshot": {
+      "type": "object",
+      "description": "Immutable snapshot of line_items and fulfillments captured when order enters production_scheduled. Used to detect and block unauthorized modifications.",
+      "properties": {
+        "line_items": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "fulfillments": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "total_price": {
+          "type": "number"
+        },
+        "captured_at": {
+          "type": "string"
+        }
+      }
+    },
     "fulfillment_method": {
       "type": "string",
       "enum": [

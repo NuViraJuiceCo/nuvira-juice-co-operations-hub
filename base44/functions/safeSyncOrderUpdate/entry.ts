@@ -381,6 +381,70 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── STEP 8.5: PRODUCTION SNAPSHOT LOCK ──────────────────────────────────
+    // When transitioning TO production_scheduled: capture snapshot of line_items + fulfillments
+    // When order is already production_scheduled or beyond: compare against snapshot and block mismatches
+    const snapshotStatuses = ['production_scheduled', 'in_production', 'out_for_delivery', 'fulfilled'];
+    const isEnteringProductionScheduled = incomingData.production_status === 'production_scheduled' &&
+      existingOrder && existingOrder.production_status !== 'production_scheduled';
+
+    if (isEnteringProductionScheduled && source !== 'admin') {
+      // Capture snapshot on transition into production_scheduled
+      incomingData.production_snapshot = {
+        line_items: existingOrder.line_items || [],
+        fulfillments: (existingOrder.fulfillments || []).map(f => ({
+          fulfillment_number: f.fulfillment_number,
+          delivery_date: f.delivery_date,
+          production_date: f.production_date,
+          items: f.items || [],
+        })),
+        total_price: existingOrder.total_price,
+        captured_at: new Date().toISOString(),
+      };
+      console.log(`[SAFE-SYNC] Production snapshot captured for order ${existingOrder.id}`);
+    } else if (existingOrder?.production_snapshot && snapshotStatuses.includes(lockStatus) && source !== 'admin') {
+      // Guard: if incoming tries to change line_items or fulfillments, compare against snapshot
+      const snap = existingOrder.production_snapshot;
+      if (incomingData.line_items && snap.line_items) {
+        const snapTitles = snap.line_items.map(i => i.title).sort().join(',');
+        const incomingTitles = incomingData.line_items.map(i => i.title).sort().join(',');
+        if (snapTitles !== incomingTitles) {
+          await quarantine(base44, {
+            incident_type: 'overwrite_rejection',
+            customer_email: existingOrder.customer_email,
+            customer_name: existingOrder.customer_name,
+            existing_order_id: existingOrder.id,
+            existing_order_number: existingOrder.shopify_order_number,
+            existing_order_type: existingOrder.source_channel,
+            incoming_payload: { line_items: incomingData.line_items, snapshot_line_items: snap.line_items },
+            incoming_source: source,
+            issue_description: `Production snapshot mismatch: incoming line_items differ from snapshot captured at ${snap.captured_at}. Blocked by snapshot lock.`,
+            recommended_action: 'manual_review',
+          });
+          delete incomingData.line_items;
+          console.warn(`[SAFE-SYNC] Snapshot lock blocked line_items overwrite for order ${existingOrder.id}`);
+        }
+      }
+      if (incomingData.fulfillments && snap.fulfillments && snap.fulfillments.length > 0) {
+        if (incomingData.fulfillments.length !== snap.fulfillments.length) {
+          await quarantine(base44, {
+            incident_type: 'overwrite_rejection',
+            customer_email: existingOrder.customer_email,
+            customer_name: existingOrder.customer_name,
+            existing_order_id: existingOrder.id,
+            existing_order_number: existingOrder.shopify_order_number,
+            existing_order_type: existingOrder.source_channel,
+            incoming_payload: { fulfillment_count: incomingData.fulfillments.length, snapshot_count: snap.fulfillments.length },
+            incoming_source: source,
+            issue_description: `Production snapshot mismatch: incoming has ${incomingData.fulfillments.length} fulfillments vs snapshot ${snap.fulfillments.length}. Blocked.`,
+            recommended_action: 'manual_review',
+          });
+          delete incomingData.fulfillments;
+          console.warn(`[SAFE-SYNC] Snapshot lock blocked fulfillments overwrite for order ${existingOrder.id}`);
+        }
+      }
+    }
+
     // ── STEP 9: WRITE ────────────────────────────────────────────────────────
     let writtenOrder;
     const fieldsWritten = Object.keys(incomingData);
