@@ -117,8 +117,8 @@ Deno.serve(async (req) => {
     const processedIds = new Set();
 
     for (const ord of orders) {
+      const orderId = ord.shopify_order_id || ord.id;
       try {
-        const orderId = ord.shopify_order_id || ord.id;
 
         // Skip if we've already processed this ID in this sync
         if (processedIds.has(orderId)) {
