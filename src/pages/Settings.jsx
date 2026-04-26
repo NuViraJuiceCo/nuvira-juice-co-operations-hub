@@ -53,7 +53,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 w-full max-w-2xl px-0 sm:px-0">
       <div>
         <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Settings</h1>
         <p className="text-muted-foreground mt-1">Manage your account and preferences</p>
@@ -120,7 +120,7 @@ export default function Settings() {
                 rows="3"
               />
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 onClick={handleSave}
                 disabled={saving}
@@ -197,13 +197,13 @@ export default function Settings() {
 
       {/* Delete Confirmation Dialog */}
       {showDeleteDialog && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-xl p-6 max-w-sm w-full space-y-4">
+         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+           <div className="bg-card rounded-xl p-6 max-w-sm w-full space-y-4">
             <h3 className="text-lg font-semibold text-foreground">Confirm Account Deletion</h3>
             <p className="text-sm text-muted-foreground">
               Are you sure you want to delete your account? This cannot be undone.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col-reverse sm:flex-row gap-3">
               <Button
                 variant="outline"
                 onClick={() => setShowDeleteDialog(false)}

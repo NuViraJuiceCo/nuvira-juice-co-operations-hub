@@ -193,57 +193,60 @@ export default function Orders() {
           "Use the production_status field to track an order from New → In Production → Packed → Fulfilled.",
         ]}
       />
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Orders</h1>
-          <p className="text-muted-foreground mt-1">{orders.length} synced orders</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleSync} disabled={syncing} className="gap-2">
-            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Sync'}
-          </Button>
-          <Button variant="outline" onClick={handleRecalculateBatches} disabled={syncing} className="gap-2">
-            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Recalc...' : 'Recalc Batches'}
-          </Button>
-          <Button variant="outline" onClick={exportCSV} className="gap-2">
-            <Download className="h-4 w-4" /> Export
-          </Button>
-        </div>
-      </div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+         <div>
+           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Orders</h1>
+           <p className="text-muted-foreground mt-1">{orders.length} synced orders</p>
+         </div>
+         <div className="flex flex-wrap gap-2">
+           <Button variant="outline" onClick={handleSync} disabled={syncing} className="gap-2 flex-1 sm:flex-none">
+             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+             {syncing ? 'Syncing...' : 'Sync'}
+           </Button>
+           <Button variant="outline" onClick={handleRecalculateBatches} disabled={syncing} className="gap-2 flex-1 sm:flex-none text-xs sm:text-sm">
+             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+             <span className="hidden sm:inline">{syncing ? 'Recalc...' : 'Recalc Batches'}</span>
+             <span className="sm:hidden">{syncing ? 'Recalc...' : 'Recalc'}</span>
+           </Button>
+           <Button variant="outline" onClick={exportCSV} className="gap-2 flex-1 sm:flex-none">
+             <Download className="h-4 w-4" /> Export
+           </Button>
+         </div>
+       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 bg-card border border-border rounded-xl p-4">
-        <div className="relative flex-1">
+      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search orders..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 w-full"
           />
         </div>
-        <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-full sm:w-44">
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="New">New</SelectItem>
-            <SelectItem value="Confirmed">Confirmed</SelectItem>
-            <SelectItem value="awaiting_production">Awaiting Production</SelectItem>
-            <SelectItem value="in_production">In Production</SelectItem>
-            <SelectItem value="packed">Packed</SelectItem>
-          </SelectContent>
-        </SelectMobile>
-        <SelectMobile value={channelFilter} onValueChange={setChannelFilter} placeholder="All Channels" triggerClassName="w-full sm:w-44">
-          <SelectContent>
-            <SelectItem value="all">All Channels</SelectItem>
-            <SelectItem value="online">Online</SelectItem>
-            <SelectItem value="pos">POS</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="subscription">Subscription</SelectItem>
-            <SelectItem value="wholesale">Wholesale</SelectItem>
-          </SelectContent>
-        </SelectMobile>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
+          <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-full">
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="New">New</SelectItem>
+              <SelectItem value="Confirmed">Confirmed</SelectItem>
+              <SelectItem value="awaiting_production">Awaiting Production</SelectItem>
+              <SelectItem value="in_production">In Production</SelectItem>
+              <SelectItem value="packed">Packed</SelectItem>
+            </SelectContent>
+          </SelectMobile>
+          <SelectMobile value={channelFilter} onValueChange={setChannelFilter} placeholder="All Channels" triggerClassName="w-full">
+            <SelectContent>
+              <SelectItem value="all">All Channels</SelectItem>
+              <SelectItem value="online">Online</SelectItem>
+              <SelectItem value="pos">POS</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="subscription">Subscription</SelectItem>
+              <SelectItem value="wholesale">Wholesale</SelectItem>
+            </SelectContent>
+          </SelectMobile>
+        </div>
       </div>
 
       {/* Bulk Actions */}
@@ -260,10 +263,10 @@ export default function Orders() {
       )}
 
 
-      {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      {/* Desktop Table — visible on sm+ screens */}
+      <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
                 <th className="px-5 py-3 text-left w-10">
@@ -396,10 +399,108 @@ export default function Orders() {
                     ].filter(Boolean))}
                     </tbody>
           </table>
-        </div>
-      </div>
-    </div>
-    </PullToRefresh>
+          </div>
+          </div>
+
+          {/* Mobile Cards — visible only on small screens */}
+          <div className="sm:hidden space-y-3">
+          {sorted.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <p>No orders match your filters.</p>
+          </div>
+          ) : (
+          sorted.map((order) => (
+            <div
+              key={order.id}
+              className="bg-card border border-border rounded-lg p-4 space-y-3 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-primary text-sm">{order.shopify_order_number}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{order.customer_name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{order.customer_email}</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={selected.has(order.id)}
+                  onChange={(e) => { e.stopPropagation(); toggleSelect(order.id); }}
+                  className="cursor-pointer flex-shrink-0 mt-1"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <p className="text-muted-foreground">Channel</p>
+                  <p className="font-medium">{order.source_channel}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Payment</p>
+                  <StatusBadge status={order.payment_status} />
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <StatusBadge status={order.production_status} />
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total</p>
+                  <p className="font-semibold">${order.total_price?.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                {moment(order.customer_order_date).utcOffset(-5).format("MMM D, h:mm A")} CT
+              </div>
+
+              <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => setEditingOrder(order)}
+                  className="flex-1 px-3 py-2 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(order.id)}
+                  disabled={deleting === order.id}
+                  className="flex-1 px-3 py-2 text-xs bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+                >
+                  {deleting === order.id ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+
+              {/* Expandable Items */}
+              {expandedOrderId === order.id && (
+                <div className="pt-3 border-t border-border space-y-3">
+                  {order.address_line1 && (
+                    <div>
+                      <p className="text-xs font-semibold text-foreground mb-1">Delivery Address</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {order.address_line1}{order.address_line2 ? `, ${order.address_line2}` : ''}<br />
+                        {order.address_city}, {order.address_state} {order.address_postal_code}
+                      </p>
+                    </div>
+                  )}
+                  {order.line_items && order.line_items.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-foreground mb-2">Items</p>
+                      <div className="space-y-1">
+                        {order.line_items.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-muted/20 rounded px-2 py-1.5">
+                            <p className="text-xs font-medium text-foreground truncate flex-1">{item.title}</p>
+                            <p className="text-xs text-muted-foreground ml-2 flex-shrink-0">×{item.quantity}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))
+          )}
+          </div>
+          </div>
+          </PullToRefresh>
 
     {editingOrder && (
       <OrderEditForm

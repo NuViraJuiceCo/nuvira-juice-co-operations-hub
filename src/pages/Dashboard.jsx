@@ -66,7 +66,7 @@ export default function Dashboard() {
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
-      <div className="space-y-6 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-6">
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8 pb-28 sm:pb-24 lg:pb-6 w-full overflow-x-hidden">
       <AdminGuide
         title="Admin Guide — Dashboard"
         steps={[
@@ -91,7 +91,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
         <StatCard label="New Orders" value={newOrders} icon={ShoppingCart} />
         <StatCard label="In Production" value={inProduction} icon={Factory} />
         <StatCard label="To Fulfill" value={toFulfill} icon={Truck} />

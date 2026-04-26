@@ -63,8 +63,8 @@ export default function Compliance() {
   const overdue = docs.filter(d => d.status === "Overdue" || d.status === "Expired").length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-6 w-full overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Compliance</h1>
           <p className="text-muted-foreground mt-1">Certifications, permits and regulatory requirements</p>
@@ -72,7 +72,7 @@ export default function Compliance() {
         <Button onClick={() => {}} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Document</Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <StatCard label="Valid" value={valid} icon={ShieldCheck} />
         <StatCard label="Due Soon" value={dueSoon} icon={Clock} />
         <StatCard label="Overdue" value={overdue} icon={AlertTriangle} />

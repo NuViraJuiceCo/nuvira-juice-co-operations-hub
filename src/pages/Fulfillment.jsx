@@ -179,32 +179,33 @@ export default function Fulfillment() {
           </div>
         )}
 
-        {/* Table */}
-         <div className="bg-card border border-border rounded-xl overflow-hidden">
-           <div className="overflow-x-auto">
-             <table className="w-full">
-               <thead>
-                 <tr className="border-b border-border">
-                   <th className="px-3 sm:px-5 py-3 text-left w-10">
-                     <input
-                       type="checkbox"
-                       checked={selected.size === filtered.length && filtered.length > 0}
-                       onChange={toggleSelectAll}
-                       className="cursor-pointer"
-                     />
-                   </th>
-                   <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer</th>
-                   <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Fulfillment</th>
-                   <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Items</th>
-                   <th className="hidden sm:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
-                   <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                   <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Driver</th>
-                   <th className="px-3 sm:px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
-                 </tr>
-               </thead>
+        {/* Desktop Table / Mobile Cards */}
+        {/* Desktop Table — visible on sm+ screens */}
+        <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-3 sm:px-5 py-3 text-left w-10">
+                    <input
+                      type="checkbox"
+                      checked={selected.size === filtered.length && filtered.length > 0}
+                      onChange={toggleSelectAll}
+                      className="cursor-pointer"
+                    />
+                  </th>
+                  <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer</th>
+                  <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Fulfillment</th>
+                  <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Items</th>
+                  <th className="hidden md:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
+                  <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Driver</th>
+                  <th className="px-3 sm:px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
+                </tr>
+              </thead>
               <tbody>
                 {filtered.map((task) => (
-                    <tr key={task.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors min-h-touch">
+                    <tr key={task.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                       <td className="px-3 sm:px-5 py-3.5 w-10">
                         <input
                           type="checkbox"
@@ -215,13 +216,13 @@ export default function Fulfillment() {
                       </td>
                       <td className="px-3 sm:px-5 py-3.5">
                         <p className="text-sm font-medium text-foreground">{task.customer_name}</p>
-                        {task.address && <p className="text-xs text-muted-foreground">{task.address}</p>}
+                        {task.address && <p className="text-xs text-muted-foreground truncate">{task.address}</p>}
                       </td>
                       <td className="px-3 sm:px-5 py-3.5 text-sm font-medium text-primary whitespace-nowrap">
                         {moment(task.scheduled_date).format("MMM D")}
                       </td>
-                      <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.items_summary || '—'}</td>
-                      <td className="hidden sm:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.fulfillment_type || '—'}</td>
+                      <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground truncate">{task.items_summary || '—'}</td>
+                      <td className="hidden md:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.fulfillment_type || '—'}</td>
                       <td className="px-3 sm:px-5 py-3.5"><StatusBadge status={task.status} /></td>
                       <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm">
                         <button
@@ -231,27 +232,89 @@ export default function Fulfillment() {
                           {task.assigned_driver || 'Unassigned'}
                         </button>
                       </td>
-                      <td className="px-3 sm:px-5 py-3.5 text-center flex gap-2 justify-center">
-                        <button
-                          onClick={() => handleEditDriver(task)}
-                          className="text-blue-600 hover:text-blue-700"
-                          title="Assign driver"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(task.id)}
-                          disabled={deleting === task.id}
-                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                      <td className="px-3 sm:px-5 py-3.5 text-center">
+                        <div className="flex gap-2 justify-center">
+                          <button
+                            onClick={() => handleEditDriver(task)}
+                            className="text-blue-600 hover:text-blue-700"
+                            title="Assign driver"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(task.id)}
+                            disabled={deleting === task.id}
+                            className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Mobile Cards — visible only on small screens */}
+        <div className="sm:hidden space-y-3">
+          {filtered.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No fulfillment tasks match your filter.</p>
+            </div>
+          ) : (
+            filtered.map((task) => (
+              <div key={task.id} className="bg-card border border-border rounded-lg p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground">{task.customer_name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{task.address || 'No address'}</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(task.id)}
+                    onChange={() => toggleSelect(task.id)}
+                    className="cursor-pointer mt-1"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Date</p>
+                    <p className="font-medium text-primary">{moment(task.scheduled_date).format("MMM D")}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Type</p>
+                    <p className="text-sm">{task.fulfillment_type || '—'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">Items</p>
+                    <p className="text-xs text-foreground line-clamp-2">{task.items_summary || '—'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground mb-1">Status</p>
+                    <StatusBadge status={task.status} />
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground mb-2">Driver</p>
+                    <button
+                      onClick={() => handleEditDriver(task)}
+                      className="text-xs px-3 py-1.5 w-full bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+                    >
+                      {task.assigned_driver || 'Assign Driver'}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDelete(task.id)}
+                  disabled={deleting === task.id}
+                  className="w-full text-xs px-3 py-1.5 text-red-600 border border-red-200 rounded hover:bg-red-50 transition-colors disabled:opacity-50"
+                >
+                  {deleting === task.id ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Edit Driver Modal */}

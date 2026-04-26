@@ -84,11 +84,32 @@
   * {
     @apply border-border outline-ring/50;
   }
-  body {
+  html, body {
     @apply bg-background text-foreground font-sans;
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden;
+  }
+  body {
     overscroll-behavior: none;
   }
   button, [role="button"], nav {
     user-select: none;
+  }
+  /* iOS safe area and viewport fixes */
+  @supports (padding: max(0px)) {
+    body {
+      padding-left: max(env(safe-area-inset-left), 0);
+      padding-right: max(env(safe-area-inset-right), 0);
+    }
+  }
+  /* Prevent horizontal scrolling */
+  main {
+    width: 100%;
+    overflow-x: hidden;
+  }
+  /* Better table overflow handling */
+  table {
+    word-break: break-word;
   }
 }

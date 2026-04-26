@@ -8,7 +8,14 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-background flex" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div
+      className="min-h-screen bg-background flex flex-col w-full overflow-x-hidden"
+      style={{
+        paddingTop: 'max(0px, env(safe-area-inset-top))',
+        paddingLeft: 'max(0px, env(safe-area-inset-left))',
+        paddingRight: 'max(0px, env(safe-area-inset-right))',
+      }}
+    >
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -17,15 +24,19 @@ export default function AppLayout() {
         />
       )}
 
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <div className="flex flex-1 min-h-0">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col min-w-0 lg:ml-56 pb-20 lg:pb-0">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          <div className="max-w-[1440px] mx-auto">
-            <Outlet />
-          </div>
-        </main>
+        <div className="flex-1 flex flex-col min-w-0 lg:ml-56">
+          <TopBar onMenuClick={() => setSidebarOpen(true)} />
+          <main className="flex-1 overflow-y-auto">
+            <div className="p-4 sm:p-6 lg:p-8 pb-24 sm:pb-20 lg:pb-6 min-h-full">
+              <div className="max-w-[1440px] mx-auto w-full">
+                <Outlet />
+              </div>
+            </div>
+          </main>
+        </div>
       </div>
       
       {/* Mobile Navigation */}

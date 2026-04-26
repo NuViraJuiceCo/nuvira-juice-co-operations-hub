@@ -152,7 +152,7 @@ export default function Production() {
           />
 
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-4">
             <div>
               <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
               <p className="text-muted-foreground mt-1">
@@ -162,8 +162,8 @@ export default function Production() {
                 <p className="text-xs text-green-600 mt-1">{lastCalc}</p>
               )}
             </div>
-            <div className="flex gap-2 flex-wrap">
-              <SelectMobile value={categoryFilter} onValueChange={setCategoryFilter} placeholder="All Categories" triggerClassName="w-40">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <SelectMobile value={categoryFilter} onValueChange={setCategoryFilter} placeholder="All Categories" triggerClassName="w-full">
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
                   <SelectItem value="juice">Juice</SelectItem>
@@ -171,7 +171,7 @@ export default function Production() {
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </SelectMobile>
-              <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-44">
+              <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-full">
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="Planned">Planned</SelectItem>
@@ -184,10 +184,11 @@ export default function Production() {
               <Button
                 onClick={handleRecalculate}
                 disabled={recalculating}
-                className="gap-2"
+                className="gap-2 w-full sm:w-auto"
               >
                 <RefreshCw className={`h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
-                {recalculating ? 'Recalculating...' : 'Recalculate'}
+                <span className="hidden sm:inline">{recalculating ? 'Recalculating...' : 'Recalculate'}</span>
+                <span className="sm:hidden text-xs">{recalculating ? 'Recalc...' : 'Recalc'}</span>
               </Button>
             </div>
           </div>
