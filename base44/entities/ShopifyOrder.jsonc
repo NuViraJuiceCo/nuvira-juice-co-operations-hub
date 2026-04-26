@@ -41,6 +41,14 @@
     "customer_phone": {
       "type": "string"
     },
+    "internal_customer_id": {
+      "type": "string",
+      "description": "Internal Hub customer ID (source of truth)"
+    },
+    "customer_app_user_id": {
+      "type": "string",
+      "description": "Customer App user ID for identity matching"
+    },
     "delivery_address": {
       "type": "string",
       "description": "DEPRECATED: use address_* fields instead."
@@ -249,7 +257,7 @@
         "fulfilled"
       ],
       "default": "unlocked",
-      "description": "Lifecycle lock controlling what future syncs are allowed to overwrite"
+      "description": "Lifecycle lock controlling what future syncs are allowed to modify. Once verified or higher, destructive overwrites are blocked."
     },
     "tags": {
       "type": "array",
@@ -275,22 +283,28 @@
       "type": "string"
     },
     "stripe_customer_id": {
-      "type": "string"
+      "type": "string",
+      "description": "Stripe customer ID (Stripe owns this field)"
     },
     "stripe_checkout_session_id": {
-      "type": "string"
+      "type": "string",
+      "description": "Stripe checkout session ID (Stripe owns this field)"
     },
     "stripe_payment_intent_id": {
-      "type": "string"
+      "type": "string",
+      "description": "Stripe payment intent ID (Stripe owns this field)"
     },
     "stripe_invoice_id": {
-      "type": "string"
+      "type": "string",
+      "description": "Stripe invoice ID (Stripe owns this field)"
     },
     "stripe_subscription_id": {
-      "type": "string"
+      "type": "string",
+      "description": "Stripe subscription ID (Stripe owns this field)"
     },
     "stripe_charge_id": {
-      "type": "string"
+      "type": "string",
+      "description": "Stripe charge ID (Stripe owns this field)"
     },
     "stripe_event_id_applied": {
       "type": "string"
