@@ -182,11 +182,11 @@ export default function Fulfillment() {
                      />
                    </th>
                    <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer</th>
+                   <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Items</th>
                    <th className="hidden sm:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
                    <th className="px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                    <th className="hidden sm:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
-                   <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Time Window</th>
-                   <th className="hidden md:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Driver</th>
+                   <th className="hidden lg:table-cell px-3 sm:px-5 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Driver</th>
                    <th className="px-3 sm:px-5 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
                  </tr>
                </thead>
@@ -203,38 +203,38 @@ export default function Fulfillment() {
                       </td>
                       <td className="px-3 sm:px-5 py-3.5">
                         <p className="text-sm font-medium text-foreground">{task.customer_name}</p>
-                        {task.address && <p className="text-xs text-muted-foreground truncate">{task.address}</p>}
+                        {task.address && <p className="text-xs text-muted-foreground">{task.address}</p>}
                       </td>
+                      <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.items_summary || '—'}</td>
                       <td className="hidden sm:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.fulfillment_type || '—'}</td>
                       <td className="px-3 sm:px-5 py-3.5"><StatusBadge status={task.status} /></td>
                       <td className="hidden sm:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
                         {moment(task.scheduled_date).format("MMM D")}
                       </td>
-                      <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm text-muted-foreground">{task.time_window || '—'}</td>
-                      <td className="hidden md:table-cell px-3 sm:px-5 py-3.5 text-sm">
-                         <button
-                           onClick={() => handleEditDriver(task)}
-                           className="text-primary hover:text-primary/80 hover:underline"
-                         >
-                           {task.assigned_driver || 'Unassigned'}
-                         </button>
-                       </td>
-                       <td className="px-3 sm:px-5 py-3.5 text-center flex gap-2 justify-center">
-                         <button
-                           onClick={() => handleEditDriver(task)}
-                           className="text-blue-600 hover:text-blue-700"
-                           title="Assign driver"
-                         >
-                           <Edit2 className="h-4 w-4" />
-                         </button>
-                         <button
-                           onClick={() => handleDelete(task.id)}
-                           disabled={deleting === task.id}
-                           className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                         >
-                           <Trash2 className="h-4 w-4" />
-                         </button>
-                       </td>
+                      <td className="hidden lg:table-cell px-3 sm:px-5 py-3.5 text-sm">
+                        <button
+                          onClick={() => handleEditDriver(task)}
+                          className="text-primary hover:text-primary/80 hover:underline"
+                        >
+                          {task.assigned_driver || 'Unassigned'}
+                        </button>
+                      </td>
+                      <td className="px-3 sm:px-5 py-3.5 text-center flex gap-2 justify-center">
+                        <button
+                          onClick={() => handleEditDriver(task)}
+                          className="text-blue-600 hover:text-blue-700"
+                          title="Assign driver"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(task.id)}
+                          disabled={deleting === task.id}
+                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
               </tbody>
