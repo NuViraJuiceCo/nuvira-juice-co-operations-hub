@@ -45,6 +45,16 @@ Deno.serve(async (req) => {
         continue; // Skip orders without fulfillments
       }
 
+      // Check if tasks already exist for this order to avoid duplicates
+      const existingTasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
+        order_id: order.id,
+      });
+
+      if (existingTasks && existingTasks.length > 0) {
+        console.log(`[CREATE-FULFILLMENT-TASKS] Tasks already exist for order ${order.id}, skipping`);
+        continue;
+      }
+
       for (const fulfillment of order.fulfillments) {
         try {
           // Build items summary from WEEKLY fulfillment items, NOT parent monthly totals
@@ -70,11 +80,12 @@ Deno.serve(async (req) => {
           createdTasks.push({
             task_id: task.id,
             order_id: order.id,
+            fulfillment_number: fulfillment.fulfillment_number,
             delivery_date: fulfillment.delivery_date,
             customer_name: order.customer_name,
           });
         } catch (err) {
-          console.error(`[CREATE-FULFILLMENT-TASKS] Failed to create task for order ${order.id}:`, err.message);
+          console.error(`[CREATE-FULFILLMENT-TASKS] Failed to create task for order ${order.id}, fulfillment ${fulfillment.fulfillment_number}:`, err.message);
         }
       }
     }
