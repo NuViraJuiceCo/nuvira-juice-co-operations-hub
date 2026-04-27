@@ -307,20 +307,20 @@ export default function Inventory() {
           sorted.map(item => {
             const status = getStatus(item);
             return (
-              <div key={item.id} className="bg-card border border-border rounded-lg p-4 space-y-2">
+              <div key={item.id} className="bg-card border border-border rounded-lg p-3 space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground">{item.ingredient}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.category || "Uncategorized"}</p>
+                    <p className="font-medium text-foreground text-sm">{item.ingredient}</p>
+                    <p className="text-xs text-muted-foreground">{item.category || "Uncategorized"}</p>
                   </div>
                   <input
                     type="checkbox"
                     checked={selected.has(item.id)}
                     onChange={() => toggleSelect(item.id)}
-                    className="cursor-pointer flex-shrink-0 mt-1"
+                    className="cursor-pointer flex-shrink-0 mt-0.5"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-1.5 text-xs">
                   <div>
                     <p className="text-muted-foreground">Stock</p>
                     <p className="font-semibold">{item.stock} {item.unit}</p>
@@ -339,17 +339,17 @@ export default function Inventory() {
                     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[status]}`}>{status}</span>
                   </div>
                 </div>
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-1.5 pt-1.5">
                   <button
                     onClick={() => setEditingItem(item)}
-                    className="flex-1 px-3 py-2 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+                    className="flex-1 px-2.5 py-1.5 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleDelete(item.id)}
                     disabled={deleting === item.id}
-                    className="flex-1 px-3 py-2 text-xs bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+                    className="flex-1 px-2.5 py-1.5 text-xs bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
                   >
                     {deleting === item.id ? 'Deleting...' : 'Delete'}
                   </button>
