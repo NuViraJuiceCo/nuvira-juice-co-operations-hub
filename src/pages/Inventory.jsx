@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 
 import StatCard from "../components/shared/StatCard";
 import AdminGuide from "../components/shared/AdminGuide";
-import BulkActionsBar from "../components/shared/BulkActionsBar";
 import ColumnSorter from "../components/shared/ColumnSorter";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import InventoryEditForm from "../components/inventory/InventoryEditForm";
@@ -195,26 +194,6 @@ export default function Inventory() {
           ))}
         </select>
       </div>
-
-      {/* Bulk Actions */}
-      {selected.size > 0 && (
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
-          <button
-            onClick={handleBulkDelete}
-            disabled={deleting}
-            className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-          >
-            {deleting ? "Deleting..." : "Delete Selected"}
-          </button>
-          <button
-            onClick={() => setSelected(new Set())}
-            className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
 
       {/* Results Section */}
       {sorted.length === 0 ? (
