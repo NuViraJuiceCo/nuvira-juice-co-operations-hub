@@ -94,8 +94,9 @@ export default function OperationsCalendar() {
   };
 
   const totalEvents = calendarEvents.filter((e) => {
-    const m = moment(e.date);
-    return m.month() === currentMonth.month() && m.year() === currentMonth.year();
+    if (!e.date) return false;
+    const [y, m] = e.date.split("-").map(Number);
+    return m === currentMonth.month() + 1 && y === currentMonth.year();
   }).length;
 
   return (

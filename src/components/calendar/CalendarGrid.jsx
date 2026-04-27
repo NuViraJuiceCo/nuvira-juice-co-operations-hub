@@ -19,7 +19,8 @@ export default function CalendarGrid({ currentMonth, events }) {
   const endOfMonth = moment(currentMonth).endOf("month");
   const startDay = startOfMonth.day();
   const daysInMonth = endOfMonth.date();
-  const today = moment().format("YYYY-MM-DD");
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   const days = [];
   for (let i = 0; i < startDay; i++) {
@@ -57,10 +58,9 @@ export default function CalendarGrid({ currentMonth, events }) {
               return <div key={di} className="min-h-[100px] bg-muted/10" />;
             }
 
-            const dateStr = moment(currentMonth)
-              .clone()
-              .date(day)
-              .format("YYYY-MM-DD");
+            const year = currentMonth.year();
+            const month = currentMonth.month() + 1;
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const isToday = dateStr === today;
             const dayEvents = events.filter((e) => e.date === dateStr);
 
