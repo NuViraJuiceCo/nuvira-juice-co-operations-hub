@@ -4,19 +4,20 @@ import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 
 export default function EventEditForm({ event, onClose, onSave }) {
+  const isCreating = !event;
   const [formData, setFormData] = useState({
-    name: event.name || '',
-    type: event.type || 'Pop-Up',
-    status: event.status || 'Pending',
-    date: event.date || '',
-    end_date: event.end_date || '',
-    location: event.location || '',
-    expected_attendees: event.expected_attendees || '',
-    products: event.products || '',
-    contact_name: event.contact_name || '',
-    contact_email: event.contact_email || '',
-    revenue: event.revenue || '',
-    notes: event.notes || '',
+    name: event?.name || '',
+    type: event?.type || 'Pop-Up',
+    status: event?.status || 'Pending',
+    date: event?.date || '',
+    end_date: event?.end_date || '',
+    location: event?.location || '',
+    expected_attendees: event?.expected_attendees || '',
+    products: event?.products || '',
+    contact_name: event?.contact_name || '',
+    contact_email: event?.contact_email || '',
+    revenue: event?.revenue || '',
+    notes: event?.notes || '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -30,7 +31,11 @@ export default function EventEditForm({ event, onClose, onSave }) {
     setError(null);
     setLoading(true);
     try {
-      await base44.entities.Event.update(event.id, formData);
+      if (isCreating) {
+        await base44.entities.Event.create(formData);
+      } else {
+        await base44.entities.Event.update(event.id, formData);
+      }
       onSave();
     } catch (err) {
       setError(err.message || 'Failed to save changes');
@@ -42,7 +47,7 @@ export default function EventEditForm({ event, onClose, onSave }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-card rounded-xl shadow-lg max-w-md w-full p-6 my-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Edit Event</h2>
+          <h2 className="text-lg font-semibold">{isCreating ? 'Add Event' : 'Edit Event'}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
@@ -123,7 +128,7 @@ export default function EventEditForm({ event, onClose, onSave }) {
               Cancel
             </Button>
             <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? 'Saving...' : 'Save'}
+              {loading ? 'Saving...' : isCreating ? 'Create Event' : 'Save'}
             </Button>
           </div>
         </form>

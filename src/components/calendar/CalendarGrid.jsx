@@ -58,6 +58,7 @@ export default function CalendarGrid({ currentMonth, events }) {
             }
 
             const dateStr = moment(currentMonth)
+              .clone()
               .date(day)
               .format("YYYY-MM-DD");
             const isToday = dateStr === today;
