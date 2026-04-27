@@ -216,151 +216,154 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* Desktop Table — ONLY 768px+ (HIDDEN on mobile) */}
-      <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
-         <div className="overflow-x-auto">
-           <table className="w-full text-sm">
-             <thead>
-               <tr className="border-b border-border bg-muted/30">
-                 <th className="px-3 sm:px-4 py-3 text-left w-10">
-                   <input
-                     type="checkbox"
-                     checked={selected.size === sorted.length && sorted.length > 0}
-                     onChange={toggleSelectAll}
-                     className="cursor-pointer"
-                   />
-                 </th>
-                 <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("ingredient")}>
-                   <ColumnSorter column="Ingredient" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                 </th>
-                 <th className="hidden sm:table-cell px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("category")}>
-                   <ColumnSorter column="Category" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                 </th>
-                 <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("stock")}>
-                   <ColumnSorter column="Stock" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                 </th>
-                 <th className="hidden md:table-cell px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("reorder_point")}>
-                   <ColumnSorter column="Reorder At" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                 </th>
-                 <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("status")}>
-                   <ColumnSorter column="Status" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                 </th>
-                 <th className="hidden lg:table-cell px-3 sm:px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("supplier")}>
-                   <ColumnSorter column="Supplier" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-                 </th>
-                 <th className="px-3 sm:px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
-               </tr>
-             </thead>
-             <tbody>
-               {sorted.map(item => {
-                 const status = getStatus(item);
-                 return (
-                   <tr key={item.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-                     <td className="px-3 sm:px-4 py-3.5 w-10">
-                       <input
-                         type="checkbox"
-                         checked={selected.has(item.id)}
-                         onChange={() => toggleSelect(item.id)}
-                         className="cursor-pointer"
-                       />
-                     </td>
-                     <td className="px-3 sm:px-4 py-3.5 font-medium text-foreground">{item.ingredient}</td>
-                     <td className="hidden sm:table-cell px-3 sm:px-4 py-3.5 text-muted-foreground">{item.category || "—"}</td>
-                     <td className="px-3 sm:px-4 py-3.5 font-semibold text-foreground">{item.stock} {item.unit}</td>
-                     <td className="hidden md:table-cell px-3 sm:px-4 py-3.5 text-muted-foreground">{item.reorder_point}</td>
-                     <td className="px-3 sm:px-4 py-3.5">
-                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[status]}`}>{status}</span>
-                     </td>
-                     <td className="hidden lg:table-cell px-3 sm:px-4 py-3.5 text-muted-foreground truncate">{item.supplier || "—"}</td>
-                     <td className="px-3 sm:px-4 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => setEditingItem(item)}
-                            className="text-primary hover:text-primary/80"
-                            title="Edit ingredient"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item.id)}
-                            disabled={deleting === item.id}
-                            className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                            title="Delete ingredient"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                   </tr>
-                 );
-               })}
-             </tbody>
-           </table>
-         </div>
-       </div>
-
-      {/* Mobile Cards — ONLY LAYOUT <768px (FORCED) */}
-      <div className="sm:hidden space-y-3 w-full" style={{display: 'block'}}>
-        {sorted.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>No ingredients found.</p>
+      {/* Results Section */}
+      {sorted.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No ingredients found.</p>
+        </div>
+      ) : (
+        <>
+          {/* Desktop Table */}
+          <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="px-4 py-3 text-left w-10">
+                      <input
+                        type="checkbox"
+                        checked={selected.size === sorted.length && sorted.length > 0}
+                        onChange={toggleSelectAll}
+                        className="cursor-pointer"
+                      />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("ingredient")}>
+                      <ColumnSorter column="Ingredient" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("category")}>
+                      <ColumnSorter column="Category" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("stock")}>
+                      <ColumnSorter column="Stock" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("reorder_point")}>
+                      <ColumnSorter column="Reorder At" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("status")}>
+                      <ColumnSorter column="Status" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="hidden lg:table-cell px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50" onClick={() => handleSort("supplier")}>
+                      <ColumnSorter column="Supplier" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider w-20">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map(item => {
+                    const status = getStatus(item);
+                    return (
+                      <tr key={item.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
+                        <td className="px-4 py-3.5 w-10">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(item.id)}
+                            onChange={() => toggleSelect(item.id)}
+                            className="cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-4 py-3.5 font-medium text-foreground">{item.ingredient}</td>
+                        <td className="hidden sm:table-cell px-4 py-3.5 text-muted-foreground text-sm">{item.category || "—"}</td>
+                        <td className="px-4 py-3.5 font-semibold text-foreground">{item.stock} {item.unit}</td>
+                        <td className="hidden md:table-cell px-4 py-3.5 text-muted-foreground text-sm">{item.reorder_point}</td>
+                        <td className="px-4 py-3.5">
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[status]}`}>{status}</span>
+                        </td>
+                        <td className="hidden lg:table-cell px-4 py-3.5 text-muted-foreground text-sm truncate">{item.supplier || "—"}</td>
+                        <td className="px-4 py-3.5 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setEditingItem(item)}
+                              className="p-1 text-primary hover:text-primary/80 hover:bg-muted rounded transition-colors"
+                              title="Edit ingredient"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              disabled={deleting === item.id}
+                              className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                              title="Delete ingredient"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        ) : (
-          sorted.map(item => {
-            const status = getStatus(item);
-            return (
-              <div key={item.id} className="bg-card border border-border rounded-lg p-3 space-y-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground text-sm">{item.ingredient}</p>
-                    <p className="text-xs text-muted-foreground">{item.category || "Uncategorized"}</p>
+
+          {/* Mobile Cards */}
+          <div className="sm:hidden space-y-3">
+            {sorted.map(item => {
+              const status = getStatus(item);
+              return (
+                <div key={item.id} className="bg-card border border-border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground text-sm">{item.ingredient}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.category || "Uncategorized"}</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(item.id)}
+                      onChange={() => toggleSelect(item.id)}
+                      className="cursor-pointer flex-shrink-0 mt-0.5"
+                    />
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={selected.has(item.id)}
-                    onChange={() => toggleSelect(item.id)}
-                    className="cursor-pointer flex-shrink-0 mt-0.5"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 text-xs">
-                  <div>
-                    <p className="text-muted-foreground">Stock</p>
-                    <p className="font-semibold">{item.stock} {item.unit}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Reorder At</p>
-                    <p className="font-semibold">{item.reorder_point}</p>
+                  <div className="grid grid-cols-2 gap-3 py-2 border-t border-b border-border/30">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Stock</p>
+                      <p className="font-semibold text-sm mt-0.5">{item.stock} {item.unit}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Reorder At</p>
+                      <p className="font-semibold text-sm mt-0.5">{item.reorder_point}</p>
+                    </div>
                   </div>
                   {item.supplier && (
-                    <div className="col-span-2">
-                      <p className="text-muted-foreground">Supplier</p>
-                      <p className="text-xs truncate">{item.supplier}</p>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Supplier</p>
+                      <p className="text-sm mt-0.5 truncate">{item.supplier}</p>
                     </div>
                   )}
-                  <div className="col-span-2">
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[status]}`}>{status}</span>
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[status]}`}>{status}</span>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => setEditingItem(item)}
+                      className="flex-1 px-3 py-2 text-xs font-medium bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      disabled={deleting === item.id}
+                      className="flex-1 px-3 py-2 text-xs font-medium bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      {deleting === item.id ? 'Delete...' : 'Delete'}
+                    </button>
                   </div>
                 </div>
-                <div className="flex gap-1.5 pt-1.5">
-                  <button
-                    onClick={() => setEditingItem(item)}
-                    className="flex-1 px-2.5 py-1.5 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    disabled={deleting === item.id}
-                    className="flex-1 px-2.5 py-1.5 text-xs bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
-                  >
-                    {deleting === item.id ? 'Deleting...' : 'Delete'}
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       </div>
     </PullToRefresh>
