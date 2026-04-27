@@ -46,6 +46,7 @@ Deno.serve(async (req) => {
         id: order.id,
         order_number: order.shopify_order_number,
         customer_email: order.customer_email,
+        contact_email: order.customer_email, // also expose as contact_email for Apple Sign In user matching
         status: order.production_status,
         total: order.total_price,
         fulfillment_type: order.fulfillment_method,

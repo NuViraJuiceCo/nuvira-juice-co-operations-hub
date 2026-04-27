@@ -142,9 +142,10 @@ Deno.serve(async (req) => {
           incomingData: {
             shopify_order_id: orderId,
             shopify_order_number: ord.shopify_order_number || ord.order_number || `#APP-${orderId?.slice(-6) || Date.now()}`,
-            customer_email: ord.customer_email || '',
+            customer_email: ord.customer_email || ord.contact_email || '',  // fallback to contact_email for Apple Sign In users
             customer_name: customerName || '',
             customer_phone: ord.customer_phone || '',
+            customer_app_user_id: ord.customer_app_user_id || ord.user_id || '',
             line_items: ord.line_items && ord.line_items.length > 0 ? ord.line_items : (ord.items || []),
             fulfillment_method: ord.fulfillment_method || ord.fulfillment_type || 'delivery',
             requested_delivery_date: ord.requested_delivery_date || ord.delivery_date || '',
