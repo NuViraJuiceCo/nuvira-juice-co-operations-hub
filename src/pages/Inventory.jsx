@@ -167,7 +167,7 @@ export default function Inventory() {
         <Button onClick={() => setIsCreating(true)} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Item</Button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Total Items" value={items.length} icon={Package} />
         <StatCard label="Low Stock" value={low} icon={TrendingDown} />
         <StatCard label="Critical / Out" value={critical} icon={AlertTriangle} />
