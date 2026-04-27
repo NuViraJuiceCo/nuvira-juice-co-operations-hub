@@ -144,29 +144,34 @@ export default function Inventory() {
     <>
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6">
-      <AdminGuide
-        title="Admin Guide — Inventory"
-        steps={[
-          "Click 'Add Item' to add each ingredient or supply you use in production.",
-          "For each item, fill in: name, category, unit (kg/L/units/etc.), current stock, and reorder point.",
-          "The reorder point is the stock level at which you want to be alerted to reorder.",
-          "Update stock levels regularly — especially after production runs or new deliveries arrive.",
-          "Assign a supplier to each item so you know who to contact when stock gets low.",
-        ]}
-        tips={[
-          "Items with stock at or below the reorder point show as 'Low' — keep an eye on these before production runs.",
-          "Use the Location field (e.g. Cold Room, Dry Store) to know where each item is physically stored.",
-          "The Purchase Orders page will flag low-stock items automatically as suggested reorders.",
-        ]}
-      />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Inventory</h1>
-          <p className="text-muted-foreground mt-1">Track ingredient stock levels and reorder points</p>
+      {/* Header Section */}
+      <div className="flex flex-col gap-6">
+        <AdminGuide
+          title="Admin Guide — Inventory"
+          steps={[
+            "Click 'Add Item' to add each ingredient or supply you use in production.",
+            "For each item, fill in: name, category, unit (kg/L/units/etc.), current stock, and reorder point.",
+            "The reorder point is the stock level at which you want to be alerted to reorder.",
+            "Update stock levels regularly — especially after production runs or new deliveries arrive.",
+            "Assign a supplier to each item so you know who to contact when stock gets low.",
+          ]}
+          tips={[
+            "Items with stock at or below the reorder point show as 'Low' — keep an eye on these before production runs.",
+            "Use the Location field (e.g. Cold Room, Dry Store) to know where each item is physically stored.",
+            "The Purchase Orders page will flag low-stock items automatically as suggested reorders.",
+          ]}
+        />
+        
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Inventory</h1>
+            <p className="text-sm text-muted-foreground mt-1">Track ingredient stock levels and reorder points</p>
+          </div>
+          <Button onClick={() => setIsCreating(true)} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Item</Button>
         </div>
-        <Button onClick={() => setIsCreating(true)} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Item</Button>
       </div>
 
+      {/* Stats Section */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Total Items" value={items.length} icon={Package} />
         <StatCard label="Low Stock" value={low} icon={TrendingDown} />
@@ -174,21 +179,22 @@ export default function Inventory() {
         <StatCard label="Categories" value={[...new Set(items.map(i => i.category).filter(Boolean))].length} icon={Package} />
       </div>
 
-      <div className="space-y-3">
-         <div className="relative">
-           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-           <Input className="pl-9 text-sm w-full" placeholder="Search ingredients..." value={search} onChange={e => setSearch(e.target.value)} />
-         </div>
-         <select
-           value={statusFilter}
-           onChange={(e) => setStatusFilter(e.target.value)}
-           className="w-full px-3 py-2 rounded-lg border border-input bg-background text-xs sm:text-sm"
-         >
-           {statusOptions.map(s => (
-             <option key={s} value={s}>{s === "all" ? "All Statuses" : s}</option>
-           ))}
-         </select>
-       </div>
+      {/* Controls Section */}
+      <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input className="pl-9 text-sm w-full" placeholder="Search ingredients..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border border-input bg-background text-xs sm:text-sm"
+        >
+          {statusOptions.map(s => (
+            <option key={s} value={s}>{s === "all" ? "All Statuses" : s}</option>
+          ))}
+        </select>
+      </div>
 
       {/* Bulk Actions */}
       {selected.size > 0 && (
@@ -209,10 +215,6 @@ export default function Inventory() {
           </button>
         </div>
       )}
-      <BulkActionsBar
-        selectedCount={selected.size}
-        onClearSelection={() => setSelected(new Set())}
-      />
 
       {/* Desktop Table — ONLY 768px+ (HIDDEN on mobile) */}
       <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden" style={{display: 'none'}}>
