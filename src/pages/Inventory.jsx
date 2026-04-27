@@ -217,7 +217,7 @@ export default function Inventory() {
       )}
 
       {/* Desktop Table — ONLY 768px+ (HIDDEN on mobile) */}
-      <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden" style={{display: 'none'}}>
+      <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
          <div className="overflow-x-auto">
            <table className="w-full text-sm">
              <thead>
