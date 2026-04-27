@@ -15,7 +15,7 @@ const navGroups = [
       { path: "/", label: "Dashboard", icon: LayoutDashboard },
       { path: "/calendar", label: "Calendar", icon: CalendarDays },
       { path: "/compliance", label: "Compliance Logs", icon: ShieldCheck },
-      { path: "/driver-portal", label: "Driver Portal", icon: Route },
+      { path: "/driver-portal", label: "Driver Portal", icon: Truck },
       { path: "/events", label: "Events", icon: CalendarCheck },
       { path: "/fulfillment", label: "Fulfillment", icon: Truck },
       { path: "/inventory", label: "Inventory", icon: Package },
