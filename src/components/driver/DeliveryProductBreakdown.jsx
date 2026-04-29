@@ -4,7 +4,8 @@ import { useState } from 'react';
 export default function DeliveryProductBreakdown({ order, date }) {
   const [expanded, setExpanded] = useState(false);
 
-  const items = order.deliveryItems || [];
+  const NON_PRODUCT_KEYWORDS = ['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'];
+  const items = (order.deliveryItems || []).filter(item => !NON_PRODUCT_KEYWORDS.some(kw => (item.title||'').toLowerCase().includes(kw)));
   const totalBottles = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
 
   if (!items || items.length === 0) {

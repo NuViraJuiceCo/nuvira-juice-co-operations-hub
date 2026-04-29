@@ -116,7 +116,7 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
               return addr || '(address missing)';
             })()}
           </p>
-          <p className="text-[10px] text-muted-foreground">{order.items?.map(i => `${i.title} ×${i.quantity}`).join(', ')}</p>
+          <p className="text-[10px] text-muted-foreground">{order.items?.filter(i => !['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'].some(kw => (i.title||'').toLowerCase().includes(kw))).map(i => `${i.title} ×${i.quantity}`).join(', ')}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(order.delivery_address)}&travelmode=driving`} target="_blank" rel="noopener noreferrer"
@@ -156,9 +156,9 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
                   </div>
                 ) : (
                   <>
-                    {order.items?.map((item, i) => (
-                      <p key={i} className="text-xs">{item.title} × {item.quantity}</p>
-                    ))}
+                   {order.items?.filter(item => !['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'].some(kw => (item.title||'').toLowerCase().includes(kw))).map((item, i) => (
+                     <p key={i} className="text-xs">{item.title} × {item.quantity}</p>
+                   ))}
                   </>
                 )}
               </div>
