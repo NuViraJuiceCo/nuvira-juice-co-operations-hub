@@ -431,6 +431,13 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Keywords that are NOT producible items — skip them for batch planning
+      const NON_PRODUCTION_KEYWORDS = [
+        'delivery fee', 'delivery charge', 'shipping fee', 'shipping charge',
+        'tip', 'gratuity', 'discount', 'coupon', 'gift card', 'gift wrap',
+        'service fee', 'handling fee', 'tax',
+      ];
+
       for (const item of order.line_items) {
         let itemTitle = (item.title || '').trim();
         
@@ -441,6 +448,9 @@ Deno.serve(async (req) => {
         
         const totalQty = Number(item.quantity) || 0;
         if (totalQty <= 0 || !itemTitle) continue;
+
+        // Skip non-production line items (fees, shipping, etc.)
+        if (NON_PRODUCTION_KEYWORDS.some(kw => itemTitle.toLowerCase().includes(kw))) continue;
 
         // CRITICAL: Per-fulfillment quantity (divide total ONLY across fulfillments for THIS order)
         // For subscription: if 12 bottles for 4 weeks, this is 3 bottles per week
