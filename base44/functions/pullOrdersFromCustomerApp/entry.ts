@@ -221,6 +221,12 @@ Deno.serve(async (req) => {
         // For updates to existing orders, use 'customer_app' source (address/notes/items only).
         const writeSource = hubOrder ? 'customer_app' : 'rebuild_subscriptions';
 
+        // When matched by order number to a different hub record, use internal_id so safeSyncOrderUpdate
+        // finds and updates the CORRECT existing record instead of creating a new one.
+        const matchBy = hubOrder && hubOrder.shopify_order_id !== orderId
+          ? { internal_id: hubOrder.id }
+          : { shopify_order_id: orderId };
+
         // Route ALL writes through safeSyncOrderUpdate — it enforces all protections
         const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
           incomingData: {
@@ -248,7 +254,7 @@ Deno.serve(async (req) => {
             address_country: ord.address_country || 'US',
           },
           source: writeSource,
-          matchBy: { shopify_order_id: orderId },
+          matchBy,
         });
 
         const action = safeResult?.data?.action || 'unknown';
