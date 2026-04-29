@@ -118,8 +118,14 @@ Deno.serve(async (req) => {
     // Pre-load all existing hub orders indexed by shopify_order_id — avoids per-order DB lookups in safeSyncOrderUpdate
     const existingOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500);
     const existingByOrderId = new Map();
+    // Secondary index: email + 10-min time bucket → catches ghost duplicates with different IDs
+    const existingByEmailTimeBucket = new Map();
     for (const o of existingOrders) {
       if (o.shopify_order_id) existingByOrderId.set(o.shopify_order_id, o);
+      if (o.customer_email && o.customer_order_date) {
+        const bucket = Math.floor(new Date(o.customer_order_date).getTime() / (10 * 60 * 1000));
+        existingByEmailTimeBucket.set(`${o.customer_email}__${bucket}`, o);
+      }
     }
     console.log(`[PULL-ORDERS] Loaded ${existingOrders.length} existing hub orders for change detection`);
 
@@ -138,7 +144,21 @@ Deno.serve(async (req) => {
         }
         processedIds.add(orderId);
 
-        const hubOrder = existingByOrderId.get(orderId);
+        let hubOrder = existingByOrderId.get(orderId);
+
+        // Secondary dedup: if no match by ID, check email + 10-min time bucket
+        // This catches ghost duplicates where the customer app used its own internal ID
+        // instead of the Stripe session ID that the hub already stored
+        if (!hubOrder && ord.customer_email && (ord.created_date || ord.order_date)) {
+          const orderDate = ord.created_date || ord.order_date;
+          const bucket = Math.floor(new Date(orderDate).getTime() / (10 * 60 * 1000));
+          const bucketMatch = existingByEmailTimeBucket.get(`${ord.customer_email}__${bucket}`);
+          if (bucketMatch) {
+            console.log(`[PULL-ORDERS] Ghost duplicate detected for ${ord.customer_email} (ID ${orderId} vs hub ${bucketMatch.shopify_order_id}) — skipping`);
+            results.push({ order_id: orderId, action: 'skipped', reason: 'ghost_duplicate_by_email_time' });
+            continue;
+          }
+        }
 
         // Build customer name — try payload first, then existing hub record, then Stripe (last resort only if truly missing)
         let customerName = ord.customer_name ||
