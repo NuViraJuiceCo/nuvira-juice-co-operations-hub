@@ -9,7 +9,36 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (user?.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
 
-    const { email, name } = await req.json();
+    const { email, name, payment_intent_ids } = await req.json();
+
+    // If payment intent IDs provided, look them up directly
+    if (payment_intent_ids && payment_intent_ids.length > 0) {
+      const results = await Promise.all(payment_intent_ids.map(async (piId) => {
+        const pi = await stripe.paymentIntents.retrieve(piId, { expand: ['customer', 'charges'] });
+        const charge = pi.charges?.data?.[0];
+        return {
+          id: pi.id,
+          amount: pi.amount / 100,
+          status: pi.status,
+          created: new Date(pi.created * 1000).toISOString(),
+          customer_id: typeof pi.customer === 'string' ? pi.customer : pi.customer?.id,
+          customer_email: pi.customer?.email || charge?.billing_details?.email || pi.receipt_email,
+          customer_name: pi.customer?.name || charge?.billing_details?.name,
+          receipt_email: pi.receipt_email,
+          description: pi.description,
+          metadata: pi.metadata,
+          charge: charge ? {
+            id: charge.id,
+            status: charge.status,
+            paid: charge.paid,
+            receipt_url: charge.receipt_url,
+            billing_name: charge.billing_details?.name,
+            billing_email: charge.billing_details?.email,
+          } : null,
+        };
+      }));
+      return Response.json({ payment_intents: results });
+    }
 
     // 1) Try exact email match
     const byEmail = email ? await stripe.customers.list({ email: email.trim(), limit: 10 }) : { data: [] };
