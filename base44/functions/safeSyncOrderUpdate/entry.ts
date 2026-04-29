@@ -285,6 +285,25 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── STEP 3.5: MINIMUM QUALITY FOR NEW ORDERS ────────────────────────────
+    // New orders must have minimum completeness to avoid corrupted records
+    if (!existingOrder && source !== 'admin') {
+      const incomingScore = getCompletenessScore(incomingData);
+      const minScore = source === 'rebuild_subscriptions' ? 6 : 5; // Subscriptions need more data
+      if (incomingScore < minScore) {
+        await quarantine(base44, {
+          incident_type: 'low_quality_new_order',
+          customer_email: incomingData.customer_email || null,
+          customer_name: incomingData.customer_name || null,
+          incoming_payload: incomingData,
+          incoming_source: source,
+          issue_description: `New order rejected — completeness score ${incomingScore}/${minScore} from ${source}. Missing critical fields.`,
+          recommended_action: 'manual_review',
+        });
+        return Response.json({ status: 'rejected', reason: `low_quality_new_order_score_${incomingScore}_below_${minScore}` });
+      }
+    }
+
     // ── STEP 4: SUBSCRIPTION HARD LOCK ──────────────────────────────────────
     if (existingOrder && (existingOrder.source_channel === 'subscription' || existingOrder.stripe_subscription_id)) {
       // Never downgrade source_channel from subscription
