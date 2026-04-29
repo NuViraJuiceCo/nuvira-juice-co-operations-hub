@@ -146,8 +146,10 @@ Deno.serve(async (req) => {
     for (const o of existingOrders) {
       if (o.shopify_order_id) existingByOrderId.set(o.shopify_order_id, o);
       if (o.shopify_order_number) existingByOrderNumber.set(o.shopify_order_number, o);
-      if (o.customer_email && o.customer_order_date) {
-        const bucket = Math.floor(new Date(o.customer_order_date).getTime() / (24 * 60 * 60 * 1000)); // 24-hour bucket
+      // Use customer_order_date OR created_date as fallback — some old orders have null customer_order_date
+      const dateForBucket = o.customer_order_date || o.created_date;
+      if (o.customer_email && dateForBucket) {
+        const bucket = Math.floor(new Date(dateForBucket).getTime() / (24 * 60 * 60 * 1000)); // 24-hour bucket
         existingByEmailTimeBucket.set(`${o.customer_email}__${bucket}`, o);
       }
     }

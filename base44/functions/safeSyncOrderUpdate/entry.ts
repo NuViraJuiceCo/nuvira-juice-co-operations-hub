@@ -225,6 +225,19 @@ Deno.serve(async (req) => {
           console.error('[SAFE-SYNC] internal_id lookup failed:', err.message);
         }
       }
+
+      // FINAL SAFETY NET: match by shopify_order_number before ever creating a new record.
+      // Prevents duplicates when the same order arrives with a different shopify_order_id
+      // (e.g. customer app sends internal ID one time, Stripe ID another time).
+      if (!existingOrder && incomingData.shopify_order_number) {
+        const byNumber = await base44.asServiceRole.entities.ShopifyOrder.filter({
+          shopify_order_number: incomingData.shopify_order_number,
+        });
+        if (byNumber && byNumber.length > 0) {
+          existingOrder = byNumber[0];
+          console.log(`[SAFE-SYNC] Matched existing order by order_number ${incomingData.shopify_order_number} — preventing duplicate creation`);
+        }
+      }
     }
 
     // ── STEP 2: IDEMPOTENCY CHECK ────────────────────────────────────────────
