@@ -378,7 +378,7 @@ export default function Orders() {
                               </div>
                             ) : (
                               <div className="space-y-2">
-                                {order.line_items.map((item, idx) => (
+                                {order.line_items.filter(item => !['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'].some(kw => (item.title||'').toLowerCase().includes(kw))).map((item, idx) => (
                                   <div key={idx} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-2.5">
                                     <div className="flex-1">
                                       <p className="text-sm font-medium text-foreground">{item.title}</p>
@@ -484,7 +484,7 @@ export default function Orders() {
                     <div>
                       <p className="text-xs font-semibold text-foreground mb-2">Items</p>
                       <div className="space-y-1">
-                        {order.line_items.map((item, idx) => (
+                        {order.line_items.filter(item => !['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'].some(kw => (item.title||'').toLowerCase().includes(kw))).map((item, idx) => (
                           <div key={idx} className="flex items-center justify-between bg-muted/20 rounded px-2 py-1.5">
                             <p className="text-xs font-medium text-foreground truncate flex-1">{item.title}</p>
                             <p className="text-xs text-muted-foreground ml-2 flex-shrink-0">×{item.quantity}</p>
