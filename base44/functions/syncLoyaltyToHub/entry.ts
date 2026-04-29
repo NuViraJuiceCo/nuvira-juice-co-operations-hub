@@ -6,12 +6,7 @@ const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-
-    if (!user || user.role !== 'admin') {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+    // Called from entity automation — no user session. Use service role only.
     const payload = await req.json();
     const { event, data } = payload;
 

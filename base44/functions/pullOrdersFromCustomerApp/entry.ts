@@ -37,7 +37,9 @@ async function fetchNameFromStripe(ord) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const { date } = await req.json();
+    let body = {};
+    try { body = await req.json(); } catch (_) {}
+    const { date } = body;
 
     if (!CUSTOMER_APP_API || !SYNC_SECRET) {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
@@ -69,6 +71,7 @@ Deno.serve(async (req) => {
     let orders = Array.isArray(data.orders) ? data.orders : (Array.isArray(data) ? data : []);
     
     // Fetch subscription orders if available
+    // NOTE: getSubscriptionOrdersForSync uses CUSTOMER_APP_SYNC_SECRET (same as SYNC_SECRET here) — intentional per architecture
     try {
       const subResponse = await fetch(`${CUSTOMER_APP_API}/functions/getSubscriptionOrdersForSync`, {
         method: 'POST',
