@@ -180,6 +180,11 @@ Deno.serve(async (req) => {
           }
         }
 
+        // If this is a new order (no hubOrder), use 'rebuild_subscriptions' source which
+        // allows shopify_order_id + shopify_order_number through field ownership.
+        // For updates to existing orders, use 'customer_app' source (address/notes/items only).
+        const writeSource = hubOrder ? 'customer_app' : 'rebuild_subscriptions';
+
         // Route ALL writes through safeSyncOrderUpdate — it enforces all protections
         const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
           incomingData: {
@@ -200,6 +205,7 @@ Deno.serve(async (req) => {
             sync_status: 'synced',
             last_sync_at: new Date().toISOString(),
             customer_order_date: ord.created_date || ord.order_date || new Date().toISOString(),
+            source_channel: 'online',
             address_line1: ord.address_line1 || '',
             address_line2: ord.address_line2 || '',
             address_city: ord.address_city || '',
@@ -207,7 +213,7 @@ Deno.serve(async (req) => {
             address_postal_code: ord.address_postal_code || '',
             address_country: ord.address_country || 'US',
           },
-          source: 'customer_app',
+          source: writeSource,
           matchBy: { shopify_order_id: orderId },
         });
 

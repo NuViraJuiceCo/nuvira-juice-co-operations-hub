@@ -60,7 +60,8 @@ const FIELD_OWNERSHIP = {
     'total_price', 'subtotal', 'payment_status', 'fulfillment_method',
     'address_line1', 'address_line2', 'address_city', 'address_state',
     'address_postal_code', 'address_country', 'sync_status', 'last_sync_at', 'customer_order_date',
-    'production_status', 'order_lock_status',
+    'production_status', 'order_lock_status', 'customer_app_user_id', 'customer_notes', 'tags',
+    'requested_delivery_date', 'delivery_notes',
   ],
   operations: [
     'production_status', 'fulfillment_status', 'assigned_delivery_date',
