@@ -118,10 +118,12 @@ Deno.serve(async (req) => {
     // Pre-load all existing hub orders indexed by shopify_order_id — avoids per-order DB lookups in safeSyncOrderUpdate
     const existingOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500);
     const existingByOrderId = new Map();
+    const existingByOrderNumber = new Map();
     // Secondary index: email + 10-min time bucket → catches ghost duplicates with different IDs
     const existingByEmailTimeBucket = new Map();
     for (const o of existingOrders) {
       if (o.shopify_order_id) existingByOrderId.set(o.shopify_order_id, o);
+      if (o.shopify_order_number) existingByOrderNumber.set(o.shopify_order_number, o);
       if (o.customer_email && o.customer_order_date) {
         const bucket = Math.floor(new Date(o.customer_order_date).getTime() / (10 * 60 * 1000));
         existingByEmailTimeBucket.set(`${o.customer_email}__${bucket}`, o);
@@ -146,7 +148,16 @@ Deno.serve(async (req) => {
 
         let hubOrder = existingByOrderId.get(orderId);
 
-        // Secondary dedup: if no match by ID, check email + 10-min time bucket
+        // Secondary dedup: match by order number (catches orders where app used internal ID but hub has same order number)
+        if (!hubOrder && ord.shopify_order_number) {
+          const byNumber = existingByOrderNumber.get(ord.shopify_order_number);
+          if (byNumber) {
+            console.log(`[PULL-ORDERS] Matched by order number ${ord.shopify_order_number} (ID ${orderId} vs hub ${byNumber.shopify_order_id}) — treating as same order`);
+            hubOrder = byNumber;
+          }
+        }
+
+        // Tertiary dedup: if still no match, check email + 10-min time bucket
         // This catches ghost duplicates where the customer app used its own internal ID
         // instead of the Stripe session ID that the hub already stored
         if (!hubOrder && ord.customer_email && (ord.created_date || ord.order_date)) {
