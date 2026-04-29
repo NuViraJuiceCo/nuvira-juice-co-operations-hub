@@ -450,18 +450,22 @@ Deno.serve(async (req) => {
     }
 
     // ── STEP 10: AUDIT LOG ───────────────────────────────────────────────────
-    await logSync(base44, {
-      source,
-      stripe_event_id: stripeEventId || null,
-      order_id: writtenOrder.id,
-      order_number: writtenOrder.shopify_order_number || incomingData.shopify_order_number,
-      customer_email: writtenOrder.customer_email || incomingData.customer_email,
-      action: existingOrder ? 'updated' : 'created',
-      reason: `source:${source}, lock:${lockStatus}`,
-      fields_updated: fieldsWritten,
-      fields_rejected: [...fieldsRejected, ...fieldsFiltered],
-      success: true,
-    });
+    // Only log creates, Stripe webhook events, or writes with rejections — skip routine customer_app updates to reduce credits
+    const shouldLog = !existingOrder || stripeEventId || fieldsRejected.length > 0 || fieldsFiltered.length > 0 || source === 'stripe_webhook';
+    if (shouldLog) {
+      await logSync(base44, {
+        source,
+        stripe_event_id: stripeEventId || null,
+        order_id: writtenOrder.id,
+        order_number: writtenOrder.shopify_order_number || incomingData.shopify_order_number,
+        customer_email: writtenOrder.customer_email || incomingData.customer_email,
+        action: existingOrder ? 'updated' : 'created',
+        reason: `source:${source}, lock:${lockStatus}`,
+        fields_updated: fieldsWritten,
+        fields_rejected: [...fieldsRejected, ...fieldsFiltered],
+        success: true,
+      });
+    }
 
     return Response.json({
       status: 'success',

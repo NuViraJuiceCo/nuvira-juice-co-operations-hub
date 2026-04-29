@@ -112,6 +112,14 @@ Deno.serve(async (req) => {
     orders = Array.from(seenOrderIds.values());
     console.log(`[PULL-ORDERS] Deduplicated to ${orders.length} unique orders from customer app`);
 
+    // Pre-load all existing hub orders indexed by shopify_order_id — avoids per-order DB lookups in safeSyncOrderUpdate
+    const existingOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500);
+    const existingByOrderId = new Map();
+    for (const o of existingOrders) {
+      if (o.shopify_order_id) existingByOrderId.set(o.shopify_order_id, o);
+    }
+    console.log(`[PULL-ORDERS] Loaded ${existingOrders.length} existing hub orders for change detection`);
+
     // Upsert orders into hub ShopifyOrder entity
     const results = [];
     const processedIds = new Set();
@@ -127,14 +135,46 @@ Deno.serve(async (req) => {
         }
         processedIds.add(orderId);
 
-        // Build customer name — try payload first, then Stripe
+        const hubOrder = existingByOrderId.get(orderId);
+
+        // Build customer name — try payload first, then existing hub record, then Stripe (last resort only if truly missing)
         let customerName = ord.customer_name ||
           (ord.first_name || ord.last_name ? `${ord.first_name || ''} ${ord.last_name || ''}`.trim() : null) ||
           ord.full_name || null;
 
-        if (!customerName && (ord.stripe_checkout_session_id || ord.stripe_payment_intent_id || ord.stripe_subscription_id || ord.customer_email)) {
+        // Use existing hub name if we already have one — avoid Stripe API call
+        if (!customerName && hubOrder?.customer_name) {
+          customerName = hubOrder.customer_name;
+        }
+
+        // Only hit Stripe if name is truly unknown and order has no hub record yet
+        if (!customerName && !hubOrder && (ord.stripe_checkout_session_id || ord.stripe_payment_intent_id || ord.stripe_subscription_id || ord.customer_email)) {
           customerName = await fetchNameFromStripe(ord);
           if (customerName) console.log(`[PULL-ORDERS] Got name from Stripe for ${orderId}: ${customerName}`);
+        }
+
+        // Skip write if order already exists in hub and nothing meaningful has changed
+        if (hubOrder) {
+          const incomingAddress = ord.address_line1 || '';
+          const hubAddress = hubOrder.address_line1 || '';
+          const incomingItems = JSON.stringify(ord.line_items || ord.items || []);
+          const hubItems = JSON.stringify(hubOrder.line_items || []);
+          const incomingNotes = ord.customer_notes || ord.notes || '';
+          const hubNotes = hubOrder.customer_notes || '';
+          const incomingTotal = ord.total_price || ord.total || 0;
+          const hubTotal = hubOrder.total_price || 0;
+
+          const unchanged =
+            incomingAddress === hubAddress &&
+            incomingItems === hubItems &&
+            incomingNotes === hubNotes &&
+            Math.abs(incomingTotal - hubTotal) < 0.01 &&
+            (!customerName || customerName === hubOrder.customer_name);
+
+          if (unchanged) {
+            results.push({ order_id: orderId, action: 'skipped', reason: 'no_changes' });
+            continue;
+          }
         }
 
         // Route ALL writes through safeSyncOrderUpdate — it enforces all protections
