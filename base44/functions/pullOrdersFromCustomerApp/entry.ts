@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     if (recentLogs && recentLogs.length > 0) {
       const lastRun = new Date(recentLogs[0].sync_timestamp).getTime();
       const secondsAgo = (Date.now() - lastRun) / 1000;
-      if (secondsAgo < 90) {
+      if (secondsAgo < 180) {
         console.log(`[PULL-ORDERS] Skipping — another pull ran ${Math.round(secondsAgo)}s ago (concurrency lock)`);
         return Response.json({ status: 'skipped', reason: 'concurrency_lock', last_run_seconds_ago: Math.round(secondsAgo) });
       }
@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
       if (o.shopify_order_id) existingByOrderId.set(o.shopify_order_id, o);
       if (o.shopify_order_number) existingByOrderNumber.set(o.shopify_order_number, o);
       if (o.customer_email && o.customer_order_date) {
-        const bucket = Math.floor(new Date(o.customer_order_date).getTime() / (10 * 60 * 1000));
+        const bucket = Math.floor(new Date(o.customer_order_date).getTime() / (24 * 60 * 60 * 1000)); // 24-hour bucket
         existingByEmailTimeBucket.set(`${o.customer_email}__${bucket}`, o);
       }
     }
@@ -171,6 +171,7 @@ Deno.serve(async (req) => {
         let hubOrder = existingByOrderId.get(orderId);
 
         // Secondary dedup: match by order number (catches orders where app used internal ID but hub has same order number)
+        // This is the PRIMARY protection against the customer app sending different IDs for the same order
         if (!hubOrder && ord.shopify_order_number) {
           const byNumber = existingByOrderNumber.get(ord.shopify_order_number);
           if (byNumber) {
@@ -179,16 +180,16 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Tertiary dedup: if still no match, check email + 10-min time bucket
-        // This catches ghost duplicates where the customer app used its own internal ID
-        // instead of the Stripe session ID that the hub already stored
+        // Tertiary dedup: if still no match, check email + same-DAY bucket (24-hour window)
+        // Catches ghost duplicates where the customer app used its own internal ID AND no order number match.
+        // Using 24h window because subscription orders can have timestamps hours apart in the same order cycle.
         if (!hubOrder && ord.customer_email && (ord.created_date || ord.order_date)) {
           const orderDate = ord.created_date || ord.order_date;
-          const bucket = Math.floor(new Date(orderDate).getTime() / (10 * 60 * 1000));
+          const bucket = Math.floor(new Date(orderDate).getTime() / (24 * 60 * 60 * 1000)); // 24-hour bucket
           const bucketMatch = existingByEmailTimeBucket.get(`${ord.customer_email}__${bucket}`);
           if (bucketMatch) {
             console.log(`[PULL-ORDERS] Ghost duplicate detected for ${ord.customer_email} (ID ${orderId} vs hub ${bucketMatch.shopify_order_id}) — skipping`);
-            results.push({ order_id: orderId, action: 'skipped', reason: 'ghost_duplicate_by_email_time' });
+            results.push({ order_id: orderId, action: 'skipped', reason: 'ghost_duplicate_by_email_day' });
             continue;
           }
         }
