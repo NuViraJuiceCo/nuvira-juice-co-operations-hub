@@ -539,7 +539,8 @@ Deno.serve(async (req) => {
     }
 
     // ─── SAVE UPDATED ORDERS (fulfillments, assigned_delivery_date) ────────────
-    // Route ALL order writes through safeSyncOrderUpdate to enforce locks and field ownership
+    // Direct writes for fulfillments/delivery dates — these fields don't trigger recalc automation
+    // (fulfillments and assigned_delivery_date are not in the trigger conditions)
     const ordersToUpdate = allOrders.filter(o => o.fulfillments || o._deliveryDateAssigned);
     for (const order of ordersToUpdate) {
       const updateData = {};
@@ -550,13 +551,10 @@ Deno.serve(async (req) => {
         updateData.assigned_delivery_date = order._deliveryDateAssigned;
       }
       if (Object.keys(updateData).length > 0) {
-        const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
-          incomingData: updateData,
-          source: 'operations',
-          matchBy: { internal_id: order.id },
-        });
-        if (safeResult?.data?.status === 'rejected') {
-          console.warn(`[RECALC] Gateway rejected fulfillment write for order ${order.id}: ${safeResult.data.reason}`);
+        try {
+          await base44.asServiceRole.entities.ShopifyOrder.update(order.id, updateData);
+        } catch (err) {
+          console.warn(`[RECALC] Failed to update fulfillments for order ${order.id}: ${err.message}`);
         }
       }
     }

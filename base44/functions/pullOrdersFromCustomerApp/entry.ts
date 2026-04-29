@@ -157,6 +157,8 @@ Deno.serve(async (req) => {
         }
 
         // Skip write if order already exists in hub and nothing meaningful has changed
+        // CRITICAL: Do NOT include sync_status/last_sync_at in this check — they change every run
+        // and would prevent the no-change skip, causing a recalculate storm on every poll.
         if (hubOrder) {
           const incomingAddress = ord.address_line1 || '';
           const hubAddress = hubOrder.address_line1 || '';
@@ -166,12 +168,15 @@ Deno.serve(async (req) => {
           const hubNotes = hubOrder.customer_notes || '';
           const incomingTotal = ord.total_price || ord.total || 0;
           const hubTotal = hubOrder.total_price || 0;
+          const incomingPhone = ord.customer_phone || '';
+          const hubPhone = hubOrder.customer_phone || '';
 
           const unchanged =
             incomingAddress === hubAddress &&
             incomingItems === hubItems &&
             incomingNotes === hubNotes &&
             Math.abs(incomingTotal - hubTotal) < 0.01 &&
+            incomingPhone === hubPhone &&
             (!customerName || customerName === hubOrder.customer_name);
 
           if (unchanged) {
@@ -202,8 +207,6 @@ Deno.serve(async (req) => {
             total_price: ord.total_price || ord.total || 0,
             customer_notes: ord.customer_notes || ord.notes || '',
             tags: ord.tags || [],
-            sync_status: 'synced',
-            last_sync_at: new Date().toISOString(),
             customer_order_date: ord.created_date || ord.order_date || new Date().toISOString(),
             source_channel: 'online',
             address_line1: ord.address_line1 || '',
