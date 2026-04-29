@@ -13,6 +13,15 @@ Deno.serve(async (req) => {
       return Response.json({ message: 'No valid customer email, skipping notification' });
     }
 
+    // Only send notifications for orders created within the last 10 minutes
+    // This prevents confirmation emails firing for sync-imported or repaired orders
+    const orderCreatedAt = new Date(shopifyOrder.created_date || shopifyOrder.customer_order_date || 0).getTime();
+    const ageMinutes = (Date.now() - orderCreatedAt) / 60000;
+    if (ageMinutes > 10) {
+      console.log(`[NOTIFY] Skipping — order is ${Math.round(ageMinutes)} min old (not a fresh order)`);
+      return Response.json({ message: 'Skipped — order too old to be a fresh purchase' });
+    }
+
     if (!CUSTOMER_APP_API) {
       console.warn('[NOTIFY] Customer app API not configured, skipping notification');
       return Response.json({ message: 'Customer app API not configured' });

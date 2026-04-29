@@ -45,6 +45,28 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
+    // ── CONCURRENCY LOCK: bail if another pull ran within the last 90 seconds ──
+    // This prevents race conditions when a manual click fires simultaneously with the scheduler.
+    const recentLogs = await base44.asServiceRole.entities.OrderSyncLog.filter(
+      { sync_source: 'pullOrdersFromCustomerApp' }, '-sync_timestamp', 1
+    );
+    if (recentLogs && recentLogs.length > 0) {
+      const lastRun = new Date(recentLogs[0].sync_timestamp).getTime();
+      const secondsAgo = (Date.now() - lastRun) / 1000;
+      if (secondsAgo < 90) {
+        console.log(`[PULL-ORDERS] Skipping — another pull ran ${Math.round(secondsAgo)}s ago (concurrency lock)`);
+        return Response.json({ status: 'skipped', reason: 'concurrency_lock', last_run_seconds_ago: Math.round(secondsAgo) });
+      }
+    }
+    // Write a lock entry immediately so any concurrent run will see it
+    await base44.asServiceRole.entities.OrderSyncLog.create({
+      sync_timestamp: new Date().toISOString(),
+      sync_source: 'pullOrdersFromCustomerApp',
+      event_type: 'pull_start',
+      action: 'lock_acquired',
+      success: true,
+    });
+
     // Fetch all orders from customer app
     const response = await fetch(`${CUSTOMER_APP_API}/functions/getAllOrdersForSync`, {
       method: 'POST',
