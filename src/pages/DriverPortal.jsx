@@ -73,8 +73,22 @@ function buildFullRouteUrl(orders) {
   const remaining = orders.filter(o => o.status !== 'delivered');
   if (remaining.length === 0) return null;
   const origin = encodeURIComponent(DEPOT);
-  const destination = encodeURIComponent(remaining[remaining.length - 1].delivery_address);
-  const waypoints = remaining.slice(0, -1).map(o => encodeURIComponent(o.delivery_address)).join('|');
+  
+  const formatAddress = (order) => {
+    // Try fulfillment address first (for subscriptions)
+    if (order.selectedFulfillment?.address_line1) {
+      return `${order.selectedFulfillment.address_line1}${order.selectedFulfillment.address_line2 ? ' ' + order.selectedFulfillment.address_line2 : ''}, ${order.selectedFulfillment.address_city}, ${order.selectedFulfillment.address_state} ${order.selectedFulfillment.address_postal_code}`;
+    }
+    // Fall back to order-level address
+    if (order.address_line1) {
+      return `${order.address_line1}${order.address_line2 ? ' ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}`;
+    }
+    // Last resort
+    return order.delivery_address || '';
+  };
+  
+  const destination = encodeURIComponent(formatAddress(remaining[remaining.length - 1]));
+  const waypoints = remaining.slice(0, -1).map(o => encodeURIComponent(formatAddress(o))).join('|');
   return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ''}&travelmode=driving`;
 }
 
