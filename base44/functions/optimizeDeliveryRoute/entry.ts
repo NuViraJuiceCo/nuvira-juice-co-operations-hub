@@ -157,11 +157,18 @@ Deno.serve(async (req) => {
     const depotCoords = { latitude: 38.6849, longitude: -90.6639 }; // O'Fallon, MO coordinates
     
     // Build waypoints for Google Routes API
-    const waypoints = undeliveredStops.map(stop => ({
-      location: {
-        address: stop.delivery_address,
-      },
-    }));
+    const waypoints = undeliveredStops.map(stop => {
+      // Use structured address fields if available
+      let address = stop.delivery_address;
+      if (stop.address_line1) {
+        address = `${stop.address_line1}${stop.address_line2 ? ' ' + stop.address_line2 : ''}, ${stop.address_city}, ${stop.address_state} ${stop.address_postal_code}`;
+      }
+      return {
+        location: {
+          address,
+        },
+      };
+    });
 
     // Call Google Routes Optimization API
     let optimizedRoute = null;
@@ -242,9 +249,11 @@ Deno.serve(async (req) => {
 
     // Fallback: cluster-based sort (group by zip code proximity)
     const clusteredOrders = [...undeliveredStops].sort((a, b) => {
-      const aZip = (a.delivery_address || '').match(/\d{5}/)?.[0] || '';
-      const bZip = (b.delivery_address || '').match(/\d{5}/)?.[0] || '';
-      return aZip.localeCompare(bZip) || (a.delivery_address || '').localeCompare(b.delivery_address || '');
+      const aZip = (a.address_postal_code || a.delivery_address || '').match(/\d{5}/)?.[0] || '';
+      const bZip = (b.address_postal_code || b.delivery_address || '').match(/\d{5}/)?.[0] || '';
+      const aAddr = (a.address_line1 || a.delivery_address || '');
+      const bAddr = (b.address_line1 || b.delivery_address || '');
+      return aZip.localeCompare(bZip) || aAddr.localeCompare(bAddr);
     });
 
     return Response.json({
