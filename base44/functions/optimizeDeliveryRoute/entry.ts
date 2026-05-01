@@ -82,10 +82,15 @@ Deno.serve(async (req) => {
     }
 
     // ── QUALITY GATE: Delivery orders must have complete address ──────────────
-    // POS orders: only require address if fulfillment_method is 'delivery'
-    // All delivery orders (any type) must have address before Driver Portal
-    const hasCompleteAddress = (order) => {
+    // Check BOTH parent-level and fulfillment-level addresses
+    // For single_delivery: use parent address (may be empty if in fulfillment only)
+    // For multi_delivery (subscriptions): check fulfillment.address_line1
+    const hasCompleteAddressAtParent = (order) => {
       return order.address_line1 && order.address_city && order.address_state && order.address_postal_code;
+    };
+
+    const hasCompleteAddressAtFulfillment = (fulfillment) => {
+      return fulfillment.address_line1 && fulfillment.address_city && fulfillment.address_state && fulfillment.address_postal_code;
     };
 
     const isDeliveryOrder = (order) => {
@@ -97,9 +102,26 @@ Deno.serve(async (req) => {
       .filter(o => !['fulfilled', 'canceled', 'refunded'].includes(o.production_status))
       .filter(o => {
         // Gate: if order is marked for delivery, it must have complete address
-        if (isDeliveryOrder(o) && !hasCompleteAddress(o)) {
-          console.warn(`[OPTIMIZE-ROUTE] Gating order ${o.shopify_order_number} (${o.order_type}): delivery order missing address. address_line1=${o.address_line1}, city=${o.address_city}, state=${o.address_state}, zip=${o.address_postal_code}`);
-          return false; // Block from Driver Portal
+        if (!isDeliveryOrder(o)) return true; // Non-delivery orders don't need address gate
+        
+        const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
+        
+        if (fulfillmentMode === 'multi_delivery' && o.fulfillments && o.fulfillments.length > 0) {
+          // For subscriptions: check that at least ONE fulfillment has complete address
+          const hasValidFulfillment = o.fulfillments.some(f => hasCompleteAddressAtFulfillment(f));
+          if (!hasValidFulfillment) {
+            console.warn(`[OPTIMIZE-ROUTE] Gating subscription ${o.shopify_order_number} (${o.customer_name}): no fulfillment has complete address`);
+            return false;
+          }
+        } else {
+          // For one-time orders: check parent address first, then fulfillment
+          const hasParentAddress = hasCompleteAddressAtParent(o);
+          const hasFulfillmentAddress = o.fulfillments && o.fulfillments.length > 0 && hasCompleteAddressAtFulfillment(o.fulfillments[0]);
+          
+          if (!hasParentAddress && !hasFulfillmentAddress) {
+            console.warn(`[OPTIMIZE-ROUTE] Gating order ${o.shopify_order_number} (${o.order_type}): delivery order missing address at both parent and fulfillment levels`);
+            return false;
+          }
         }
         return true;
       })
