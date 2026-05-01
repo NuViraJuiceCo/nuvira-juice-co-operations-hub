@@ -763,7 +763,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   // Filter orders to show only fulfillments for the selected date
   // and extract per-fulfillment products
   let displayOrders = (routeData?.optimized_orders || queuedOrders || []).map(order => {
-    if (order.fulfillments && order.fulfillments.length > 0) {
+    // Check if this is a subscription or one-time order
+    const hasMultipleFulfillments = order.fulfillments && order.fulfillments.length > 0;
+    
+    if (hasMultipleFulfillments) {
       // Subscription: find the fulfillment for this delivery date
       const fulfillmentForDate = order.fulfillments.find(f => f.delivery_date === date);
       if (fulfillmentForDate) {
@@ -775,16 +778,25 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           isSubscriptionDelivery: true,
         };
       } else {
-        // No fulfillment for this date - skip this order
+        // No fulfillment for this date - skip this subscription order
         return null;
       }
     } else {
-      // One-time order: use line_items
-      return {
-        ...order,
-        deliveryItems: order.items || [],
-        isSubscriptionDelivery: false,
-      };
+      // One-time order: check if it's assigned to this date and show it
+      const isAssignedToThisDate = order.assigned_delivery_date === date || 
+                                    order.requested_delivery_date === date;
+      
+      if (isAssignedToThisDate || !date) {
+        // Show one-time orders assigned to this date
+        return {
+          ...order,
+          deliveryItems: order.items || [],
+          isSubscriptionDelivery: false,
+        };
+      } else {
+        // One-time order not assigned to this date - skip it
+        return null;
+      }
     }
   }).filter(o => o !== null);
 
