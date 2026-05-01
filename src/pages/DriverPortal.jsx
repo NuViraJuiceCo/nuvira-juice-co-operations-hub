@@ -336,7 +336,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
             </span>
           </div>
           <p className="text-xs font-medium text-foreground mt-0.5">{order.customer_name || order.customer_email}</p>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">{order.delivery_address}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">{order.address_line1 ? `${order.address_line1}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}` : order.delivery_address}</p>
           {pendingReturn && (
             <div className="flex items-center gap-1 mt-1">
               <Recycle className="w-3 h-3 text-amber-600" />
