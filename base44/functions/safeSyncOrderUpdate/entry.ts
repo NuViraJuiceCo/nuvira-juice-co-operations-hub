@@ -291,15 +291,39 @@ Deno.serve(async (req) => {
       const incomingScore = getCompletenessScore(incomingData);
       const minScore = source === 'rebuild_subscriptions' ? 6 : 5; // Subscriptions need more data
       if (incomingScore < minScore) {
-        await quarantine(base44, {
-          incident_type: 'low_quality_new_order',
-          customer_email: incomingData.customer_email || null,
-          customer_name: incomingData.customer_name || null,
-          incoming_payload: incomingData,
+        // DEDUP CHECK: Only create one queue entry per unique order/reason
+        // Key: customer_email + stripe_subscription_id + incident reason
+        const existingQueue = await base44.asServiceRole.entities.OrderReviewQueue.filter({
           incoming_source: source,
-          issue_description: `New order rejected — completeness score ${incomingScore}/${minScore} from ${source}. Missing critical fields.`,
-          recommended_action: 'manual_review',
+          incident_type: 'low_quality_new_order',
+          customer_email: incomingData.customer_email,
+          status: 'pending',
         });
+        
+        // Check if THIS EXACT ORDER already has a pending review
+        const isDuplicate = existingQueue && existingQueue.length > 0 && 
+          existingQueue.some(q => 
+            q.incoming_payload?.stripe_subscription_id === incomingData.stripe_subscription_id ||
+            q.incoming_payload?.stripe_checkout_session_id === incomingData.stripe_checkout_session_id ||
+            q.incoming_payload?.shopify_order_number === incomingData.shopify_order_number
+          );
+        
+        if (!isDuplicate) {
+          // First time seeing this order - create ONE queue entry
+          await quarantine(base44, {
+            incident_type: 'low_quality_new_order',
+            customer_email: incomingData.customer_email || null,
+            customer_name: incomingData.customer_name || null,
+            incoming_payload: incomingData,
+            incoming_source: source,
+            issue_description: `New order rejected — score ${incomingScore}/${minScore}. Missing: ${!incomingData.customer_name ? 'customer_name ' : ''}${!incomingData.address_line1 ? 'address_line1' : ''}`,
+            recommended_action: 'manual_review',
+          });
+          console.log(`[SAFE-SYNC] Created queue entry for ${incomingData.customer_email} (${incomingData.stripe_subscription_id || incomingData.shopify_order_number})`);
+        } else {
+          // Already queued - skip to prevent explosion
+          console.log(`[SAFE-SYNC] DEDUP: Skipped duplicate queue entry for ${incomingData.customer_email}`);
+        }
         return Response.json({ status: 'rejected', reason: `low_quality_new_order_score_${incomingScore}_below_${minScore}` });
       }
     }
