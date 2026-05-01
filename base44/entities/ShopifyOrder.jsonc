@@ -14,6 +14,24 @@
       "type": "string",
       "description": "Linked Base44 Order record ID"
     },
+    "order_type": {
+      "type": "string",
+      "enum": [
+        "subscription",
+        "one_time",
+        "pos"
+      ],
+      "default": "one_time",
+      "description": "Order type: subscription (recurring), one_time (customer app/checkout), or pos (point-of-sale)"
+    },
+    "fulfillment_mode": {
+      "type": "string",
+      "enum": [
+        "single_delivery",
+        "multi_delivery"
+      ],
+      "description": "single_delivery = one fulfillment window, multi_delivery = split across multiple weeks (subscriptions)"
+    },
     "customer_order_date": {
       "type": "string",
       "description": "Original order timestamp from customer app"
@@ -29,7 +47,8 @@
         "admin",
         "event"
       ],
-      "default": "online"
+      "default": "online",
+      "description": "DEPRECATED: use order_type instead. Kept for backward compatibility."
     },
     "customer_email": {
       "type": "string"
@@ -99,7 +118,7 @@
     },
     "fulfillments": {
       "type": "array",
-      "description": "For subscription orders: breakdown of items per fulfillment week",
+      "description": "For multi_delivery orders: breakdown of items per fulfillment window",
       "items": {
         "type": "object",
         "properties": {

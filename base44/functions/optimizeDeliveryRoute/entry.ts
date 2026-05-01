@@ -20,12 +20,14 @@ Deno.serve(async (req) => {
     let orders = allOrders;
     if (date) {
       orders = allOrders.filter(o => {
-        // For subscription orders: check if any fulfillment matches the date
-        if (o.source_channel === 'subscription' && o.fulfillments && o.fulfillments.length > 0) {
+        const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
+        
+        // For multi-delivery orders: check if any fulfillment matches the date
+        if (fulfillmentMode === 'multi_delivery' && o.fulfillments && o.fulfillments.length > 0) {
           return o.fulfillments.some(f => f.delivery_date && f.delivery_date === date);
         }
 
-        // For non-subscription orders: only show if explicitly assigned to this date
+        // For single-delivery orders: only show if explicitly assigned to this date
         if (o.assigned_delivery_date && o.assigned_delivery_date === date) {
           return true;
         }
@@ -33,7 +35,6 @@ Deno.serve(async (req) => {
           return true;
         }
 
-        // Do NOT include pre-orders or new orders without explicit delivery assignments
         return false;
       });
     }
@@ -84,10 +85,11 @@ Deno.serve(async (req) => {
     const queuedOrders = orders
       .filter(o => !['fulfilled', 'canceled', 'refunded'].includes(o.production_status))
       .map(o => {
+        const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
         let fulfillmentsForDate = o.fulfillments || [];
         
-        // For subscription orders on a specific date, only show the fulfillment for that date
-        if (date && o.source_channel === 'subscription' && o.fulfillments && o.fulfillments.length > 0) {
+        // For multi-delivery orders on a specific date, only show the fulfillment for that date
+        if (date && fulfillmentMode === 'multi_delivery' && o.fulfillments && o.fulfillments.length > 0) {
           fulfillmentsForDate = o.fulfillments.filter(f => f.delivery_date && f.delivery_date.startsWith(date));
         }
 

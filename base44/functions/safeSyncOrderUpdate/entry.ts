@@ -479,6 +479,22 @@ Deno.serve(async (req) => {
       if (!incomingData.customer_email) {
         return Response.json({ status: 'rejected', reason: 'missing_email_for_new_order' }, { status: 400 });
       }
+
+      // Auto-set order_type and fulfillment_mode for new orders if not provided
+      if (!incomingData.order_type) {
+        if (incomingData.source_channel === 'subscription' || incomingData.stripe_subscription_id) {
+          incomingData.order_type = 'subscription';
+        } else if (incomingData.source_channel === 'pos' || incomingData.fulfillment_method === 'pos') {
+          incomingData.order_type = 'pos';
+        } else {
+          incomingData.order_type = 'one_time';
+        }
+      }
+
+      if (!incomingData.fulfillment_mode) {
+        incomingData.fulfillment_mode = incomingData.order_type === 'subscription' ? 'multi_delivery' : 'single_delivery';
+      }
+
       writtenOrder = await base44.asServiceRole.entities.ShopifyOrder.create(incomingData);
     }
 

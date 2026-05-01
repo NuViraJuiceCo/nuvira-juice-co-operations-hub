@@ -781,36 +781,35 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   // and extract per-fulfillment products
   let displayOrders = (routeData?.optimized_orders || queuedOrders || []).map(order => {
     // Check if this is a subscription or one-time order
-    const isSubscription = order.source_channel === 'subscription' || order.stripe_subscription_id;
-    const hasEmbeddedFulfillments = order.fulfillments && order.fulfillments.length > 0;
+    const fulfillmentMode = order.fulfillment_mode || (order.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
     
-    if (isSubscription && hasEmbeddedFulfillments) {
-      // Subscription: find the fulfillment for this delivery date
-      const fulfillmentForDate = order.fulfillments.find(f => f.delivery_date === date);
+    if (fulfillmentMode === 'multi_delivery') {
+      // Multi-delivery: find the fulfillment for this delivery date
+      const fulfillmentForDate = order.fulfillments?.find(f => f.delivery_date === date);
       if (fulfillmentForDate) {
         return {
           ...order,
           deliveryItems: fulfillmentForDate.items || [],
           selectedFulfillment: fulfillmentForDate,
-          isSubscriptionDelivery: true,
+          isMultiDelivery: true,
         };
       } else {
-        // No fulfillment for this date - skip this subscription order
+        // No fulfillment for this date - skip this order
         return null;
       }
     } else {
-      // One-time order: check if it's assigned to this date and show it
+      // Single-delivery: check if it's assigned to this date
       const isAssignedToThisDate = order.assigned_delivery_date === date || 
                                     order.requested_delivery_date === date;
       
       if (isAssignedToThisDate || !date) {
-        // Use fulfillment items if available, otherwise order items
-        const fulfillmentForDate = hasEmbeddedFulfillments ? (order.fulfillments.find(f => f.delivery_date === date) || order.fulfillments[0]) : null;
+        // Use first fulfillment if available, otherwise order items
+        const fulfillmentForDate = order.fulfillments?.length > 0 ? order.fulfillments[0] : null;
         return {
           ...order,
           deliveryItems: fulfillmentForDate?.items || order.items || [],
           selectedFulfillment: fulfillmentForDate || null,
-          isSubscriptionDelivery: false,
+          isMultiDelivery: false,
         };
       } else {
         return null;
