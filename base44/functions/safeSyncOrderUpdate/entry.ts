@@ -91,7 +91,7 @@ const FIELD_OWNERSHIP = {
 };
 
 // ── ALWAYS-SAFE FIELDS ───────────────────────────────────────────────────────
-// Any source can update these regardless of ownership
+// Any source can update these regardless of ownership (used for internal tracking)
 const ALWAYS_SAFE_FIELDS = ['sync_status', 'last_sync_at', 'stripe_event_id_applied', 'last_reconciliation_at'];
 
 function normalizeTitle(title) {
@@ -262,10 +262,17 @@ Deno.serve(async (req) => {
     }
 
     // ── STEP 2: IDEMPOTENCY CHECK ────────────────────────────────────────────
-    if (stripeEventId && existingOrder) {
-      if (existingOrder.stripe_event_id_applied === stripeEventId) {
+    if (stripeEventId) {
+      if (existingOrder && existingOrder.stripe_event_id_applied === stripeEventId) {
         console.log('[SAFE-SYNC] Duplicate event, skipping:', stripeEventId);
         return Response.json({ status: 'skipped', reason: 'duplicate_event', order_id: existingOrder.id });
+      }
+      // Mark stripeEventId for idempotency on future re-submits (new AND existing orders)
+      incomingData.stripe_event_id_applied = stripeEventId;
+      if (!existingOrder) {
+        console.log('[SAFE-SYNC] Marked new order with stripe_event_id_applied for idempotency:', stripeEventId);
+      } else {
+        console.log('[SAFE-SYNC] Updated existing order stripe_event_id_applied for future idempotency:', stripeEventId);
       }
     }
 
@@ -605,6 +612,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── STEP 8.9: GENERATE SHOPIFY_ORDER_ID FOR CUSTOMER APP STRIPE ORDERS ─────
+    // Customer App Stripe orders may not have a real shopify_order_id.
+    // Generate stable internal fallback: customer_app:{order_number} or stripe_checkout:{session_id}
+    if (!existingOrder && !incomingData.shopify_order_id && source === 'customer_app') {
+      if (incomingData.stripe_checkout_session_id) {
+        incomingData.shopify_order_id = `stripe_checkout:${incomingData.stripe_checkout_session_id}`;
+      } else if (incomingData.stripe_payment_intent_id) {
+        incomingData.shopify_order_id = `stripe_payment_intent:${incomingData.stripe_payment_intent_id}`;
+      } else if (incomingData.shopify_order_number) {
+        incomingData.shopify_order_id = `customer_app:${incomingData.shopify_order_number}`;
+      }
+      if (incomingData.shopify_order_id) {
+        console.log(`[SAFE-SYNC] Generated shopify_order_id for customer_app order: ${incomingData.shopify_order_id}`);
+      }
+    }
+
     // ── STEP 9: WRITE ────────────────────────────────────────────────────────
     let writtenOrder;
     const fieldsWritten = Object.keys(incomingData);
@@ -616,6 +639,17 @@ Deno.serve(async (req) => {
       // Creating new order — ensure required fields
       if (!incomingData.customer_email) {
         return Response.json({ status: 'rejected', reason: 'missing_email_for_new_order' }, { status: 400 });
+      }
+
+      // Require shopify_order_number for new orders (visible order number)
+      if (!incomingData.shopify_order_number) {
+        return Response.json({ status: 'rejected', reason: 'missing_order_number_for_new_order' }, { status: 400 });
+      }
+
+      // Require shopify_order_id for new orders (internal ID)
+      // Customer App Stripe orders should have generated one in STEP 8.9
+      if (!incomingData.shopify_order_id) {
+        return Response.json({ status: 'rejected', reason: 'missing_shopify_order_id_for_new_order' }, { status: 400 });
       }
 
       // Auto-set order_type and fulfillment_mode for new orders if not provided
