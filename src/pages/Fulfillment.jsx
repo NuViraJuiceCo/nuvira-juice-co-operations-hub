@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { getTodayDateString } from "@/lib/timezoneUtils";
 import AdminGuide from "../components/shared/AdminGuide";
 import { Trash2, Edit2 } from "lucide-react";
 import { SelectContent, SelectItem } from "@/components/ui/select";
@@ -118,7 +119,7 @@ export default function Fulfillment() {
     (t) => statusFilter === "all" || t.status === statusFilter
   );
 
-  const today = moment().format("YYYY-MM-DD");
+  const today = getTodayDateString();
   const todayTasks = tasks.filter((t) => t.scheduled_date === today).length;
   const unassigned = tasks.filter((t) => t.status === "Unassigned").length;
 

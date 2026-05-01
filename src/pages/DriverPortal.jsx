@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
+import { formatAdminTimestamp, formatDeliveryDate } from '@/lib/timezoneUtils';
 import {
   Leaf, MapPin, Navigation, CheckCircle2, ChevronDown, ChevronRight,
   RefreshCw, Clock, Route, XCircle, Recycle, Package, Camera, X,
@@ -528,7 +529,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                       <img src={order.delivery_photo_url} alt="Proof of delivery" className="w-full object-cover max-h-40" />
                       <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-3 py-1.5 flex items-center justify-between">
                         <p className="text-white text-[10px] font-semibold">Proof of Delivery</p>
-                        {order.delivered_at && <p className="text-white/70 text-[10px]">{format(new Date(order.delivered_at), 'h:mm a')}</p>}
+                        {order.delivered_at && <p className="text-white/70 text-[10px]">{formatAdminTimestamp(order.delivered_at)}</p>}
                       </div>
                     </div>
                   )}
