@@ -403,6 +403,71 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── STEP 8.2: DELIVERY ADDRESS QUALITY GATE ────────────────────────────
+    // CRITICAL: All delivery orders MUST have complete address before entering Driver Portal
+    // Check both parent-level (address_line1, city, state, zip) and fulfillment-level
+    const isDeliveryOrder = incomingData.fulfillment_method === 'delivery' || existingOrder?.fulfillment_method === 'delivery';
+
+    if (isDeliveryOrder) {
+      const hasParentAddress = incomingData.address_line1 && incomingData.address_city && 
+                               incomingData.address_state && incomingData.address_postal_code;
+      const hasFulfillmentAddress = (incomingData.fulfillments?.[0]?.address_line1 && 
+                                     incomingData.fulfillments[0].address_city && 
+                                     incomingData.fulfillments[0].address_state && 
+                                     incomingData.fulfillments[0].address_postal_code) || false;
+
+      // If incoming has neither, check if we can preserve from existing
+      if (!hasParentAddress && !hasFulfillmentAddress && existingOrder) {
+        const existingParentAddress = existingOrder.address_line1 && existingOrder.address_city && 
+                                      existingOrder.address_state && existingOrder.address_postal_code;
+        const existingFulfillmentAddress = (existingOrder.fulfillments?.[0]?.address_line1 && 
+                                            existingOrder.fulfillments[0].address_city && 
+                                            existingOrder.fulfillments[0].address_state && 
+                                            existingOrder.fulfillments[0].address_postal_code) || false;
+
+        // Preserve existing address if available
+        if (existingParentAddress) {
+          incomingData.address_line1 = existingOrder.address_line1;
+          incomingData.address_line2 = existingOrder.address_line2 || incomingData.address_line2;
+          incomingData.address_city = existingOrder.address_city;
+          incomingData.address_state = existingOrder.address_state;
+          incomingData.address_postal_code = existingOrder.address_postal_code;
+          incomingData.address_country = existingOrder.address_country || incomingData.address_country;
+        } else if (existingFulfillmentAddress && incomingData.fulfillments?.length > 0) {
+          incomingData.address_line1 = existingOrder.fulfillments[0].address_line1;
+          incomingData.address_line2 = existingOrder.fulfillments[0].address_line2 || incomingData.address_line2;
+          incomingData.address_city = existingOrder.fulfillments[0].address_city;
+          incomingData.address_state = existingOrder.fulfillments[0].address_state;
+          incomingData.address_postal_code = existingOrder.fulfillments[0].address_postal_code;
+          incomingData.address_country = existingOrder.fulfillments[0].address_country || incomingData.address_country;
+        }
+      }
+
+      // FINAL GATE: if still no address after all attempts, quarantine and reject
+      const finalHasParentAddress = incomingData.address_line1 && incomingData.address_city && 
+                                    incomingData.address_state && incomingData.address_postal_code;
+      const finalHasFulfillmentAddress = (incomingData.fulfillments?.[0]?.address_line1 && 
+                                          incomingData.fulfillments[0].address_city && 
+                                          incomingData.fulfillments[0].address_state && 
+                                          incomingData.fulfillments[0].address_postal_code) || false;
+
+      if (!finalHasParentAddress && !finalHasFulfillmentAddress && source !== 'admin') {
+        console.error(`[SAFE-SYNC] Delivery order ${existingOrder?.id || incomingData.customer_email} missing complete address — quarantining`);
+        await quarantine(base44, {
+          incident_type: 'missing_customer_info',
+          customer_email: incomingData.customer_email || existingOrder?.customer_email,
+          customer_name: incomingData.customer_name || existingOrder?.customer_name,
+          existing_order_id: existingOrder?.id || null,
+          existing_order_number: existingOrder?.shopify_order_number || incomingData.shopify_order_number,
+          incoming_payload: incomingData,
+          incoming_source: source,
+          issue_description: `Delivery order missing complete address at both parent and fulfillment levels. Cannot enter Driver Portal.`,
+          recommended_action: 'manual_review',
+        });
+        return Response.json({ status: 'rejected', reason: 'delivery_order_missing_address' }, { status: 400 });
+      }
+    }
+
     // ── STEP 8.5: PRODUCTION SNAPSHOT LOCK ──────────────────────────────────
     // When transitioning TO production_scheduled: capture snapshot of line_items + fulfillments
     // When order is already production_scheduled or beyond: compare against snapshot and block mismatches
