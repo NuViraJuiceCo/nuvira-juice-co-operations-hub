@@ -180,6 +180,24 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
 
+    // ── INTERNAL FUNCTION AUTHORIZATION ─────────────────────────────────────
+    // Allow trusted internal functions (rebuild_subscriptions) to call this gateway
+    // without requiring user authentication. Validate via INTERNAL_FUNCTION_SECRET.
+    const providedSecret = body._internalSecret;
+    const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+    const isInternalCall = providedSecret && internalSecret && providedSecret === internalSecret && body.source === 'rebuild_subscriptions';
+    
+    if (!isInternalCall) {
+      // External/public call — require valid user auth
+      const userAuth = await base44.auth.me().catch(() => null);
+      if (!userAuth) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    } else {
+      // Internal call authorized — log and proceed
+      console.log(`[SAFE-SYNC] Internal call from ${body.source} authorized via internal secret`);
+    }
+
     const {
       incomingData,     // Fields to write
       source,           // Who is writing: stripe_webhook | customer_app | rebuild_subscriptions | operations | admin | manual_recovery

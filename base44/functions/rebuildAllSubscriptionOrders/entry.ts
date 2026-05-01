@@ -121,7 +121,16 @@ Deno.serve(async (req) => {
       try {
         const customer = typeof sub.customer === 'object' ? sub.customer : await stripe.customers.retrieve(sub.customer);
         const email = customer.email;
-        const name = customer.name || '';
+        let name = customer.name || '';
+        
+        // If Stripe customer name is empty, try to extract from metadata or default
+        if (!name && customer.metadata?.full_name) {
+          name = customer.metadata.full_name;
+        }
+        // Last resort: use first 50 chars of email
+        if (!name) {
+          name = email.split('@')[0];
+        }
 
         if (!email) {
           results.failed.push({ sub_id: sub.id, reason: 'no_email' });
@@ -152,17 +161,17 @@ Deno.serve(async (req) => {
           console.warn(`[REBUILD-SUBS] Could not fetch invoice for ${sub.id}: ${err.message}`);
         }
 
-        // Try to get address from customer or latest invoice
+        // Try to get address from customer, invoice, or metadata
         let addressFields = {};
         try {
-          const addr = customer.address || customer.shipping?.address || {};
+          const addr = customer.address || customer.shipping?.address || customer.metadata?.address || {};
           addressFields = {
-            address_line1: addr.line1 || '',
-            address_line2: addr.line2 || '',
-            address_city: addr.city || '',
-            address_state: addr.state || '',
-            address_postal_code: addr.postal_code || '',
-            address_country: addr.country || 'US',
+            address_line1: addr.line1 || customer.metadata?.address_line1 || '',
+            address_line2: addr.line2 || customer.metadata?.address_line2 || '',
+            address_city: addr.city || customer.metadata?.address_city || '',
+            address_state: addr.state || customer.metadata?.address_state || '',
+            address_postal_code: addr.postal_code || customer.metadata?.address_postal_code || '',
+            address_country: addr.country || customer.metadata?.address_country || 'US',
           };
         } catch (_) {}
 
@@ -203,10 +212,13 @@ Deno.serve(async (req) => {
         };
 
         // Route ALL writes through safeSyncOrderUpdate — enforces locks, subscription protection, field ownership
+        // Pass internal secret in payload for authorized function-to-function calls
+        const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
         const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
           incomingData: orderData,
           source: 'rebuild_subscriptions',
           matchBy: { stripe_subscription_id: sub.id },
+          _internalSecret: internalSecret || '',
         });
 
         const action = safeResult?.data?.action || safeResult?.data?.status;
