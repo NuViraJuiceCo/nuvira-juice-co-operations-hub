@@ -40,26 +40,35 @@ export default function ComplianceLogs() {
         log_types: logTypeFilter === 'all' ? null : [logTypeFilter]
       });
 
-      if (response.data && response.data.url) {
-        window.open(response.data.url, '_blank');
+      if (response.data && response.data.file_url) {
+        // Support both data URI and HTTP URLs
+        if (response.data.file_url.startsWith('data:')) {
+          // Data URI: trigger download
+          const link = document.createElement('a');
+          link.href = response.data.file_url;
+          link.download = `NuVira-Compliance-Audit-${startDate}-to-${endDate}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          // HTTP URL: open in new tab
+          window.open(response.data.file_url, '_blank');
+        }
+      } else {
+        alert('Error: No PDF generated. Please try again.');
       }
     } catch (error) {
       console.error('Export failed:', error);
+      alert(`Export failed: ${error.message || 'Unknown error'}`);
     } finally {
       setIsExporting(false);
     }
   };
 
   const handleDelete = async (logId) => {
-    setDeletingId(logId);
-    try {
-      await base44.entities.ComplianceLog.delete(logId);
-      queryClient.invalidateQueries({ queryKey: ['compliance_logs'] });
-    } catch (error) {
-      console.error('Delete failed:', error);
-    } finally {
-      setDeletingId(null);
-    }
+    // Compliance records should NOT be deleted per audit requirements
+    // Instead, show a warning
+    alert('⚠️ Compliance logs cannot be deleted — they must be preserved for health department audits. Contact admin if a record needs to be marked as void.');
   };
 
   const failedLogs = logs.filter(l => l.status === 'fail');
@@ -226,15 +235,9 @@ export default function ComplianceLogs() {
 
                     {log.notes && <p className="text-sm mt-2 text-muted-foreground">📝 {log.notes}</p>}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(log.id)}
-                    disabled={deletingId === log.id}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="text-xs text-muted-foreground">
+                    {/* Delete disabled — records are immutable per audit requirements */}
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -126,15 +126,20 @@ Deno.serve(async (req) => {
     const pdfBase64 = doc.output('datauristring').split(',')[1];
     const pdfBuffer = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0));
 
-    const uploadRes = await base44.asServiceRole.integrations.Core.UploadFile({
-      file: new Blob([pdfBuffer], { type: 'application/pdf' }),
-    });
+    // For now, return the PDF as data URI since blob upload has issues
+    const pdfDataUri = `data:application/pdf;base64,${pdfBase64}`;
+    
+    // TODO: Once blob upload is fixed, uncomment the code below:
+    // const uploadRes = await base44.asServiceRole.integrations.Core.UploadFile({
+    //   file: new Blob([pdfBuffer], { type: 'application/pdf' }),
+    // });
+    // return Response.json({ success: true, file_url: uploadRes.file_url, ... })
 
     console.log(`[AUDIT] Generated audit packet for ${start_date} to ${end_date}`);
 
     return Response.json({
       success: true,
-      file_url: uploadRes.file_url,
+      file_url: pdfDataUri,
       summary: {
         temperature_logs: filtered.temperature.length,
         pH_logs: filtered.pH.length,

@@ -124,14 +124,20 @@ export default function UnifiedComplianceForm() {
     setMessage('');
 
     try {
+      // Use Chicago timezone for all timestamp data
+      const chicagoTime = new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' });
+      const chicagoDate = new Date(chicagoTime);
+      
       const logEntry = {
         log_type: activeTab,
-        log_date: new Date().toISOString().split('T')[0],
-        log_time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+        log_date: chicagoDate.toISOString().split('T')[0],
+        log_time: chicagoDate.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
         staff_member: user.full_name,
         shift: getShift(),
         data: formData,
-        status: getStatus(activeTab, formData)
+        status: getStatus(activeTab, formData),
+        notes: '', // Ensure notes field exists
+        within_range: getStatus(activeTab, formData) === 'pass' // Add within_range for compliance schema
       };
 
       await base44.entities.ComplianceLog.create(logEntry);
@@ -140,14 +146,17 @@ export default function UnifiedComplianceForm() {
 
       setTimeout(() => setMessage(''), 3000);
     } catch (error) {
-      setMessage(`Error: ${error.message}`);
+      console.error('Save error:', error);
+      setMessage(`❌ Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const getShift = () => {
-    const hour = new Date().getHours();
+    // Use America/Chicago timezone for shift determination
+    const chicagoTime = new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' });
+    const hour = new Date(chicagoTime).getHours();
     if (hour < 12) return 'Morning';
     if (hour < 17) return 'Afternoon';
     return 'Night';
