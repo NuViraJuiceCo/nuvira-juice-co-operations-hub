@@ -1,0 +1,90 @@
+{
+  "name": "DataQualityAlert",
+  "type": "object",
+  "properties": {
+    "alert_type": {
+      "type": "string",
+      "enum": [
+        "missing_order_type",
+        "missing_fulfillment_mode",
+        "missing_delivery_address",
+        "zero_quantity_batch",
+        "missing_fulfillments",
+        "driver_portal_gap",
+        "route_optimization_blocked",
+        "fallback_address_used",
+        "quarantined_order",
+        "repair_function_executed"
+      ],
+      "description": "Type of data quality issue"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "description": "Alert severity"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "resolved",
+        "acknowledged"
+      ],
+      "default": "active",
+      "description": "Current status of the alert"
+    },
+    "order_id": {
+      "type": "string",
+      "description": "Related order ID if applicable"
+    },
+    "batch_id": {
+      "type": "string",
+      "description": "Related batch ID if applicable"
+    },
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email for context"
+    },
+    "issue_description": {
+      "type": "string",
+      "description": "Detailed description of the issue"
+    },
+    "recommended_action": {
+      "type": "string",
+      "description": "What should be done to resolve this"
+    },
+    "affected_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The delivery or production date affected"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the alert was created"
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the alert was resolved"
+    },
+    "resolved_by": {
+      "type": "string",
+      "description": "Admin who resolved the alert"
+    },
+    "resolution_notes": {
+      "type": "string",
+      "description": "How the issue was resolved"
+    }
+  },
+  "required": [
+    "alert_type",
+    "severity",
+    "issue_description"
+  ]
+}

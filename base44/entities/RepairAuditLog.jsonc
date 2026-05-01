@@ -1,0 +1,81 @@
+{
+  "name": "RepairAuditLog",
+  "type": "object",
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the repair function was executed"
+    },
+    "executed_by": {
+      "type": "string",
+      "description": "Email of the admin who ran this"
+    },
+    "user_role": {
+      "type": "string",
+      "description": "Role of the user (should always be admin)"
+    },
+    "repair_function": {
+      "type": "string",
+      "description": "Name of the repair/cleanup/recovery function",
+      "enum": [
+        "repairMissingAddresses",
+        "cleanupDuplicateOrders",
+        "detectAndCanonicalizeDuplicateOrders",
+        "cleanupOrphanedAndDuplicateRecords",
+        "stripeOrderRecovery",
+        "autoRemediateStripeOrders",
+        "reconcileStripeOrders",
+        "repairOrderLineItems",
+        "autoFixSubscriptionOrders",
+        "fullOrderRecovery",
+        "cleanupUnknownOrders",
+        "reconcileAndRepairStripeOrders",
+        "cleanupCorruptedOrders",
+        "unifiedOrderRepairWorker",
+        "comprehensiveDataRepair",
+        "restoreSukhwantOrder",
+        "repairSukhwantKahlonOrder"
+      ]
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "repair",
+        "cleanup",
+        "recovery",
+        "rebuild",
+        "reconcile",
+        "restore",
+        "detect"
+      ],
+      "description": "Type of operation performed"
+    },
+    "records_affected": {
+      "type": "integer",
+      "description": "Number of records modified or deleted"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why this repair was run"
+    },
+    "changes": {
+      "type": "object",
+      "description": "Summary of what was changed (repaired, deleted, etc.)"
+    },
+    "details": {
+      "type": "object",
+      "description": "Additional details about the execution"
+    },
+    "app_version": {
+      "type": "string",
+      "description": "App version when repair was executed"
+    }
+  },
+  "required": [
+    "timestamp",
+    "executed_by",
+    "repair_function",
+    "action"
+  ]
+}

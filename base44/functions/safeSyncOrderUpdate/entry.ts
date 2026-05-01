@@ -405,7 +405,7 @@ Deno.serve(async (req) => {
 
     // ── STEP 8.2: DELIVERY ADDRESS QUALITY GATE ────────────────────────────
     // CRITICAL: All delivery orders MUST have complete address before entering Driver Portal
-    // Check both parent-level (address_line1, city, state, zip) and fulfillment-level
+    // Check parent-level → fulfillment-level → FulfillmentTask fallback
     const isDeliveryOrder = incomingData.fulfillment_method === 'delivery' || existingOrder?.fulfillment_method === 'delivery';
 
     if (isDeliveryOrder) {
@@ -416,7 +416,7 @@ Deno.serve(async (req) => {
                                      incomingData.fulfillments[0].address_state && 
                                      incomingData.fulfillments[0].address_postal_code) || false;
 
-      // If incoming has neither, check if we can preserve from existing
+      // If incoming has neither, check if we can preserve from existing or fallback to FulfillmentTask
       if (!hasParentAddress && !hasFulfillmentAddress && existingOrder) {
         const existingParentAddress = existingOrder.address_line1 && existingOrder.address_city && 
                                       existingOrder.address_state && existingOrder.address_postal_code;
@@ -440,6 +440,34 @@ Deno.serve(async (req) => {
           incomingData.address_state = existingOrder.fulfillments[0].address_state;
           incomingData.address_postal_code = existingOrder.fulfillments[0].address_postal_code;
           incomingData.address_country = existingOrder.fulfillments[0].address_country || incomingData.address_country;
+        } else {
+          // FALLBACK: Check FulfillmentTask for this order's delivery date
+          try {
+            const deliveryDate = incomingData.requested_delivery_date || incomingData.assigned_delivery_date || 
+                                (incomingData.fulfillments?.[0]?.delivery_date);
+            if (existingOrder?.id && deliveryDate) {
+              const ftasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
+                order_id: existingOrder.id,
+                scheduled_date: deliveryDate,
+              });
+              if (ftasks && ftasks.length > 0 && ftasks[0].address) {
+                // Parse address from FulfillmentTask format: "line1, city, state"
+                const addrParts = ftasks[0].address.split(',').map(p => p.trim());
+                if (addrParts.length >= 3) {
+                  incomingData.address_line1 = addrParts[0];
+                  incomingData.address_city = addrParts[1];
+                  incomingData.address_state = addrParts[2];
+                  // FulfillmentTask doesn't have zip, so keep incoming if present
+                  if (!incomingData.address_postal_code) {
+                    incomingData.address_postal_code = addrParts[3] || '';
+                  }
+                  console.log(`[SAFE-SYNC] Recovered address from FulfillmentTask for order ${existingOrder.id}`);
+                }
+              }
+            }
+          } catch (err) {
+            console.warn(`[SAFE-SYNC] FulfillmentTask fallback failed (non-critical): ${err.message}`);
+          }
         }
       }
 
