@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
 
     // Map ShopifyOrder to driver portal format and filter to undelivered orders
     const queuedOrders = orders
-      .filter(o => o.production_status !== 'fulfilled')
+      .filter(o => !['fulfilled', 'canceled', 'refunded'].includes(o.production_status))
       .map(o => {
         let fulfillmentsForDate = o.fulfillments || [];
         
