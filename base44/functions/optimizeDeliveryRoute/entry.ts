@@ -237,6 +237,11 @@ Deno.serve(async (req) => {
                 time_saved_minutes: timeSaved,
                 optimization_method: 'google_routes_api',
               },
+              return_to_origin: {
+                location: DEPOT,
+                display_name: 'Return to NuVira Base',
+                is_return_stop: true,
+              },
             });
           }
         } else {
@@ -256,16 +261,23 @@ Deno.serve(async (req) => {
       return aZip.localeCompare(bZip) || aAddr.localeCompare(bAddr);
     });
 
+    const routeWithReturn = [...queuedOrders.filter(o => o.status === 'delivered'), ...clusteredOrders];
+
     return Response.json({
       status: 'success',
       orders: queuedOrders,
-      optimized_orders: [...queuedOrders.filter(o => o.status === 'delivered'), ...clusteredOrders],
+      optimized_orders: routeWithReturn,
       route_stats: {
         optimized_duration_minutes: Math.round(undeliveredStops.length * 12),
         total_distance_miles: Math.round(undeliveredStops.length * 2.5),
         stops_count: undeliveredStops.length,
         time_saved_minutes: 0,
         optimization_method: 'cluster_sort',
+      },
+      return_to_origin: {
+        location: DEPOT,
+        display_name: 'Return to NuVira Base',
+        is_return_stop: true,
       },
     });
 

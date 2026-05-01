@@ -828,6 +828,27 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
   const routeReturnCount = todaysBagReturns.filter(r => r.verification_status === 'requested').length;
 
+  // Add return-to-origin stop at the end of the route (display only)
+  const routeDisplayOrders = routeData?.optimized_orders
+    ? [
+        ...routeData.optimized_orders,
+        ...(routeData.return_to_origin ? [{
+          id: '__return_to_origin__',
+          order_number: 'Return',
+          customer_name: 'Return to NuVira Base',
+          customer_email: null,
+          delivery_address: DEPOT,
+          address_line1: '619 N Main St',
+          address_line2: 'Unit 3',
+          address_city: "O'Fallon",
+          address_state: 'MO',
+          address_postal_code: '63366',
+          status: 'return_to_origin',
+          is_return_stop: true,
+        }] : []),
+      ]
+    : routeData?.optimized_orders || queuedOrders || [];
+
   const quickDates = getQuickDates();
 
   return (
@@ -900,6 +921,13 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         ))}
       </div>
 
+      {isOptimized && routeData?.return_to_origin && (
+        <div className="px-4 mt-4 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2">
+          <Navigation className="w-4 h-4 text-blue-600 shrink-0" />
+          <p className="text-xs text-blue-700"><span className="font-semibold">Round-trip route:</span> After final delivery, return to NuVira Base</p>
+        </div>
+      )}
+
       {queuedOrders?.length > 0 && !isOptimized && (
         <div className="px-4 mt-4">
           <button onClick={optimizeRoute} disabled={optimizing}
@@ -951,7 +979,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
             </div>
           )}
           {(() => {
-            const url = buildFullRouteUrl(displayOrders);
+            const url = buildFullRouteUrl(routeDisplayOrders);
             return url ? (
               <a href={url} target="_blank" rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full py-3.5 bg-blue-600 text-white rounded-xl text-sm font-bold active:scale-[0.98] transition-transform">
@@ -969,7 +997,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
             <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             <p className="text-sm text-muted-foreground">Loading delivery queue...</p>
           </div>
-        ) : displayOrders.length === 0 ? (
+        ) : routeDisplayOrders.length === 0 ? (
           <div className="text-center py-16">
             <CheckCircle2 className="w-10 h-10 text-primary mx-auto mb-3" />
             <p className="text-sm font-semibold">No queued deliveries</p>
@@ -979,21 +1007,35 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           <>
             <p className="text-xs text-muted-foreground font-medium px-1">
               {isOptimized
-                ? `${displayOrders.length} stops · optimized order`
-                : `${displayOrders.length} stop${displayOrders.length > 1 ? 's' : ''} · tap to review bag returns`}
+                ? `${(routeDisplayOrders || []).filter(o => !o.is_return_stop).length} deliveries + return to base`
+                : `${routeDisplayOrders.length} stop${routeDisplayOrders.length > 1 ? 's' : ''} · tap to review bag returns`}
             </p>
-            {displayOrders.map((order, idx) => (
+            {(routeDisplayOrders || []).map((order, idx) => (
               <div key={order.id} className="flex gap-2">
-                {isOptimized && (
+                {isOptimized && order.is_return_stop && (
+                  <div className="flex gap-2 w-full pt-2">
+                    <div className="flex flex-col items-center pt-2 shrink-0">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold bg-green-100 text-green-600">✓</div>
+                    </div>
+                    <div className="flex-1 flex items-center px-4 py-3.5 bg-blue-50 border border-blue-200 rounded-xl">
+                      <Navigation className="w-4 h-4 text-blue-600 mr-2 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-blue-900">Return to NuVira Base</p>
+                        <p className="text-xs text-blue-600 mt-0.5">619 N Main St Unit 3, O'Fallon, MO 63366</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {isOptimized && !order.is_return_stop && (
                   <div className="flex flex-col items-center pt-4 shrink-0">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${order.status === 'delivered' ? 'bg-green-100 text-green-600' : 'bg-primary text-primary-foreground'}`}>
                       {order.status === 'delivered' ? '✓' : idx + 1}
                     </div>
-                    {idx < displayOrders.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
+                    {idx < (routeDisplayOrders || []).filter(o => !o.is_return_stop).length && <div className="w-0.5 flex-1 bg-border mt-1" />}
                   </div>
                 )}
                 <div className="flex-1 pb-2">
-                  {isOptimized || manualOrder ? (
+                  {!order.is_return_stop && (isOptimized || manualOrder) ? (
                     <StopCard
                        order={order}
                        pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
