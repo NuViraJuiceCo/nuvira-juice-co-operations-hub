@@ -46,16 +46,7 @@ export default function Production() {
       base44.entities.ShopifyOrder.list("-created_date", 200),
     ]);
     setBatches(batchData);
-    // Filter valid orders and log any with zero quantities
-    const validOrders = orderData.filter(o => {
-      if (!o.fulfillments || o.fulfillments.length === 0) return true;
-      const hasInvalidFulfillment = o.fulfillments.some(f => !f.items || f.items.length === 0);
-      if (hasInvalidFulfillment && o.order_type === 'subscription') {
-        console.warn(`[PRODUCTION QUALITY GATE] Subscription ${o.shopify_order_number} (${o.customer_name}) has missing items - blocking from production`);
-      }
-      return !hasInvalidFulfillment;
-    });
-    setOrders(validOrders);
+    setOrders(orderData);
     setLoading(false);
   }, []);
 
@@ -67,9 +58,10 @@ export default function Production() {
     const unsub = base44.entities.ProductionBatch.subscribe(() => {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
+        // Force fresh data load — invalidate and reload
         load();
         loadIngredients();
-      }, 2000);
+      }, 1000);
     });
     return () => {
       unsub();
@@ -114,21 +106,6 @@ export default function Production() {
   };
 
   const today = moment().format("YYYY-MM-DD");
-
-  // QUALITY GATE: Exclude orders with x0 quantities (invalid production records)
-  const validOrders = orders.filter(o => {
-    // Skip orders with no fulfillments
-    if (!o.fulfillments || o.fulfillments.length === 0) return true; // One-time orders
-    
-    // For subscriptions: check that each active fulfillment has items
-    const hasMissingItems = o.fulfillments.some(f => !f.items || f.items.length === 0);
-    if (hasMissingItems) {
-      console.warn(`[QUALITY GATE] Order ${o.shopify_order_number} (${o.customer_name}) has fulfillment with missing items — skipping from production`);
-      return false; // Block invalid fulfillments from production
-    }
-    
-    return true;
-  });
 
   // Filter
   const filtered = batches.filter(b => {

@@ -311,8 +311,22 @@ Deno.serve(async (req) => {
     const activeStatuses = ['new', 'awaiting_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage'];
 
     for (const order of allOrders) {
-      if (!order || !order.line_items || order.line_items.length === 0) continue;
       if (!activeStatuses.includes(order.production_status)) continue;
+
+      // CRITICAL FIX: For subscriptions, read from fulfillments directly instead of parent line_items
+      // Parent line_items are empty; fulfillments contain the actual weekly quantities
+      const isSubscription = order.source_channel === 'subscription';
+      const hasValidFulfillments = isSubscription && order.fulfillments && order.fulfillments.length > 0;
+      
+      if (isSubscription && !hasValidFulfillments) {
+        console.warn(`[RECALC] Subscription ${order.shopify_order_number} (${order.customer_name}) has no fulfillments — skipping`);
+        continue;
+      }
+
+      if (!isSubscription && (!order.line_items || order.line_items.length === 0)) {
+        console.warn(`[RECALC] One-time order ${order.shopify_order_number} has no line_items — skipping`);
+        continue;
+      }
 
       // Determine production date for this order
       let productionDate;
@@ -328,39 +342,41 @@ Deno.serve(async (req) => {
         productionDate = getNextProductionDate(orderDate);
       }
 
-      // For subscriptions, detect how many fulfillments are in this order
-      // and split the total quantity evenly across that many weekly production dates.
-      // Priority: existing fulfillments array > Bundle metadata > customer_notes > default 1
+      // For subscriptions, use fulfillment count from existing fulfillments
       let fulfillmentCount = 1;
+      let fulfillmentDates = [];
       
-      // FIRST: Check if order already has fulfillments array (highest priority)
-      if (order.source_channel === 'subscription' && order.fulfillments && order.fulfillments.length > 0) {
+      if (isSubscription && order.fulfillments && order.fulfillments.length > 0) {
+        // SUBSCRIPTIONS: Use embedded fulfillments structure
         fulfillmentCount = order.fulfillments.length;
-        console.log(`[RECALC] Order ${order.shopify_order_number} already has ${fulfillmentCount} fulfillments`);
-      } else if (order.source_channel === 'subscription' && order.line_items && order.line_items.length > 0) {
-        // SECOND: Try to get fulfillment count from Bundle metadata
-        for (const item of order.line_items) {
-          // Try to find bundle by exact name first
-          for (const bKey of Object.keys(bundleFullData)) {
-            if (bKey.toLowerCase() === item.title.toLowerCase() || 
-                stripArticle(bKey).toLowerCase() === stripArticle(item.title).toLowerCase()) {
-              const bundleData = bundleFullData[bKey];
-              if (bundleData && bundleData.fulfillment_count) {
-                fulfillmentCount = Math.max(1, bundleData.fulfillment_count);
-                console.log(`[RECALC] Found bundle "${item.title}" with fulfillment_count=${fulfillmentCount}`);
-                break;
+        fulfillmentDates = order.fulfillments.map(f => f.production_date);
+        console.log(`[RECALC] Subscription ${order.shopify_order_number} has ${fulfillmentCount} fulfillments from embedded array`);
+      } else {
+        // ONE-TIME ORDERS: Calculate from metadata
+        // Try to get fulfillment count from Bundle metadata
+        if (order.line_items && order.line_items.length > 0) {
+          for (const item of order.line_items) {
+            // Try to find bundle by exact name first
+            for (const bKey of Object.keys(bundleFullData)) {
+              if (bKey.toLowerCase() === item.title.toLowerCase() || 
+                  stripArticle(bKey).toLowerCase() === stripArticle(item.title).toLowerCase()) {
+                const bundleData = bundleFullData[bKey];
+                if (bundleData && bundleData.fulfillment_count) {
+                  fulfillmentCount = Math.max(1, bundleData.fulfillment_count);
+                  console.log(`[RECALC] Found bundle "${item.title}" with fulfillment_count=${fulfillmentCount}`);
+                  break;
+                }
               }
             }
+            if (fulfillmentCount > 1) break;
           }
-          if (fulfillmentCount > 1) break;
         }
+        // If no bundle match, fall back to customer_notes or default to 1
+        if (fulfillmentCount === 1) {
+          fulfillmentCount = detectFulfillmentCount(order, bundleMap);
+        }
+        fulfillmentDates = getSubscriptionProductionDates(productionDate, fulfillmentCount);
       }
-      // THIRD: If no bundle match, fall back to customer_notes or default to 1
-      if (fulfillmentCount === 1) {
-        fulfillmentCount = detectFulfillmentCount(order, bundleMap);
-      }
-      
-      const fulfillmentDates = getSubscriptionProductionDates(productionDate, fulfillmentCount);
       
       // Build fulfillment breakdown for the order (for driver visibility)
       if (order.source_channel === 'subscription' && fulfillmentCount > 1) {
@@ -438,52 +454,66 @@ Deno.serve(async (req) => {
         'service fee', 'handling fee', 'tax',
       ];
 
-      for (const item of order.line_items) {
-        let itemTitle = (item.title || '').trim();
-        
-        // CRITICAL FIX: Strip Stripe's quantity prefix (e.g., "1 × Monthly Ritual (at $144.00 / month)" → "Monthly Ritual")
-        itemTitle = itemTitle.replace(/^\d+\s*×\s*/, '').trim(); // Remove "1 × " prefix
-        itemTitle = itemTitle.replace(/\s*\(at\s+\$[\d.]+\s*\/\s*\w+\)/i, '').trim(); // Remove "(at $144.00 / month)"
-        itemTitle = itemTitle.replace(/\s*\(\$[\d.,]+.*?\)/i, '').trim(); // Generic price suffix removal
-        
-        const totalQty = Number(item.quantity) || 0;
-        if (totalQty <= 0 || !itemTitle) continue;
-
-        // Skip non-production line items (fees, shipping, etc.)
-        if (NON_PRODUCTION_KEYWORDS.some(kw => itemTitle.toLowerCase().includes(kw))) continue;
-
-        // CRITICAL: Per-fulfillment quantity (divide total ONLY across fulfillments for THIS order)
-        // For subscription: if 12 bottles for 4 weeks, this is 3 bottles per week
-        const perFulfillmentQty = fulfillmentCount > 1 
-          ? Math.round(totalQty / fulfillmentCount) 
-          : totalQty;
-
-        // Check if this line item is a bundle (try multiple name variations)
-        const bundleComponents = findBundleComponents(bundleMap, itemTitle);
-
-        for (let fi = 0; fi < fulfillmentDates.length; fi++) {
-          const fDate = fulfillmentDates[fi];
+      // CRITICAL FIX: For subscriptions, iterate through fulfillments directly
+      // Each fulfillment has its own items with correct weekly quantities
+      if (isSubscription && order.fulfillments && order.fulfillments.length > 0) {
+        // ─── SUBSCRIPTION: Process fulfillments array ───
+        for (let fi = 0; fi < order.fulfillments.length; fi++) {
+          const fulfillment = order.fulfillments[fi];
+          const fDate = fulfillment.production_date;
           const fDateObj = new Date(fDate + 'T00:00:00');
           if (fDateObj < today) continue; // skip past dates
 
-          if (bundleComponents && bundleComponents.length > 0) {
-            // Decompose bundle into individual products, FOR THIS FULFILLMENT ONLY
-            for (const component of bundleComponents) {
-              const productName = normalizeProductName(component.product_name);
-              
-              // CRITICAL: component.quantity is the TOTAL across all fulfillments in the bundle definition
-              // Divide by fulfillmentCount to get per-fulfillment amount
-              const componentQtyPerFulfillment = fulfillmentCount > 1
-                ? Math.round((Number(component.quantity) || 1) / fulfillmentCount)
-                : (Number(component.quantity) || 1);
-              const qty = Math.max(1, componentQtyPerFulfillment); // Ensure at least 1 if component exists
-              
-              const key = `${fDate}__${productName}`;
+          const fulfillmentItems = fulfillment.items && fulfillment.items.length > 0
+            ? fulfillment.items
+            : order.line_items || []; // Fallback only if fulfillment.items is missing
 
+          for (const item of fulfillmentItems) {
+            let itemTitle = (item.title || '').trim();
+            if (!itemTitle) continue;
+
+            const qty = Number(item.quantity) || 0;
+            if (qty <= 0) continue;
+
+            // Skip non-production items (fees, shipping, etc.)
+            if (NON_PRODUCTION_KEYWORDS.some(kw => itemTitle.toLowerCase().includes(kw))) continue;
+
+            // Check if this is a bundle (should not be in fulfillments, but check anyway)
+            const bundleComponents = findBundleComponents(bundleMap, itemTitle);
+
+            if (bundleComponents && bundleComponents.length > 0) {
+              // Decompose bundle into individual products
+              for (const component of bundleComponents) {
+                const productName = normalizeProductName(component.product_name);
+                const componentQty = Math.max(1, Number(component.quantity) || 1);
+                const key = `${fDate}__${productName}`;
+
+                if (lockedKeys.has(key)) continue;
+
+                if (!planMap[key]) {
+                  planMap[key] = { productionDate: fDate, productName, units: 0, sources: [] };
+                }
+                planMap[key].units += componentQty;
+                planMap[key].sources.push({
+                  order_id: order.id,
+                  order_number: order.shopify_order_number,
+                  customer_email: order.customer_email,
+                  customer_name: order.customer_name || '',
+                  quantity: componentQty,
+                  source_type: 'subscription',
+                  source_item: itemTitle,
+                  fulfillment_index: fi + 1,
+                  fulfillment_total: fulfillmentCount,
+                });
+              }
+            } else {
+              // Direct product line item from fulfillment
+              const normalizedTitle = normalizeProductName(itemTitle);
+              const key = `${fDate}__${normalizedTitle}`;
               if (lockedKeys.has(key)) continue;
 
               if (!planMap[key]) {
-                planMap[key] = { productionDate: fDate, productName, units: 0, sources: [] };
+                planMap[key] = { productionDate: fDate, productName: normalizedTitle, units: 0, sources: [] };
               }
               planMap[key].units += qty;
               planMap[key].sources.push({
@@ -492,33 +522,95 @@ Deno.serve(async (req) => {
                 customer_email: order.customer_email,
                 customer_name: order.customer_name || '',
                 quantity: qty,
-                source_type: order.source_channel === 'subscription' ? 'subscription' : 'bundle',
-                source_item: itemTitle,
+                source_type: 'subscription',
+                source_item: normalizedTitle,
+                fulfillment_index: fi + 1,
+                fulfillment_total: fulfillmentCount,
+              });
+            }
+          }
+        }
+      } else {
+        // ─── ONE-TIME ORDER: Process parent line_items ───
+        for (const item of order.line_items) {
+          let itemTitle = (item.title || '').trim();
+          
+          // CRITICAL FIX: Strip Stripe's quantity prefix (e.g., "1 × Monthly Ritual (at $144.00 / month)" → "Monthly Ritual")
+          itemTitle = itemTitle.replace(/^\d+\s*×\s*/, '').trim(); // Remove "1 × " prefix
+          itemTitle = itemTitle.replace(/\s*\(at\s+\$[\d.]+\s*\/\s*\w+\)/i, '').trim(); // Remove "(at $144.00 / month)"
+          itemTitle = itemTitle.replace(/\s*\(\$[\d.,]+.*?\)/i, '').trim(); // Generic price suffix removal
+          
+          const totalQty = Number(item.quantity) || 0;
+          if (totalQty <= 0 || !itemTitle) continue;
+
+          // Skip non-production line items (fees, shipping, etc.)
+          if (NON_PRODUCTION_KEYWORDS.some(kw => itemTitle.toLowerCase().includes(kw))) continue;
+
+          // Check if this line item is a bundle (try multiple name variations)
+          const bundleComponents = findBundleComponents(bundleMap, itemTitle);
+
+          for (let fi = 0; fi < fulfillmentDates.length; fi++) {
+            const fDate = fulfillmentDates[fi];
+            const fDateObj = new Date(fDate + 'T00:00:00');
+            if (fDateObj < today) continue; // skip past dates
+
+            if (bundleComponents && bundleComponents.length > 0) {
+              // Decompose bundle into individual products, FOR THIS FULFILLMENT ONLY
+              for (const component of bundleComponents) {
+                const productName = normalizeProductName(component.product_name);
+                
+                // component.quantity is the TOTAL across all fulfillments in the bundle definition
+                // Divide by fulfillmentCount to get per-fulfillment amount
+                const componentQtyPerFulfillment = fulfillmentCount > 1
+                  ? Math.round((Number(component.quantity) || 1) / fulfillmentCount)
+                  : (Number(component.quantity) || 1);
+                const qty = Math.max(1, componentQtyPerFulfillment); // Ensure at least 1 if component exists
+                
+                const key = `${fDate}__${productName}`;
+
+                if (lockedKeys.has(key)) continue;
+
+                if (!planMap[key]) {
+                  planMap[key] = { productionDate: fDate, productName, units: 0, sources: [] };
+                }
+                planMap[key].units += qty;
+                planMap[key].sources.push({
+                  order_id: order.id,
+                  order_number: order.shopify_order_number,
+                  customer_email: order.customer_email,
+                  customer_name: order.customer_name || '',
+                  quantity: qty,
+                  source_type: 'bundle',
+                  source_item: itemTitle,
+                  fulfillment_index: fulfillmentCount > 1 ? fi + 1 : undefined,
+                  fulfillment_total: fulfillmentCount > 1 ? fulfillmentCount : undefined,
+                });
+              }
+            } else {
+              // Direct product line item, FOR THIS FULFILLMENT ONLY
+              const perFulfillmentQty = fulfillmentCount > 1 
+                ? Math.round(totalQty / fulfillmentCount) 
+                : totalQty;
+              const normalizedTitle = normalizeProductName(itemTitle);
+              const key = `${fDate}__${normalizedTitle}`;
+              if (lockedKeys.has(key)) continue;
+
+              if (!planMap[key]) {
+                planMap[key] = { productionDate: fDate, productName: normalizedTitle, units: 0, sources: [] };
+              }
+              planMap[key].units += perFulfillmentQty;
+              planMap[key].sources.push({
+                order_id: order.id,
+                order_number: order.shopify_order_number,
+                customer_email: order.customer_email,
+                customer_name: order.customer_name || '',
+                quantity: perFulfillmentQty,
+                source_type: 'direct',
+                source_item: normalizedTitle,
                 fulfillment_index: fulfillmentCount > 1 ? fi + 1 : undefined,
                 fulfillment_total: fulfillmentCount > 1 ? fulfillmentCount : undefined,
               });
             }
-          } else {
-            // Direct product line item, FOR THIS FULFILLMENT ONLY
-            const normalizedTitle = normalizeProductName(itemTitle);
-            const key = `${fDate}__${normalizedTitle}`;
-            if (lockedKeys.has(key)) continue;
-
-            if (!planMap[key]) {
-              planMap[key] = { productionDate: fDate, productName: normalizedTitle, units: 0, sources: [] };
-            }
-            planMap[key].units += perFulfillmentQty;
-            planMap[key].sources.push({
-              order_id: order.id,
-              order_number: order.shopify_order_number,
-              customer_email: order.customer_email,
-              customer_name: order.customer_name || '',
-              quantity: perFulfillmentQty,
-              source_type: order.source_channel === 'subscription' ? 'subscription' : 'direct',
-              source_item: normalizedTitle,
-              fulfillment_index: fulfillmentCount > 1 ? fi + 1 : undefined,
-              fulfillment_total: fulfillmentCount > 1 ? fulfillmentCount : undefined,
-            });
           }
         }
       }
