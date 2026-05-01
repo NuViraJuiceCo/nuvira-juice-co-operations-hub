@@ -81,9 +81,28 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'success', orders: [], optimized_orders: [] });
     }
 
+    // ── QUALITY GATE: Delivery orders must have complete address ──────────────
+    // POS orders: only require address if fulfillment_method is 'delivery'
+    // All delivery orders (any type) must have address before Driver Portal
+    const hasCompleteAddress = (order) => {
+      return order.address_line1 && order.address_city && order.address_state && order.address_postal_code;
+    };
+
+    const isDeliveryOrder = (order) => {
+      return order.fulfillment_method === 'delivery';
+    };
+
     // Map ShopifyOrder to driver portal format and filter to undelivered orders
     const queuedOrders = orders
       .filter(o => !['fulfilled', 'canceled', 'refunded'].includes(o.production_status))
+      .filter(o => {
+        // Gate: if order is marked for delivery, it must have complete address
+        if (isDeliveryOrder(o) && !hasCompleteAddress(o)) {
+          console.warn(`[OPTIMIZE-ROUTE] Gating order ${o.shopify_order_number} (${o.order_type}): delivery order missing address. address_line1=${o.address_line1}, city=${o.address_city}, state=${o.address_state}, zip=${o.address_postal_code}`);
+          return false; // Block from Driver Portal
+        }
+        return true;
+      })
       .map(o => {
         const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
         let fulfillmentsForDate = o.fulfillments || [];
