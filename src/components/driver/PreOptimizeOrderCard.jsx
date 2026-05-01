@@ -111,9 +111,10 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
           <p className="text-xs font-medium text-foreground mt-0.5">{order.customer_name || order.customer_email}</p>
           <p className="text-xs font-medium mt-0.5 truncate text-muted-foreground">
             {(() => {
-              // Build address from multiple possible sources
-              const addr = order.address_line1 ? `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}` : order.delivery_address;
-              return addr || '(address missing)';
+              if (order.address_line1) return `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}`;
+              const fulfAddr = order.selectedFulfillment || order.fulfillments?.[0];
+              if (fulfAddr?.address_line1) return `${fulfAddr.address_line1}, ${fulfAddr.address_city}, ${fulfAddr.address_state} ${fulfAddr.address_postal_code}`;
+              return order.delivery_address || '(address missing)';
             })()}
           </p>
           <p className="text-[10px] text-muted-foreground">{order.items?.filter(i => !['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'].some(kw => (i.title||'').toLowerCase().includes(kw))).map(i => `${i.title} ×${i.quantity}`).join(', ')}</p>

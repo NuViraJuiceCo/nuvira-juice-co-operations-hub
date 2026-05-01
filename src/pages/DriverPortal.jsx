@@ -336,7 +336,16 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
             </span>
           </div>
           <p className="text-xs font-medium text-foreground mt-0.5">{order.customer_name || order.customer_email}</p>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">{order.address_line1 ? `${order.address_line1}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}` : order.delivery_address}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">{(() => {
+            const a = order.address_line1 || order.selectedFulfillment?.address_line1 || order.fulfillments?.[0]?.address_line1;
+            if (a) {
+              const city = order.address_line1 ? order.address_city : (order.selectedFulfillment?.address_city || order.fulfillments?.[0]?.address_city);
+              const state = order.address_line1 ? order.address_state : (order.selectedFulfillment?.address_state || order.fulfillments?.[0]?.address_state);
+              const zip = order.address_line1 ? order.address_postal_code : (order.selectedFulfillment?.address_postal_code || order.fulfillments?.[0]?.address_postal_code);
+              return `${a}, ${city}, ${state} ${zip}`;
+            }
+            return order.delivery_address || '(address missing)';
+          })()}</p>
           {pendingReturn && (
             <div className="flex items-center gap-1 mt-1">
               <Recycle className="w-3 h-3 text-amber-600" />
@@ -367,14 +376,18 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Delivery Address</p>
                 <p className="text-xs">
                   {(() => {
-                    // Fallback chain: fulfillment address → order address fields → old delivery_address
+                    // Priority: order-level → selected fulfillment → first fulfillment → delivery_address
                     if (order.address_line1) {
                       return `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}`;
+                    }
+                    const fulfAddr = order.selectedFulfillment || order.fulfillments?.[0];
+                    if (fulfAddr?.address_line1) {
+                      return `${fulfAddr.address_line1}${fulfAddr.address_line2 ? ', ' + fulfAddr.address_line2 : ''}, ${fulfAddr.address_city}, ${fulfAddr.address_state} ${fulfAddr.address_postal_code}`;
                     }
                     return order.delivery_address || '(address missing)';
                   })()}
                 </p>
-                {!order.address_line1 && !order.delivery_address && (
+                {!order.address_line1 && !(order.selectedFulfillment?.address_line1) && !(order.fulfillments?.[0]?.address_line1) && !order.delivery_address && (
                   <p className="text-[10px] text-red-600 font-semibold">⚠ Missing address — flag for admin</p>
                 )}
               </div>
@@ -401,7 +414,11 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                 </div>
               )}
 
-              <a href={mapsUrl(order.address_line1 ? `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}` : order.delivery_address)} target="_blank" rel="noopener noreferrer"
+              <a href={mapsUrl((() => {
+                const addr = order.address_line1 ? `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}` : order.delivery_address;
+                if (addr) return addr;
+                return order.fulfillments?.[0]?.address_line1 ? `${order.fulfillments[0].address_line1}, ${order.fulfillments[0].address_city}, ${order.fulfillments[0].address_state} ${order.fulfillments[0].address_postal_code}` : '';
+              })())} target="_blank" rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full py-3 bg-blue-500 text-white rounded-xl text-sm font-semibold active:scale-95 transition-transform">
                 <Navigation className="w-4 h-4" />
                 Navigate to Stop
@@ -764,15 +781,15 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   // and extract per-fulfillment products
   let displayOrders = (routeData?.optimized_orders || queuedOrders || []).map(order => {
     // Check if this is a subscription or one-time order
-    const hasMultipleFulfillments = order.fulfillments && order.fulfillments.length > 0;
+    const isSubscription = order.source_channel === 'subscription' || order.stripe_subscription_id;
+    const hasEmbeddedFulfillments = order.fulfillments && order.fulfillments.length > 0;
     
-    if (hasMultipleFulfillments) {
+    if (isSubscription && hasEmbeddedFulfillments) {
       // Subscription: find the fulfillment for this delivery date
       const fulfillmentForDate = order.fulfillments.find(f => f.delivery_date === date);
       if (fulfillmentForDate) {
         return {
           ...order,
-          // Override items to show only this week's fulfillment products
           deliveryItems: fulfillmentForDate.items || [],
           selectedFulfillment: fulfillmentForDate,
           isSubscriptionDelivery: true,
@@ -787,14 +804,15 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
                                     order.requested_delivery_date === date;
       
       if (isAssignedToThisDate || !date) {
-        // Show one-time orders assigned to this date
+        // Use fulfillment items if available, otherwise order items
+        const fulfillmentForDate = hasEmbeddedFulfillments ? (order.fulfillments.find(f => f.delivery_date === date) || order.fulfillments[0]) : null;
         return {
           ...order,
-          deliveryItems: order.items || [],
+          deliveryItems: fulfillmentForDate?.items || order.items || [],
+          selectedFulfillment: fulfillmentForDate || null,
           isSubscriptionDelivery: false,
         };
       } else {
-        // One-time order not assigned to this date - skip it
         return null;
       }
     }
