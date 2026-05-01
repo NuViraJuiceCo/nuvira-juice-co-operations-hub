@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const CUSTOMER_APP_API = Deno.env.get('CUSTOMER_APP_API_URL');
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
+const DEPOT = "619 N Main St Unit 3, O'Fallon, MO 63366";
 
 Deno.serve(async (req) => {
   try {
@@ -168,15 +169,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Proper route optimization using Google Routes API
-    if (!optimize) {
-      return Response.json({ 
-        status: 'success', 
-        orders: queuedOrders,
-        optimized_orders: null,
-        route_stats: null,
-      });
-    }
+
 
     // Filter to undelivered stops only for optimization
     const undeliveredStops = queuedOrders.filter(o => o.status !== 'delivered');
