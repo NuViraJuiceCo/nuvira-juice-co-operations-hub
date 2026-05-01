@@ -401,7 +401,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                 </div>
               )}
 
-              <a href={mapsUrl(order.delivery_address)} target="_blank" rel="noopener noreferrer"
+              <a href={mapsUrl(order.address_line1 ? `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}` : order.delivery_address)} target="_blank" rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full py-3 bg-blue-500 text-white rounded-xl text-sm font-semibold active:scale-95 transition-transform">
                 <Navigation className="w-4 h-4" />
                 Navigate to Stop
