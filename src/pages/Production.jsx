@@ -129,9 +129,10 @@ export default function Production() {
     return true;
   });
 
-  // Group by production date, only future/today
+  // Group by production date, include past 2 days + future for active work
+  const twoDaysAgo = moment(today).subtract(2, 'days').format('YYYY-MM-DD');
   const grouped = _.groupBy(
-    filtered.filter(b => b.production_date >= today),
+    filtered.filter(b => b.production_date >= twoDaysAgo),
     b => b.production_date
   );
 
