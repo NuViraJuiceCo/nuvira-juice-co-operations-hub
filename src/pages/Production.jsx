@@ -137,7 +137,7 @@ export default function Production() {
   );
 
   const sortedDates = Object.keys(grouped).sort();
-  const activeBatches = filtered.filter(b => b.status !== "Completed" && b.production_date >= today);
+  const activeBatches = filtered.filter(b => b.status !== "completed" && b.production_date >= today);
   const totalUnits = activeBatches.reduce((s, b) => s + (b.planned_units || 0), 0);
 
   if (loading) {
@@ -239,8 +239,8 @@ export default function Production() {
                     <SelectItem value="all">All</SelectItem>
                     <SelectItem value="planned">Planned</SelectItem>
                     <SelectItem value="ready_for_production">Ready</SelectItem>
-                    <SelectItem value="in_production">In Production</SelectItem>
-                    <SelectItem value="completed_pending_verification">Verify</SelectItem>
+                    <SelectItem value="in_production">In Progress</SelectItem>
+                    <SelectItem value="completed_pending_verification">Pending Verify</SelectItem>
                     <SelectItem value="verified_logged">Verified</SelectItem>
                   </SelectContent>
                 </SelectMobile>

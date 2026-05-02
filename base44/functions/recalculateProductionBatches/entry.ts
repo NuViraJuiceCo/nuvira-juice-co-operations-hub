@@ -680,7 +680,7 @@ Deno.serve(async (req) => {
         planned_units: plan.units,
         production_date: plan.productionDate,
         order_sources: plan.sources,
-        status: existing?.status || 'Planned',
+        status: existing?.status || 'planned',
         assigned_to: existing?.assigned_to || null,
         notes: existing?.notes || null,
         is_locked: false,
