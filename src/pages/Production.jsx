@@ -49,12 +49,12 @@ export default function Production() {
   }, []);
 
   const load = useCallback(async () => {
-    const [batchData, orderData] = await Promise.all([
+    const [batchData, planData] = await Promise.all([
       base44.entities.ProductionBatch.list("production_date", 200),
-      base44.entities.ShopifyOrder.list("-created_date", 200),
+      base44.functions.invoke('getProductionPlanningData', {}),
     ]);
     setBatches(batchData);
-    setOrders(orderData);
+    setOrders(planData.data?.production_rows || []);
     setLoading(false);
   }, []);
 
