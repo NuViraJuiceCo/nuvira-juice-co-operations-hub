@@ -28,8 +28,9 @@ Deno.serve(async (req) => {
     }
 
     const products = shopifyOrder.line_items?.map(item => `${item.quantity}x ${item.title}`).join(', ') || 'Order';
+    const productsSummary = shopifyOrder.line_items?.filter(item => !['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'].some(kw => (item.title||'').toLowerCase().includes(kw))).map(item => `${item.quantity}x ${item.title}`).join('\n') || '';
 
-    // Trigger the Customer App to send the confirmation email to its own registered user
+    // Trigger the Customer App to send the confirmation SMS to its own registered user
     const response = await fetch(`${CUSTOMER_APP_API}/functions/sendOrderConfirmation`, {
       method: 'POST',
       headers: {
@@ -40,8 +41,10 @@ Deno.serve(async (req) => {
         customer_email: shopifyOrder.customer_email,
         order_number: shopifyOrder.shopify_order_number,
         products,
+        products_summary: productsSummary,
         total_price: shopifyOrder.total_price || 0,
         assigned_delivery_date: shopifyOrder.assigned_delivery_date || 'TBD',
+        company_name: 'NuVira Juice Co.',
       }),
     });
 
