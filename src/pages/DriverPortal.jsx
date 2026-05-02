@@ -676,32 +676,16 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
   const handleMarkDelivered = async (order, proofPhotoUrl, dropLocation) => {
     setUpdatingId(order.id);
-    const deliveredAt = new Date().toISOString();
     try {
-       await base44.functions.invoke('safeSyncOrderUpdate', {
-         incomingData: {
-           production_status: 'fulfilled',
-           delivery_photo_url: proofPhotoUrl,
-           delivery_drop_location: dropLocation,
-           delivered_by: user?.email,
-           delivered_at: deliveredAt,
-           // Preserve address fields
-           address_line1: order.address_line1 || order.selectedFulfillment?.address_line1,
-           address_line2: order.address_line2 || order.selectedFulfillment?.address_line2,
-           address_city: order.address_city || order.selectedFulfillment?.address_city,
-           address_state: order.address_state || order.selectedFulfillment?.address_state,
-           address_postal_code: order.address_postal_code || order.selectedFulfillment?.address_postal_code,
-           address_country: order.address_country || order.selectedFulfillment?.address_country,
-         },
-         source: 'operations',
-         matchBy: { internal_id: order.id },
-       });
-      const itemsList = order.items?.map(i => `${i.title} ×${i.quantity}`).join(', ') || '';
-      const deliveredTime = new Date(deliveredAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' });
-      await base44.integrations.Core.SendEmail({
-        to: order.customer_email,
-        subject: `Your NuVira order #${order.order_number} was delivered! 🌿`,
-        body: `Hi there!\n\nGreat news — your NuVira order has been delivered.\n\n📦 Order: #${order.order_number}\n🕒 Delivered at: ${deliveredTime}\n📍 Left at: ${dropLocation}\n🛍 Items: ${itemsList}\n\nA photo confirmation has been saved to your order. You can view it in your order history.\n\nIf you have any issues, please reach out through the Support section in the app.\n\nThanks for choosing NuVira — stay nourished! 🥤\n\nThe NuVira Team`,
+      // Send to Customer App's receiveDriverStatusUpdate function for proper routing
+      await base44.functions.invoke('receiveDriverStatusUpdate', {
+        order_id: order.id,
+        order_number: order.order_number,
+        driver_email: user?.email,
+        action: 'delivered',
+        delivery_photo_url: proofPhotoUrl,
+        delivery_drop_location: dropLocation,
+        delivery_notes: '',
       });
       toast.success('Delivery confirmed & customer notified');
       loadQueue();
@@ -716,14 +700,15 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const handleMarkUnableToDeliver = async (order, reason, notes) => {
     setUpdatingId(order.id);
     try {
-      await base44.functions.invoke('safeSyncOrderUpdate', {
-         incomingData: {
-           production_status: 'new',
-           internal_notes: `Unable to deliver on ${new Date().toLocaleDateString()} — Reason: ${reason}${notes ? `. ${notes}` : ''}`,
-         },
-         source: 'operations',
-         matchBy: { internal_id: order.id },
-       });
+      // Send to Customer App's receiveDriverStatusUpdate function for proper routing
+      await base44.functions.invoke('receiveDriverStatusUpdate', {
+        order_id: order.id,
+        order_number: order.order_number,
+        driver_email: user?.email,
+        action: 'unable_to_deliver',
+        unable_reason: reason,
+        delivery_notes: notes,
+      });
       const linkedReturn = bagReturns.find(r => r.customer_email === order.customer_email && r.verification_status === 'requested');
       if (linkedReturn) {
         await base44.entities.BagReturn.update(linkedReturn.id, {
@@ -1255,7 +1240,27 @@ export default function DriverPortal() {
 
   const verifyMutation = useMutation({
     mutationFn: async ({ ret, data }) => {
+      // Update local bag return record
       await base44.entities.BagReturn.update(ret.id, data);
+      
+      // Send to Hub via receiveDriverStatusUpdate
+      if (ret.order_id) {
+        await base44.functions.invoke('receiveDriverStatusUpdate', {
+          order_id: ret.order_id,
+          order_number: ret.order_id, // Will be resolved in the function
+          driver_email: user?.email,
+          action: 'bag_return_verified',
+          bag_data: {
+            small_bags_requested: ret.small_bags_requested,
+            small_bags_accepted: data.small_bags_accepted,
+            tote_bags_requested: ret.tote_bags_requested,
+            tote_bags_accepted: data.tote_bags_accepted,
+            credit_issued: data.credit_issued,
+            verification_status: data.verification_status,
+          },
+        }).catch(err => console.warn('Bag return audit log failed (non-critical):', err.message));
+      }
+      
       if (data.credit_issued > 0) {
         const existing = allCredits.find(c => c.customer_email === ret.customer_email);
         const entry = {
