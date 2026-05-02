@@ -229,11 +229,14 @@ export default function Orders() {
           <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-full">
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="New">New</SelectItem>
-              <SelectItem value="Confirmed">Confirmed</SelectItem>
+              <SelectItem value="new">New</SelectItem>
               <SelectItem value="awaiting_production">Awaiting Production</SelectItem>
               <SelectItem value="in_production">In Production</SelectItem>
+              <SelectItem value="bottled">Bottled</SelectItem>
+              <SelectItem value="labeled">Labeled</SelectItem>
               <SelectItem value="packed">Packed</SelectItem>
+              <SelectItem value="fulfilled">Fulfilled</SelectItem>
+              <SelectItem value="canceled">Canceled</SelectItem>
             </SelectContent>
           </SelectMobile>
           <SelectMobile value={channelFilter} onValueChange={setChannelFilter} placeholder="All Channels" triggerClassName="w-full">

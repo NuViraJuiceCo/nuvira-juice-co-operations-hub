@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
         }
 
         // 2. Loyalty & Customer Health
-        const allCustomers = await base44.asServiceRole.entities.CustomerLoyalty.list('-updated_date', 50);
+        const allCustomers = await base44.asServiceRole.entities.LoyaltyMember.list('-updated_date', 50);
         briefing.summary.total_loyalty_members = allCustomers.length;
 
         const inactiveCustomers = allCustomers.filter(c => {
@@ -111,20 +111,11 @@ Deno.serve(async (req) => {
         const events = await base44.asServiceRole.entities.Event.list('-updated_date', 5);
 
         // Check for orders without loyalty records
-        const orphanedOrders = [];
-        for (const order of allOrders) {
-          if (order.customer_email) {
-            const loyalty = await base44.asServiceRole.entities.CustomerLoyalty.filter({ 
-              customer_email: order.customer_email 
-            });
-            if (!loyalty || loyalty.length === 0) {
-              orphanedOrders.push({
-                order_id: order.shopify_order_number,
-                customer_email: order.customer_email
-              });
-            }
-          }
-        }
+        const loyaltyMembers = await base44.asServiceRole.entities.LoyaltyMember.list('-updated_date', 200);
+        const loyaltyEmails = new Set(loyaltyMembers.map(m => m.email));
+        const orphanedOrders = allOrders
+          .filter(o => o.customer_email && !loyaltyEmails.has(o.customer_email))
+          .map(o => ({ order_id: o.shopify_order_number, customer_email: o.customer_email }));
 
         briefing.summary.data_sync_status = 'healthy';
         briefing.summary.products_synced = products.length;

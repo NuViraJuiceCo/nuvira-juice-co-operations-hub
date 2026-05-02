@@ -52,10 +52,10 @@ const TOOLS = [
     group: 'Diagnostics',
     items: [
       {
-        id: 'detectBrokenStripeOrders',
+        id: 'detectStripeOrderSyncIssues',
         label: 'Detect Broken / Inconsistent Orders',
         description: 'Scans all orders and reports any with missing data, bad sync status, or Stripe mismatches.',
-        fn: 'detectBrokenStripeOrders',
+        fn: 'detectStripeOrderSyncIssues',
         payload: {},
         inputs: [],
       },

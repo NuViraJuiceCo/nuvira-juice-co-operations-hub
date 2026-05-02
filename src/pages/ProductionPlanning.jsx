@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AdminGuide from "../components/shared/AdminGuide";
 import IngredientNeedsResultFixed from "../components/production/IngredientNeedsResultFixed";
-import IngredientNeedsResult from "../components/production/IngredientNeedsResult";
 import YieldManager from "../components/production/YieldManager";
 import RecipeManager from "../components/production/RecipeManager";
 import PreOrderBatchPlanner from "../components/production/PreOrderBatchPlanner";
