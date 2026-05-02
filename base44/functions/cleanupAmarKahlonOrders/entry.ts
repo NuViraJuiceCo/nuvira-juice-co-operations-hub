@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
 
     // Find all orders by Amar Kahlon
     const amarOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
-      customer_email: 'amar.kahlon@example.com'
+      customer_email: 'amar.kahlon23@yahoo.com'
     });
 
     if (!amarOrders || amarOrders.length === 0) {
@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     }
 
     // Recalculate production batches to reflect true demand
-    const recalcRes = await base44.asServiceRole.functions.invoke('recalculateProductionBatches', {});
+    const recalcRes = await base44.functions.invoke('recalculateProductionBatches', {});
 
     return Response.json({
       message: `Cleaned up ${amarOrders.length} orders (${deleted.join(', ')})`,
