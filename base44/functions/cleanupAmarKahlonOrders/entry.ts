@@ -9,16 +9,19 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    // Find all orders by Amar Kahlon
-    const amarOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
-      customer_email: 'amar.kahlon23@yahoo.com'
-    });
+    // Target specific order numbers
+    const targetOrders = ['NV-MONI2Z3R', 'NV-MONGOVGM', 'NV-MONHJHUY', 'NV-MONL4I2M'];
+    const allOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 200);
+    const amarOrders = allOrders.filter(o => 
+      o.customer_email === 'amar.kahlon23@yahoo.com' && 
+      targetOrders.includes(o.shopify_order_number)
+    );
 
     if (!amarOrders || amarOrders.length === 0) {
-      return Response.json({ message: 'No orders found for Amar Kahlon' });
+      return Response.json({ message: 'No matching orders found' });
     }
 
-    // Delete all his orders
+    // Delete these orders
     const deleted = [];
     for (const order of amarOrders) {
       await base44.asServiceRole.entities.ShopifyOrder.delete(order.id);
