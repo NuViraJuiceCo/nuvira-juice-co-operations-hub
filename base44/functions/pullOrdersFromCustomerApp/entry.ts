@@ -182,15 +182,16 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Tertiary dedup: if still no match, check email + same-DAY bucket (24-hour window)
-        // Catches ghost duplicates where the customer app used its own internal ID AND no order number match.
-        // Using 24h window because subscription orders can have timestamps hours apart in the same order cycle.
-        if (!hubOrder && ord.customer_email && (ord.created_date || ord.order_date)) {
+        // Tertiary dedup: email + day bucket — ONLY for subscription orders where no Stripe session ID is present.
+        // One-time/checkout orders MUST have unique Stripe session or payment intent IDs — NEVER dedupe those by email.
+        // Same customer CAN place multiple one-time orders on the same day. Email alone is NOT an idempotency key.
+        const isOneTimeWithStripeId = (ord.stripe_checkout_session_id || ord.stripe_payment_intent_id);
+        if (!hubOrder && !isOneTimeWithStripeId && ord.customer_email && (ord.created_date || ord.order_date)) {
           const orderDate = ord.created_date || ord.order_date;
-          const bucket = Math.floor(new Date(orderDate).getTime() / (24 * 60 * 60 * 1000)); // 24-hour bucket
+          const bucket = Math.floor(new Date(orderDate).getTime() / (24 * 60 * 60 * 1000));
           const bucketMatch = existingByEmailTimeBucket.get(`${ord.customer_email}__${bucket}`);
           if (bucketMatch) {
-            console.log(`[PULL-ORDERS] Ghost duplicate detected for ${ord.customer_email} (ID ${orderId} vs hub ${bucketMatch.shopify_order_id}) — skipping`);
+            console.log(`[PULL-ORDERS] Ghost duplicate (subscription) detected for ${ord.customer_email} (ID ${orderId} vs hub ${bucketMatch.shopify_order_id}) — skipping`);
             results.push({ order_id: orderId, action: 'skipped', reason: 'ghost_duplicate_by_email_day' });
             continue;
           }
