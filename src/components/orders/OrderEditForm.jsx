@@ -12,6 +12,13 @@ export default function OrderEditForm({ order, onClose, onSave }) {
     assigned_delivery_date: order.assigned_delivery_date || "",
     customer_notes: order.customer_notes || "",
     internal_notes: order.internal_notes || "",
+    // Preserve address fields (critical for driver portal)
+    address_line1: order.address_line1,
+    address_line2: order.address_line2,
+    address_city: order.address_city,
+    address_state: order.address_state,
+    address_postal_code: order.address_postal_code,
+    address_country: order.address_country,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
