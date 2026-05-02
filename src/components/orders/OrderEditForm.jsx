@@ -27,7 +27,12 @@ export default function OrderEditForm({ order, onClose, onSave }) {
     setError(null);
 
     try {
-      await base44.entities.ShopifyOrder.update(order.id, formData);
+      // Use safeSyncOrderUpdate to preserve address and other protected fields
+      await base44.functions.invoke('safeSyncOrderUpdate', {
+        incomingData: formData,
+        source: 'operations',
+        matchBy: { internal_id: order.id },
+      });
       await onSave();
     } catch (err) {
       setError(err.message);
