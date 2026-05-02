@@ -97,7 +97,7 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mt-4">
+      <div className="grid grid-cols-4 gap-3 mt-4">
         <div>
           <p className="text-xs text-muted-foreground">Needed</p>
           <p className="text-xl font-bold text-primary">{batch.planned_units}</p>
@@ -109,6 +109,10 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
         <div>
           <p className="text-xs text-muted-foreground">Orders</p>
           <p className="text-xl font-bold text-foreground">{batch.order_sources?.length ?? 0}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Delivery</p>
+          <p className="text-xs font-medium text-foreground">{batch.delivery_window_label || '—'}</p>
         </div>
       </div>
 

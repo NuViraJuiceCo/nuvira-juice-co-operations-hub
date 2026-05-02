@@ -1,6 +1,53 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 import moment from 'npm:moment-timezone@0.5.45';
 
+// Delivery window config
+function getDeliveryWindowForProductionDay(production_day) {
+  switch (production_day) {
+    case 'Tuesday':
+      return {
+        delivery_day: 'Wednesday',
+        delivery_window_start: 17,
+        delivery_window_end: 20,
+        delivery_window_label: '5:00 PM - 8:00 PM',
+      };
+    case 'Friday':
+      return {
+        delivery_day: 'Saturday',
+        delivery_window_start: 17,
+        delivery_window_end: 20,
+        delivery_window_label: '5:00 PM - 8:00 PM',
+      };
+    case 'Saturday':
+      return {
+        delivery_day: 'Sunday',
+        delivery_window_start: null,
+        delivery_window_end: null,
+        delivery_window_label: 'Manual/Exception',
+      };
+    default:
+      return null;
+  }
+}
+
+function calculateDeliveryDate(production_date, production_day) {
+  if (!production_date) return null;
+  const prodDate = moment(production_date);
+  let daysToAdd = 0;
+  switch (production_day) {
+    case 'Tuesday':
+      daysToAdd = 1;
+      break;
+    case 'Friday':
+      daysToAdd = 1;
+      break;
+    case 'Saturday':
+      daysToAdd = 1;
+      break;
+  }
+  return prodDate.add(daysToAdd, 'days').format('YYYY-MM-DD');
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -109,6 +156,19 @@ Deno.serve(async (req) => {
       if (isSubscription && order.fulfillments && order.fulfillments.length > 0) {
         for (let fi = 0; fi < order.fulfillments.length; fi++) {
           const f = order.fulfillments[fi];
+          let prodDate = f.production_date || assignedProductionDate;
+          // If prodDate is an ISO date string, convert it to a day name
+          if (prodDate && /^\d{4}-\d{2}-\d{2}$/.test(prodDate)) {
+            const dayOfWeek = moment(prodDate).day();
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            prodDate = dayNames[dayOfWeek];
+          }
+          const windowInfo = getDeliveryWindowForProductionDay(prodDate);
+          const deliveryDate = f.delivery_date || calculateDeliveryDate(
+            f.production_date || moment().format('YYYY-MM-DD'),
+            prodDate
+          );
+
           productionRows.push({
             order_number: order.shopify_order_number,
             customer_name: order.customer_name || order.customer_email,
@@ -125,8 +185,12 @@ Deno.serve(async (req) => {
             is_deleted: false,
             is_active: true,
             do_not_recover: false,
-            assigned_production_date: f.production_date || assignedProductionDate,
-            assigned_delivery_date: f.delivery_date || null,
+            assigned_production_date: prodDate,
+            assigned_delivery_date: f.delivery_date || deliveryDate,
+            assigned_delivery_window_start: windowInfo?.delivery_window_start || null,
+            assigned_delivery_window_end: windowInfo?.delivery_window_end || null,
+            delivery_window_label: windowInfo?.delivery_window_label || null,
+            delivery_window_timezone: 'America/Chicago',
             production_status: order.production_status,
             fulfillment_status: f.status || 'pending',
             delivery_status: order.delivery_status || 'not_ready',
@@ -178,6 +242,19 @@ Deno.serve(async (req) => {
           }
         }
 
+        let oneTimeProdDate = order.fulfillments?.[0]?.production_date || oneTimeProductionDate;
+        // If oneTimeProdDate is an ISO date string, convert it to a day name
+        if (oneTimeProdDate && /^\d{4}-\d{2}-\d{2}$/.test(oneTimeProdDate)) {
+          const dayOfWeek = moment(oneTimeProdDate).day();
+          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          oneTimeProdDate = dayNames[dayOfWeek];
+        }
+        const windowInfo = getDeliveryWindowForProductionDay(oneTimeProdDate);
+        const deliveryDate = order.fulfillments?.[0]?.delivery_date || order.assigned_delivery_date || calculateDeliveryDate(
+          order.fulfillments?.[0]?.production_date || moment().format('YYYY-MM-DD'),
+          oneTimeProdDate
+        );
+
         productionRows.push({
           order_number: order.shopify_order_number,
           customer_name: order.customer_name || order.customer_email,
@@ -194,8 +271,12 @@ Deno.serve(async (req) => {
           is_deleted: false,
           is_active: true,
           do_not_recover: false,
-          assigned_production_date: order.fulfillments?.[0]?.production_date || oneTimeProductionDate,
-          assigned_delivery_date: order.fulfillments?.[0]?.delivery_date || order.assigned_delivery_date || null,
+          assigned_production_date: oneTimeProdDate,
+          assigned_delivery_date: deliveryDate,
+          assigned_delivery_window_start: windowInfo?.delivery_window_start || null,
+          assigned_delivery_window_end: windowInfo?.delivery_window_end || null,
+          delivery_window_label: windowInfo?.delivery_window_label || null,
+          delivery_window_timezone: 'America/Chicago',
           production_status: order.production_status,
           fulfillment_status: order.fulfillments?.[0]?.status || order.fulfillment_status || 'pending',
           delivery_status: order.delivery_status || 'not_ready',
