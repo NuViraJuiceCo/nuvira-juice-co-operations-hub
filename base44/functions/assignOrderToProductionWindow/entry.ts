@@ -21,6 +21,19 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Order not found' }, { status: 404 });
     }
 
+    // GUARDRAIL: Do not assign refunded/deleted/test orders to production
+    if (order.payment_status === 'refunded' || 
+        order.production_status === 'refunded' || 
+        order.do_not_recover === true ||
+        order.canceled_at || 
+        order.deleted_at) {
+      return Response.json({ 
+        error: 'Order is refunded/deleted/excluded - cannot assign to production',
+        order_number: order.shopify_order_number,
+        reason: order.do_not_recover ? 'do_not_recover flag set' : 'refunded or deleted'
+      }, { status: 400 });
+    }
+
     const orderPlacedAt = moment(order.customer_order_date);
     const dayOfWeek = orderPlacedAt.day(); // 0=Sun, 1=Mon, ..., 6=Sat
     const hourOfDay = orderPlacedAt.hour();
