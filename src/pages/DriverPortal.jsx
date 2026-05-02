@@ -685,6 +685,13 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
            delivery_drop_location: dropLocation,
            delivered_by: user?.email,
            delivered_at: deliveredAt,
+           // Preserve address fields
+           address_line1: order.address_line1 || order.selectedFulfillment?.address_line1,
+           address_line2: order.address_line2 || order.selectedFulfillment?.address_line2,
+           address_city: order.address_city || order.selectedFulfillment?.address_city,
+           address_state: order.address_state || order.selectedFulfillment?.address_state,
+           address_postal_code: order.address_postal_code || order.selectedFulfillment?.address_postal_code,
+           address_country: order.address_country || order.selectedFulfillment?.address_country,
          },
          source: 'operations',
          matchBy: { internal_id: order.id },
