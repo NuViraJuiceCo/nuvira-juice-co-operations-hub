@@ -144,13 +144,7 @@ export default function OperationsManager() {
   };
 
   useEffect(() => {
-    const init = async () => {
-      // Run auto-remediation first to fix any Stripe order issues
-      await runAutoRemediateStripe();
-      // Then fetch the briefing
-      await fetchBriefing();
-    };
-    init();
+    fetchBriefing();
   }, []);
 
   const getAlertIcon = (type) => {

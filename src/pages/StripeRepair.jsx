@@ -3,8 +3,9 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { AlertCircle, CheckCircle2, Loader, Play, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader, Play, ChevronDown, ChevronUp, ShieldCheck, AlertTriangle } from 'lucide-react';
 
+// safety: 'safe' = green label, 'confirm' = amber label (requires confirmation)
 const TOOLS = [
   {
     group: 'Subscription Orders',
@@ -12,10 +13,11 @@ const TOOLS = [
       {
         id: 'rebuildAllSubscriptionOrders',
         label: 'Rebuild All Subscription Orders from Stripe',
-        description: 'Scans every Stripe subscription and creates or updates the matching order in the hub. Safe to run anytime — will not overwrite production status or fulfillments.',
+        description: 'Scans every Stripe subscription and creates or updates the matching order in the hub. Will not overwrite production status or fulfillments.',
         fn: 'rebuildAllSubscriptionOrders',
         payload: {},
         inputs: [],
+        safety: 'safe',
       },
     ],
   },
@@ -29,6 +31,7 @@ const TOOLS = [
         fn: 'stripeOrderRecovery',
         inputs: [{ key: 'session_id', label: 'Checkout Session ID', placeholder: 'cs_live_...' }],
         payload: { action: 'recover_session' },
+        safety: 'safe',
       },
       {
         id: 'recover_customer',
@@ -37,14 +40,16 @@ const TOOLS = [
         fn: 'stripeOrderRecovery',
         inputs: [{ key: 'customer_email', label: 'Customer Email', placeholder: 'customer@example.com' }],
         payload: { action: 'recover_customer' },
+        safety: 'safe',
       },
       {
         id: 'fullOrderRecovery',
         label: 'Full Order Recovery',
-        description: 'Broad recovery scan across all recent Stripe events.',
+        description: 'Broad recovery scan across all recent Stripe events. May take 30–60 seconds.',
         fn: 'fullOrderRecovery',
         payload: {},
         inputs: [],
+        safety: 'confirm',
       },
     ],
   },
@@ -54,34 +59,38 @@ const TOOLS = [
       {
         id: 'detectStripeOrderSyncIssues',
         label: 'Detect Broken / Inconsistent Orders',
-        description: 'Scans all orders and reports any with missing data, bad sync status, or Stripe mismatches.',
+        description: 'Read-only scan. Reports orders with missing data, bad sync status, or Stripe mismatches.',
         fn: 'detectStripeOrderSyncIssues',
         payload: {},
         inputs: [],
+        safety: 'safe',
       },
       {
         id: 'detectMissingStripeOrders',
         label: 'Detect Missing Stripe Orders',
-        description: 'Compares Stripe payments against hub orders and lists any that are absent.',
+        description: 'Read-only. Compares Stripe payments against hub orders and lists any that are absent.',
         fn: 'detectMissingStripeOrders',
         payload: {},
         inputs: [],
+        safety: 'safe',
       },
       {
         id: 'checkLatestOrderSync',
         label: 'Check Latest Order Sync Status',
-        description: 'Shows the most recent sync activity and any errors.',
+        description: 'Read-only. Shows the most recent sync activity and any errors.',
         fn: 'checkLatestOrderSync',
         payload: {},
         inputs: [],
+        safety: 'safe',
       },
       {
         id: 'list_failed_events',
         label: 'List Unprocessed Stripe Events (Last 72h)',
-        description: 'Shows Stripe events that were received but not successfully processed.',
+        description: 'Read-only. Shows Stripe events that were received but not successfully processed.',
         fn: 'stripeOrderRecovery',
         payload: { action: 'list_failed_events' },
         inputs: [],
+        safety: 'safe',
       },
     ],
   },
@@ -95,14 +104,44 @@ const TOOLS = [
         fn: 'reconcileStripeOrders',
         payload: {},
         inputs: [],
+        safety: 'safe',
       },
+    ],
+  },
+  {
+    group: 'Address & Fulfillment',
+    items: [
       {
-        id: 'autoRemediateStripeOrders',
-        label: 'Auto-Remediate Stripe Orders',
-        description: 'Automatically fixes common order data issues detected in the hub.',
-        fn: 'autoRemediateStripeOrders',
+        id: 'reconcileAddressGaps',
+        label: 'Reconcile Missing Delivery Addresses',
+        description: 'For every paid delivery order missing a complete address: pulls from Customer App, syncs if found, or flags as NEEDS_ADDRESS_REVIEW. Returns a full report.',
+        fn: 'reconcileAddressGaps',
         payload: {},
         inputs: [],
+        safety: 'safe',
+      },
+    ],
+  },
+  {
+    group: 'Order Review Queue',
+    items: [
+      {
+        id: 'classifyQueueDryRun',
+        label: 'Classify Queue Entries (Dry Run)',
+        description: 'Read-only. Categorizes all pending OrderReviewQueue entries: fake/test, resolved-by-sync, duplicate spam, old pre-fix records, and real unresolved issues.',
+        fn: 'classifyOrderReviewQueue',
+        payload: { action: 'dry_run' },
+        inputs: [],
+        safety: 'safe',
+      },
+      {
+        id: 'classifyQueueBulkResolve',
+        label: 'Bulk Resolve Safe Queue Entries',
+        description: 'Resolves fake/test, duplicate spam, old pre-fix, and address-resolved entries. Leaves real unresolved orders open for admin action.',
+        fn: 'classifyOrderReviewQueue',
+        payload: { action: 'bulk_resolve' },
+        inputs: [],
+        safety: 'confirm',
       },
     ],
   },
@@ -139,8 +178,20 @@ function ToolCard({ tool }) {
     <Card className="p-4 space-y-3">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground">{tool.label}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{tool.description}</p>
+          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <p className="font-medium text-foreground">{tool.label}</p>
+            {tool.safety === 'safe' && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">
+                <ShieldCheck className="h-3 w-3" /> Safe
+              </span>
+            )}
+            {tool.safety === 'confirm' && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">
+                <AlertTriangle className="h-3 w-3" /> Requires Confirmation
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">{tool.description}</p>
         </div>
         <Button size="sm" onClick={run} disabled={loading} className="gap-1.5 shrink-0">
           {loading ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}

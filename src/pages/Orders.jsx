@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import OrderEditForm from "../components/orders/OrderEditForm";
 import { base44 } from "@/api/base44Client";
-import { Search, Download, Trash2, Edit2, RefreshCw } from "lucide-react";
+import { Search, Download, Archive, Edit2, RefreshCw, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -129,22 +129,50 @@ export default function Orders() {
     }
   };
 
-  const handleDelete = async (id) => {
-    setDeleting(id);
+  const handleArchive = async (order) => {
+    if (!window.confirm(`Archive order ${order.shopify_order_number}? This sets it to canceled and logs the action. It will NOT be hard-deleted.`)) return;
+    setDeleting(order.id);
     try {
-      await base44.entities.ShopifyOrder.delete(id);
-      setOrders(orders.filter(o => o.id !== id));
+      await base44.entities.ShopifyOrder.update(order.id, {
+        production_status: 'canceled',
+        internal_notes: (order.internal_notes ? order.internal_notes + '\n' : '') + `[Archived by admin on ${new Date().toISOString()}]`,
+      });
+      await base44.entities.RepairAuditLog.create({
+        timestamp: new Date().toISOString(),
+        executed_by: 'admin-ui',
+        repair_function: 'cleanupOrphanedAndDuplicateRecords',
+        action: 'cleanup',
+        records_affected: 1,
+        reason: `Admin archived order ${order.shopify_order_number} from Orders UI`,
+        changes: { order_id: order.id, order_number: order.shopify_order_number, previous_status: order.production_status, new_status: 'canceled' },
+      });
+      setOrders(orders.map(o => o.id === order.id ? { ...o, production_status: 'canceled' } : o));
     } finally {
       setDeleting(null);
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (!window.confirm(`Delete ${selected.size} order(s)?`)) return;
+  const handleBulkArchive = async () => {
+    if (!window.confirm(`Archive ${selected.size} order(s)? They will be set to canceled with an audit log entry. No hard deletes.`)) return;
     setDeleting(true);
     try {
-      await Promise.all(Array.from(selected).map(id => base44.entities.ShopifyOrder.delete(id)));
-      setOrders(orders.filter(o => !selected.has(o.id)));
+      const selectedOrders = orders.filter(o => selected.has(o.id));
+      await Promise.all(selectedOrders.map(async (order) => {
+        await base44.entities.ShopifyOrder.update(order.id, {
+          production_status: 'canceled',
+          internal_notes: (order.internal_notes ? order.internal_notes + '\n' : '') + `[Bulk archived by admin on ${new Date().toISOString()}]`,
+        });
+        await base44.entities.RepairAuditLog.create({
+          timestamp: new Date().toISOString(),
+          executed_by: 'admin-ui',
+          repair_function: 'cleanupOrphanedAndDuplicateRecords',
+          action: 'cleanup',
+          records_affected: 1,
+          reason: `Admin bulk-archived order ${order.shopify_order_number} from Orders UI`,
+          changes: { order_id: order.id, order_number: order.shopify_order_number, previous_status: order.production_status, new_status: 'canceled' },
+        });
+      }));
+      setOrders(orders.map(o => selected.has(o.id) ? { ...o, production_status: 'canceled' } : o));
       setSelected(new Set());
     } finally {
       setDeleting(false);
@@ -256,8 +284,9 @@ export default function Orders() {
       {selected.size > 0 && (
         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
-          <button onClick={handleBulkDelete} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
-            {deleting ? "Deleting..." : "Delete Selected"}
+          <button onClick={handleBulkArchive} disabled={deleting} className="text-sm px-3 py-1.5 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1.5">
+            <Archive className="h-3.5 w-3.5" />
+            {deleting ? "Archiving..." : "Archive Selected"}
           </button>
           <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded border border-blue-200 text-blue-700 hover:bg-blue-100">
             Cancel
@@ -340,11 +369,12 @@ export default function Orders() {
                          <Edit2 className="h-4 w-4" />
                        </button>
                        <button
-                         onClick={() => handleDelete(order.id)}
+                         onClick={() => handleArchive(order)}
                          disabled={deleting === order.id}
-                         className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                         className="text-amber-600 hover:text-amber-700 disabled:opacity-50"
+                         title="Archive order (sets to canceled with audit log)"
                        >
-                         <Trash2 className="h-4 w-4" />
+                         <Archive className="h-4 w-4" />
                        </button>
                       </div>
                     </td>
@@ -463,12 +493,13 @@ export default function Orders() {
                   Edit
                 </button>
                 <button
-                  onClick={() => handleDelete(order.id)}
-                  disabled={deleting === order.id}
-                  className="flex-1 px-3 py-2 text-xs bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
-                >
-                  {deleting === order.id ? 'Deleting...' : 'Delete'}
-                </button>
+                   onClick={() => handleArchive(order)}
+                   disabled={deleting === order.id}
+                   className="flex-1 px-3 py-2 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                 >
+                   <Archive className="h-3 w-3" />
+                   {deleting === order.id ? 'Archiving...' : 'Archive'}
+                 </button>
               </div>
 
               {/* Expandable Items */}
