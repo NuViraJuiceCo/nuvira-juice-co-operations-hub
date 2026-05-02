@@ -82,50 +82,17 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'success', orders: [], optimized_orders: [] });
     }
 
-    // ── QUALITY GATE: Delivery orders must have complete address ──────────────
-    // Check BOTH parent-level and fulfillment-level addresses
-    // For single_delivery: use parent address (may be empty if in fulfillment only)
-    // For multi_delivery (subscriptions): check fulfillment.address_line1
     const hasCompleteAddressAtParent = (order) => {
       return order.address_line1 && order.address_city && order.address_state && order.address_postal_code;
     };
 
     const hasCompleteAddressAtFulfillment = (fulfillment) => {
-      return fulfillment.address_line1 && fulfillment.address_city && fulfillment.address_state && fulfillment.address_postal_code;
+      return fulfillment && fulfillment.address_line1 && fulfillment.address_city && fulfillment.address_state && fulfillment.address_postal_code;
     };
 
-    const isDeliveryOrder = (order) => {
-      return order.fulfillment_method === 'delivery';
-    };
-
-    // Map ShopifyOrder to driver portal format and filter to undelivered orders
+    // Map ShopifyOrder to driver portal format — INCLUDE ALL orders, flag missing addresses
     const queuedOrders = orders
       .filter(o => !['fulfilled', 'canceled', 'refunded'].includes(o.production_status))
-      .filter(o => {
-        // Gate: if order is marked for delivery, it must have complete address
-        if (!isDeliveryOrder(o)) return true; // Non-delivery orders don't need address gate
-        
-        const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
-        
-        if (fulfillmentMode === 'multi_delivery' && o.fulfillments && o.fulfillments.length > 0) {
-          // For subscriptions: check that at least ONE fulfillment has complete address
-          const hasValidFulfillment = o.fulfillments.some(f => hasCompleteAddressAtFulfillment(f));
-          if (!hasValidFulfillment) {
-            console.warn(`[OPTIMIZE-ROUTE] Gating subscription ${o.shopify_order_number} (${o.customer_name}): no fulfillment has complete address`);
-            return false;
-          }
-        } else {
-          // For one-time orders: check parent address first, then fulfillment
-          const hasParentAddress = hasCompleteAddressAtParent(o);
-          const hasFulfillmentAddress = o.fulfillments && o.fulfillments.length > 0 && hasCompleteAddressAtFulfillment(o.fulfillments[0]);
-          
-          if (!hasParentAddress && !hasFulfillmentAddress) {
-            console.warn(`[OPTIMIZE-ROUTE] Gating order ${o.shopify_order_number} (${o.order_type}): delivery order missing address at both parent and fulfillment levels`);
-            return false;
-          }
-        }
-        return true;
-      })
       .map(o => {
         const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
         let fulfillmentsForDate = o.fulfillments || [];
@@ -133,6 +100,16 @@ Deno.serve(async (req) => {
         // For multi-delivery orders on a specific date, only show the fulfillment for that date
         if (date && fulfillmentMode === 'multi_delivery' && o.fulfillments && o.fulfillments.length > 0) {
           fulfillmentsForDate = o.fulfillments.filter(f => f.delivery_date && f.delivery_date.startsWith(date));
+        }
+
+        // Determine best available address (parent → fulfillment → legacy)
+        const fulfillmentAddr = fulfillmentsForDate[0] || o.fulfillments?.[0];
+        const hasParentAddr = hasCompleteAddressAtParent(o);
+        const hasFulfillmentAddr = hasCompleteAddressAtFulfillment(fulfillmentAddr);
+        const missing_address = o.fulfillment_method === 'delivery' && !hasParentAddr && !hasFulfillmentAddr;
+
+        if (missing_address) {
+          console.warn(`[OPTIMIZE-ROUTE] Order ${o.shopify_order_number} (${o.customer_name}) is missing a delivery address — included with flag`);
         }
 
         return {
@@ -156,6 +133,8 @@ Deno.serve(async (req) => {
           delivered_by: o.delivered_by,
           delivered_at: o.delivered_at,
           leg_duration_seconds: null,
+          missing_address,
+          payment_status: o.payment_status,
         };
       });
 
@@ -171,8 +150,8 @@ Deno.serve(async (req) => {
 
 
 
-    // Filter to undelivered stops only for optimization
-    const undeliveredStops = queuedOrders.filter(o => o.status !== 'delivered');
+    // Filter to undelivered stops with addresses for optimization (missing-address orders can't be routed)
+    const undeliveredStops = queuedOrders.filter(o => o.status !== 'delivered' && !o.missing_address);
     
     if (undeliveredStops.length === 0) {
       return Response.json({ 

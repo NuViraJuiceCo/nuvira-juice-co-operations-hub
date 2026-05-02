@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronRight, MapPin, Navigation, Recycle, X, Camera, Edit2, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, MapPin, Navigation, Recycle, X, Camera, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { base44 } from '@/api/base44Client';
 import { useRef } from 'react';
@@ -114,9 +114,15 @@ export default function PreOptimizeOrderCard({ order, pendingReturn, onVerifyRet
               if (order.address_line1) return `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}`;
               const fulfAddr = order.selectedFulfillment || order.fulfillments?.[0];
               if (fulfAddr?.address_line1) return `${fulfAddr.address_line1}, ${fulfAddr.address_city}, ${fulfAddr.address_state} ${fulfAddr.address_postal_code}`;
-              return order.delivery_address || '(address missing)';
+              return order.delivery_address || '';
             })()}
           </p>
+          {order.missing_address && (
+            <div className="flex items-center gap-1 mt-1">
+              <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+              <p className="text-[10px] text-red-600 font-semibold">Missing address — contact admin</p>
+            </div>
+          )}
           <p className="text-[10px] text-muted-foreground">{order.items?.filter(i => !['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'].some(kw => (i.title||'').toLowerCase().includes(kw))).map(i => `${i.title} ×${i.quantity}`).join(', ')}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

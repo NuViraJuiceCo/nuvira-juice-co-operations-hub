@@ -387,8 +387,11 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                     return order.delivery_address || '(address missing)';
                   })()}
                 </p>
-                {!order.address_line1 && !(order.selectedFulfillment?.address_line1) && !(order.fulfillments?.[0]?.address_line1) && !order.delivery_address && (
-                  <p className="text-[10px] text-red-600 font-semibold">⚠ Missing address — flag for admin</p>
+                {order.missing_address && (
+                  <div className="mt-1 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+                    <p className="text-[10px] text-red-700 font-semibold">Missing delivery address — contact admin before delivery</p>
+                  </div>
                 )}
               </div>
 
