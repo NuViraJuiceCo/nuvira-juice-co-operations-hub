@@ -20,6 +20,7 @@ import moment from "moment";
 
 export default function Fulfillment() {
   const [tasks, setTasks] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState(new Set());
@@ -28,16 +29,25 @@ export default function Fulfillment() {
   const [editDriver, setEditDriver] = useState("");
   const [savingDriver, setSavingDriver] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [view, setView] = useState("orders"); // "orders" | "tasks"
 
   const handleRefresh = async () => {
-    const data = await base44.entities.FulfillmentTask.list("-scheduled_date", 100);
-    setTasks(data || []);
+    const [taskData, orderData] = await Promise.all([
+      base44.entities.FulfillmentTask.list("-scheduled_date", 100),
+      base44.entities.ShopifyOrder.filter({ payment_status: "paid" }, "-created_date", 100),
+    ]);
+    setTasks(taskData || []);
+    setOrders((orderData || []).filter(o => !["fulfilled", "canceled", "refunded"].includes(o.production_status)));
   };
 
   useEffect(() => {
     async function load() {
-      const data = await base44.entities.FulfillmentTask.list("-scheduled_date", 100);
-      setTasks(data || []);
+      const [taskData, orderData] = await Promise.all([
+        base44.entities.FulfillmentTask.list("-scheduled_date", 100),
+        base44.entities.ShopifyOrder.filter({ payment_status: "paid" }, "-created_date", 100),
+      ]);
+      setTasks(taskData || []);
+      setOrders((orderData || []).filter(o => !["fulfilled", "canceled", "refunded"].includes(o.production_status)));
       setLoading(false);
     }
     load();
@@ -134,6 +144,68 @@ export default function Fulfillment() {
   return (
     <PullToRefresh onRefresh={handleRefresh}>
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+
+        {/* View Toggle */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setView("orders")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${view === "orders" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}
+          >
+            Orders ({orders.length})
+          </button>
+          <button
+            onClick={() => setView("tasks")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${view === "tasks" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}
+          >
+            Fulfillment Tasks ({tasks.length})
+          </button>
+        </div>
+
+        {/* Orders View */}
+        {view === "orders" && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">{orders.length} paid orders · not yet fulfilled</p>
+            {orders.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">No paid orders found.</div>
+            ) : (
+              orders.map(order => (
+                <div key={order.id} className="bg-card border border-border rounded-xl p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-foreground">{order.shopify_order_number}</p>
+                      <p className="text-sm text-muted-foreground">{order.customer_name} · {order.customer_email}</p>
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${
+                      order.production_status === 'new' ? 'bg-blue-50 text-blue-700' :
+                      order.production_status === 'awaiting_production' ? 'bg-amber-50 text-amber-700' :
+                      'bg-green-50 text-green-700'
+                    }`}>{order.production_status?.replace(/_/g, ' ')}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span><span className="font-medium text-foreground">Total:</span> ${order.total_price?.toFixed(2)}</span>
+                    <span><span className="font-medium text-foreground">Payment:</span> {order.payment_status}</span>
+                    <span><span className="font-medium text-foreground">Delivery:</span> {order.requested_delivery_date || order.assigned_delivery_date || '—'}</span>
+                    <span><span className="font-medium text-foreground">Method:</span> {order.fulfillment_method || '—'}</span>
+                  </div>
+                  {order.address_line1 && (
+                    <p className="text-xs text-muted-foreground">{order.address_line1}, {order.address_city}, {order.address_state} {order.address_postal_code}</p>
+                  )}
+                  {!order.address_line1 && order.fulfillment_method === 'delivery' && (
+                    <p className="text-xs text-red-500 font-semibold">⚠ Missing delivery address</p>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    {(order.line_items || []).map((item, i) => (
+                      <span key={i}>{item.quantity}× {item.title}{i < order.line_items.length - 1 ? ', ' : ''}</span>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Tasks View */}
+        {view === "tasks" && <>
         <AdminGuide
           title="Admin Guide — Fulfillment Queue"
           steps={[
@@ -316,6 +388,8 @@ export default function Fulfillment() {
             ))
           )}
         </div>
+
+        </>}
 
         {/* Edit Driver Modal */}
         <Dialog open={!!editingTask} onOpenChange={() => setEditingTask(null)}>
