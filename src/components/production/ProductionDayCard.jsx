@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Edit2, Trash2, Lock, Unlock, ChevronDown, ChevronUp } from "lucide-react";
+import { Edit2, Trash2, Lock, Unlock, ChevronDown, ChevronUp, Play } from "lucide-react";
 import StatusBadge from "../shared/StatusBadge";
 import moment from "moment";
 
@@ -47,11 +47,13 @@ function SourceBreakdown({ sources }) {
   );
 }
 
-function BatchCard({ batch, onEdit, onDelete, onToggleLock }) {
+function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
   const [expanded, setExpanded] = useState(false);
   const categoryColor = batch.product_category === 'shot'
     ? 'border-l-amber-400'
     : 'border-l-primary';
+
+  const canStart = ['planned', 'ready_for_production'].includes(batch.status);
 
   return (
     <div className={`bg-card border border-border border-l-4 ${categoryColor} rounded-xl p-5 hover:shadow-sm transition-shadow`}>
@@ -72,6 +74,15 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock }) {
           <p className="text-xs text-muted-foreground mt-0.5">{batch.batch_id}</p>
         </div>
         <div className="flex items-center gap-1.5">
+          {canStart && onStart && (
+            <button
+              onClick={() => onStart(batch)}
+              className="text-green-600 hover:text-green-700 p-1"
+              title="Start batch production"
+            >
+              <Play className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button onClick={() => onToggleLock(batch)} className="text-muted-foreground hover:text-foreground p-1" title={batch.is_locked ? "Unlock" : "Lock"}>
             {batch.is_locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
           </button>
@@ -123,7 +134,7 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock }) {
   );
 }
 
-export default function ProductionDayCard({ date, batches, today, onEdit, onDelete, onToggleLock }) {
+export default function ProductionDayCard({ date, batches, today, onEdit, onDelete, onToggleLock, onStart }) {
   const isToday = date === today;
   const isSoon = !isToday && moment(date).diff(moment(), 'days') <= 3;
   const dateLabel = isToday
@@ -167,6 +178,7 @@ export default function ProductionDayCard({ date, batches, today, onEdit, onDele
             onEdit={onEdit}
             onDelete={onDelete}
             onToggleLock={onToggleLock}
+            onStart={onStart}
           />
         ))}
       </div>

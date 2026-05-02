@@ -19,15 +19,29 @@ export default function ComplianceLogs() {
   const [deletingId, setDeletingId] = useState(null);
 
   const { data: logs = [], isLoading, refetch } = useQuery({
-    queryKey: ['compliance_logs', startDate, endDate],
+    queryKey: ['compliance_logs', startDate, endDate, logTypeFilter, statusFilter],
     queryFn: async () => {
-      const allLogs = await base44.entities.ComplianceLog.list('-log_date', 500);
+      // Fetch both ComplianceLog and BatchComplianceLog
+      const [complianceLogs, batchLogs] = await Promise.all([
+        base44.entities.ComplianceLog?.list('-log_date', 500).catch(() => []),
+        base44.entities.BatchComplianceLog?.list('-date', 500).catch(() => []),
+      ]);
+
+      const allLogs = (complianceLogs || []).map(log => ({
+        ...log,
+        source: 'manual',
+      })).concat((batchLogs || []).map(log => ({
+        ...log,
+        log_date: log.date,
+        log_type: 'batch_log',
+        source: 'production_batch',
+      })));
+
       return allLogs.filter(log => {
         const matchDate = log.log_date >= startDate && log.log_date <= endDate;
         const matchType = logTypeFilter === 'all' || log.log_type === logTypeFilter;
-        const matchStatus = statusFilter === 'all' || log.status === statusFilter;
-        return matchDate && matchType && matchStatus;
-      });
+        return matchDate && matchType;
+      }).sort((a, b) => new Date(b.log_date) - new Date(a.log_date));
     }
   });
 
@@ -71,15 +85,17 @@ export default function ComplianceLogs() {
     alert('⚠️ Compliance logs cannot be deleted — they must be preserved for health department audits. Contact admin if a record needs to be marked as void.');
   };
 
-  const failedLogs = logs.filter(l => l.status === 'fail');
-  const passedLogs = logs.filter(l => l.status === 'pass');
+  const failedLogs = logs.filter(l => l.passed_failed === 'failed' || l.status === 'fail');
+  const passedLogs = logs.filter(l => l.passed_failed === 'passed' || l.status === 'pass');
 
-  const getStatusIcon = (status) => {
-    return status === 'pass' ? (
-      <CheckCircle2 className="w-4 h-4 text-green-600" />
-    ) : (
-      <AlertCircle className="w-4 h-4 text-red-600" />
-    );
+  const getStatusIcon = (log) => {
+    const passFail = log.passed_failed || log.status;
+    if (passFail === 'pass' || passFail === 'passed') {
+      return <CheckCircle2 className="w-4 h-4 text-green-600" />;
+    } else if (passFail === 'fail' || passFail === 'failed') {
+      return <AlertCircle className="w-4 h-4 text-red-600" />;
+    }
+    return <AlertCircle className="w-4 h-4 text-slate-400" />;
   };
 
   const getLogTypeLabel = (type) => {
@@ -89,7 +105,8 @@ export default function ComplianceLogs() {
       CCP: '⚠️ CCP',
       sanitation: '🧹 Sanitation',
       corrective_action: '🔧 Corrective Action',
-      daily_checklist: '📋 Daily Checklist'
+      daily_checklist: '📋 Daily Checklist',
+      batch_log: '📦 Batch Log'
     };
     return labels[type] || type;
   };
@@ -185,6 +202,7 @@ export default function ComplianceLogs() {
                 className="mt-1 w-full p-2 border rounded-lg"
               >
                 <option value="all">All Types</option>
+                <option value="batch_log">Batch Logs</option>
                 <option value="temperature">Temperature</option>
                 <option value="pH">pH</option>
                 <option value="CCP">CCP</option>
@@ -220,18 +238,27 @@ export default function ComplianceLogs() {
           <p className="text-center text-muted-foreground py-8">No logs found for the selected date range.</p>
         ) : (
           logs.map(log => (
-            <Card key={log.id} className={log.status === 'fail' ? 'border-red-200' : ''}>
+            <Card key={log.id} className={log.passed_failed === 'failed' || log.status === 'fail' ? 'border-red-200' : ''}>
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      {getStatusIcon(log.status)}
-                      <span className="font-semibold">{getLogTypeLabel(log.log_type)}</span>
-                      <span className="text-xs px-2 py-1 rounded bg-muted">{log.status.toUpperCase()}</span>
+                      {getStatusIcon(log)}
+                      <span className="font-semibold">{getLogTypeLabel(log.log_type || log.source)}</span>
+                      <span className="text-xs px-2 py-1 rounded bg-muted">
+                        {log.source === 'production_batch' ? 'AUTO' : 'MANUAL'}
+                      </span>
+                      <span className="text-xs px-2 py-1 rounded bg-muted">
+                        {(log.passed_failed || log.status || '').toUpperCase()}
+                      </span>
                     </div>
                     <p className="text-sm text-muted-foreground mb-2">
-                      {log.log_date} {log.log_time} • {log.staff_member} • Shift: {log.shift}
+                      {log.log_date} {log.log_time ? log.log_time : ''} • {log.staff_member || (log.verified_by?.split('@')[0]) || '-'} • {log.source === 'production_batch' ? `Batch: ${log.batch_id}` : `Shift: ${log.shift || '-'}`}
                     </p>
+
+                    {log.juice_flavor && (
+                      <p className="text-sm text-muted-foreground">🧃 {log.juice_flavor} • pH: {log.pH_result || '-'}</p>
+                    )}
 
                     {log.notes && <p className="text-sm mt-2 text-muted-foreground">📝 {log.notes}</p>}
                   </div>

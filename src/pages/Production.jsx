@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import AdminGuide from "../components/shared/AdminGuide";
 import BatchEditForm from "../components/production/BatchEditForm";
+import BatchStartForm from "../components/production/BatchStartForm";
+import BatchCompleteForm from "../components/production/BatchCompleteForm";
+import BatchVerifyForm from "../components/production/BatchVerifyForm";
+import BatchHistory from "../components/production/BatchHistory";
 import ProductionDayCard from "../components/production/ProductionDayCard";
 import IngredientPlanningPanel from "../components/production/IngredientPlanningPanel";
 import RecipeEditor from "../components/production/RecipeEditor";
@@ -10,7 +14,7 @@ import PullToRefresh from "../components/shared/PullToRefresh";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import SelectMobile from "../components/SelectMobile";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Play, CheckSquare, FileCheck } from "lucide-react";
 import _ from "lodash";
 import moment from "moment";
 
@@ -21,7 +25,11 @@ export default function Production() {
   const [recalculating, setRecalculating] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [tab, setTab] = useState("today");
   const [editingBatch, setEditingBatch] = useState(null);
+  const [startingBatch, setStartingBatch] = useState(null);
+  const [completingBatch, setCompletingBatch] = useState(null);
+  const [verifyingBatch, setVerifyingBatch] = useState(null);
   const [lastCalc, setLastCalc] = useState(null);
   const [ingredientData, setIngredientData] = useState({}); // date -> dateData
   const [ingredientLoading, setIngredientLoading] = useState(false);
@@ -105,6 +113,13 @@ export default function Production() {
     await load();
   };
 
+  const handleSaveAction = async () => {
+    setStartingBatch(null);
+    setCompletingBatch(null);
+    setVerifyingBatch(null);
+    await load();
+  };
+
   const today = moment().format("YYYY-MM-DD");
 
   // Filter
@@ -152,7 +167,7 @@ export default function Production() {
             ]}
           />
 
-          {/* Header */}
+          {/* Header + Tabs */}
           <div className="space-y-4">
             <div>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
@@ -163,66 +178,224 @@ export default function Production() {
                 <p className="text-xs text-green-600 mt-1">{lastCalc}</p>
               )}
             </div>
-            <div className="flex flex-col gap-2">
-              <SelectMobile value={categoryFilter} onValueChange={setCategoryFilter} placeholder="Category" triggerClassName="flex-1">
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="juice">Juice</SelectItem>
-                  <SelectItem value="shot">Shot</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </SelectMobile>
-              <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="Status" triggerClassName="flex-1">
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="Planned">Planned</SelectItem>
-                  <SelectItem value="Awaiting Ingredients">Await Ing</SelectItem>
-                  <SelectItem value="In Production">Produc</SelectItem>
-                  <SelectItem value="In Packing">Pack</SelectItem>
-                  <SelectItem value="Completed">Done</SelectItem>
-                </SelectContent>
-              </SelectMobile>
-              <Button
-                onClick={handleRecalculate}
-                disabled={recalculating}
-                className="gap-2 flex-1 sm:flex-none text-xs sm:text-sm"
+
+            {/* Tabs */}
+            <div className="flex gap-2 border-b">
+              <button
+                onClick={() => setTab("today")}
+                className={`px-3 py-2 text-sm font-medium border-b-2 ${
+                  tab === "today"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
               >
-                <RefreshCw className={`h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
-                <span>{recalculating ? 'Calc...' : 'Calc'}</span>
-              </Button>
+                📅 Today & Upcoming
+              </button>
+              <button
+                onClick={() => setTab("in_progress")}
+                className={`px-3 py-2 text-sm font-medium border-b-2 ${
+                  tab === "in_progress"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                ⚙️ In Progress
+              </button>
+              <button
+                onClick={() => setTab("verify")}
+                className={`px-3 py-2 text-sm font-medium border-b-2 ${
+                  tab === "verify"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                ✓ Needs Verification
+              </button>
+              <button
+                onClick={() => setTab("history")}
+                className={`px-3 py-2 text-sm font-medium border-b-2 ${
+                  tab === "history"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                📋 History
+              </button>
             </div>
+
+            {tab !== "history" && (
+              <div className="flex flex-col gap-2">
+                <SelectMobile value={categoryFilter} onValueChange={setCategoryFilter} placeholder="Category" triggerClassName="flex-1">
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="juice">Juice</SelectItem>
+                    <SelectItem value="shot">Shot</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </SelectMobile>
+                <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="Status" triggerClassName="flex-1">
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="planned">Planned</SelectItem>
+                    <SelectItem value="ready_for_production">Ready</SelectItem>
+                    <SelectItem value="in_production">In Production</SelectItem>
+                    <SelectItem value="completed_pending_verification">Verify</SelectItem>
+                    <SelectItem value="verified_logged">Verified</SelectItem>
+                  </SelectContent>
+                </SelectMobile>
+                <Button
+                  onClick={handleRecalculate}
+                  disabled={recalculating}
+                  className="gap-2 flex-1 sm:flex-none text-xs sm:text-sm"
+                >
+                  <RefreshCw className={`h-4 w-4 ${recalculating ? 'animate-spin' : ''}`} />
+                  <span>{recalculating ? 'Calc...' : 'Calc'}</span>
+                </Button>
+              </div>
+            )}
           </div>
 
-          {/* Admin tools — Recipe Editor + Yield/Pack Conversion Editor */}
-          <RecipeEditor onRecipeSaved={loadIngredients} />
-          <IngredientYieldEditor onSaved={loadIngredients} />
-
-          {/* Production Days */}
-          {sortedDates.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <p className="text-lg font-medium mb-2">No upcoming production scheduled</p>
-              <p className="text-sm">Click Recalculate to generate production cards from active orders.</p>
-            </div>
+          {/* Batch History Tab */}
+          {tab === "history" ? (
+            <BatchHistory />
           ) : (
-            <div className="space-y-10">
-              {sortedDates.map(date => (
-                <div key={date}>
-                  <ProductionDayCard
-                    date={date}
-                    batches={grouped[date]}
-                    orders={orders}
-                    today={today}
-                    onEdit={setEditingBatch}
-                    onDelete={handleDelete}
-                    onToggleLock={handleToggleLock}
-                  />
-                  <IngredientPlanningPanel
-                    dateData={ingredientData[date]}
-                    loading={ingredientLoading}
-                  />
+            <>
+              {/* Admin tools — Recipe Editor + Yield/Pack Conversion Editor */}
+              {tab === "today" && (
+                <>
+                  <RecipeEditor onRecipeSaved={loadIngredients} />
+                  <IngredientYieldEditor onSaved={loadIngredients} />
+                </>
+              )}
+
+              {/* Today & Upcoming Tab */}
+              {tab === "today" && (
+                <>
+                  {sortedDates.length === 0 ? (
+                    <div className="text-center py-16 text-muted-foreground">
+                      <p className="text-lg font-medium mb-2">No upcoming production scheduled</p>
+                      <p className="text-sm">Click Recalculate to generate production cards from active orders.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-10">
+                      {sortedDates.map(date => (
+                        <div key={date}>
+                          <ProductionDayCard
+                            date={date}
+                            batches={grouped[date]}
+                            orders={orders}
+                            today={today}
+                            onEdit={setEditingBatch}
+                            onDelete={handleDelete}
+                            onToggleLock={handleToggleLock}
+                            onStart={setStartingBatch}
+                          />
+                          <IngredientPlanningPanel
+                            dateData={ingredientData[date]}
+                            loading={ingredientLoading}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* In Progress Tab */}
+              {tab === "in_progress" && (
+                <div className="space-y-3">
+                  {batches.filter(b => b.status === 'in_production').length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No batches in production.</p>
+                  ) : (
+                    batches.filter(b => b.status === 'in_production').map(batch => (
+                      <div key={batch.id} className="bg-card border rounded-lg p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h3 className="font-semibold">{batch.batch_id}</h3>
+                            <p className="text-sm text-muted-foreground">{batch.product_name}</p>
+                          </div>
+                          <span className="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-700">IN PRODUCTION</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-sm mb-3">
+                          <div>
+                            <p className="text-muted-foreground text-xs">Started</p>
+                            <p className="font-medium">{moment(batch.actual_start_time).format('HH:mm')}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-xs">Staff</p>
+                            <p className="font-medium">{(batch.staff_on_duty || []).length} on duty</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-xs">Planned Qty</p>
+                            <p className="font-medium">{batch.planned_units}</p>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => setCompletingBatch(batch)}
+                          size="sm"
+                          className="gap-2 w-full"
+                        >
+                          <CheckSquare className="h-4 w-4" />
+                          Mark Complete
+                        </Button>
+                      </div>
+                    ))
+                  )}
                 </div>
-              ))}
-            </div>
+              )}
+
+              {/* Needs Verification Tab */}
+              {tab === "verify" && (
+                <div className="space-y-3">
+                  {batches.filter(b => b.status === 'completed_pending_verification').length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No batches pending verification.</p>
+                  ) : (
+                    batches.filter(b => b.status === 'completed_pending_verification').map(batch => (
+                      <div key={batch.id} className="bg-card border border-orange-200 rounded-lg p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h3 className="font-semibold">{batch.batch_id}</h3>
+                            <p className="text-sm text-muted-foreground">{batch.product_name}</p>
+                          </div>
+                          <span className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-700">PENDING</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-3 text-sm mb-3">
+                          <div>
+                            <p className="text-muted-foreground text-xs">Quantity</p>
+                            <p className="font-medium">{batch.actual_quantity_produced || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-xs">pH</p>
+                            <p className="font-medium">{batch.pH_result || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-xs">Status</p>
+                            <p className={`font-medium text-xs ${batch.passed_failed === 'passed' ? 'text-green-600' : 'text-red-600'}`}>
+                              {batch.passed_failed?.toUpperCase() || '-'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground text-xs">Complete</p>
+                            <p className="font-medium text-xs">
+                              {batch.actual_quantity_produced && batch.pH_result && batch.passed_failed ? '✓' : '-'}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => setVerifyingBatch(batch)}
+                          disabled={batch.status !== 'completed_pending_verification'}
+                          size="sm"
+                          className="gap-2 w-full"
+                        >
+                          <FileCheck className="h-4 w-4" />
+                          Verify & Log
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </PullToRefresh>
@@ -232,6 +405,30 @@ export default function Production() {
           batch={editingBatch}
           onClose={() => setEditingBatch(null)}
           onSave={handleSaveEdit}
+        />
+      )}
+
+      {startingBatch && (
+        <BatchStartForm
+          batch={startingBatch}
+          onClose={() => setStartingBatch(null)}
+          onSave={handleSaveAction}
+        />
+      )}
+
+      {completingBatch && (
+        <BatchCompleteForm
+          batch={completingBatch}
+          onClose={() => setCompletingBatch(null)}
+          onSave={handleSaveAction}
+        />
+      )}
+
+      {verifyingBatch && (
+        <BatchVerifyForm
+          batch={verifyingBatch}
+          onClose={() => setVerifyingBatch(null)}
+          onSave={handleSaveAction}
         />
       )}
     </>
