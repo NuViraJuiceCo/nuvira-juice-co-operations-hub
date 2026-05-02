@@ -276,6 +276,46 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── STEP 2.5: FAKE/TEST STRIPE ID GUARDRAIL ─────────────────────────────
+    // Reject payloads from customer_app with obviously fake/placeholder Stripe IDs.
+    // These are test/idempotency validation payloads that must never create production records.
+    if (source === 'customer_app' && incomingData.payment_status === 'paid') {
+      const sessionId = incomingData.stripe_checkout_session_id || '';
+      const intentId = incomingData.stripe_payment_intent_id || '';
+
+      const isFakeSession = sessionId && (
+        sessionId.includes('UNIQUE') ||
+        sessionId.includes('_TEST_') ||
+        sessionId.includes('test_') ||
+        sessionId.includes('fake_') ||
+        sessionId.toLowerCase().includes('placeholder') ||
+        sessionId === 'cs_live_UNIQUE_SESSION_ID_FOR_SECOND_ORDER' ||
+        // Real Stripe live sessions are exactly: cs_live_ + 58 base62 chars (~66 total)
+        // Anything suspiciously short or with non-base62 chars after the prefix is fake
+        (sessionId.startsWith('cs_live_') && sessionId.length < 30)
+      );
+
+      const isFakeIntent = intentId && (
+        intentId.includes('UNIQUE') ||
+        intentId.includes('_TEST_') ||
+        intentId.includes('test_') ||
+        intentId.includes('fake_') ||
+        intentId.toLowerCase().includes('placeholder') ||
+        intentId === 'pi_UNIQUE_INTENT_FOR_SECOND'
+      );
+
+      if (isFakeSession || isFakeIntent) {
+        console.error(`[SAFE-SYNC] GUARDRAIL: Rejected fake/test Stripe ID from customer_app. session=${sessionId} intent=${intentId}`);
+        await logSync(base44, {
+          source, order_number: incomingData.shopify_order_number,
+          customer_email: incomingData.customer_email, action: 'rejected',
+          reason: 'fake_stripe_id_guardrail', success: false,
+          error: `Fake/test Stripe ID detected: session=${sessionId} intent=${intentId}`,
+        });
+        return Response.json({ status: 'rejected', reason: 'fake_stripe_id_detected', detail: 'Test/placeholder Stripe IDs are not permitted in production. Use real Stripe session or payment intent IDs.' }, { status: 422 });
+      }
+    }
+
     // ── STEP 3: UNKNOWN QUALITY GATE ────────────────────────────────────────
     if (isUnknownQuality(incomingData)) {
       const existingScore = existingOrder ? getCompletenessScore(existingOrder) : 0;
