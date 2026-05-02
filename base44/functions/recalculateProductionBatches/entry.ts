@@ -382,7 +382,7 @@ Deno.serve(async (req) => {
       if (order.source_channel === 'subscription' && fulfillmentCount > 1) {
         const fulfillmentItems = buildFulfillmentItemsMap(order, fulfillmentCount, bundleMap, bundleFullData);
         const fulfillmentsArray = [];
-        
+
         for (let fi = 0; fi < fulfillmentDates.length; fi++) {
           const fDate = fulfillmentDates[fi];
           // Production day → delivery day mapping:
@@ -394,7 +394,7 @@ Deno.serve(async (req) => {
           const daysToAdd = dayOfWeek === 5 ? 1 : (dayOfWeek === 6 ? 1 : 3);
           const deliveryDate = new Date(prodDate);
           deliveryDate.setDate(deliveryDate.getDate() + daysToAdd);
-          
+
           fulfillmentsArray.push({
             fulfillment_number: fi + 1,
             production_date: fDate,
@@ -411,7 +411,7 @@ Deno.serve(async (req) => {
             delivery_notes: order.delivery_notes || '',
           });
         }
-        
+
         // Update the order with fulfillment breakdown (will be saved later if needed)
         order.fulfillments = fulfillmentsArray;
 
@@ -420,7 +420,10 @@ Deno.serve(async (req) => {
           order._deliveryDateAssigned = fulfillmentsArray[0].delivery_date;
         }
       } else if (order.source_channel !== 'subscription') {
-        // One-time orders: decompose bundles if present
+        // One-time orders: decompose bundles if present (into fulfillments.items ONLY)
+        // CRITICAL GUARDRAIL: Never update order.line_items for one-time orders during production recalc.
+        // line_items = customer-facing product identity (immutable after order placed)
+        // fulfillments.items = internal production decomposition (safe to update)
         const fulfillmentItems = buildFulfillmentItemsMap(order, 1, bundleMap, bundleFullData);
         order.fulfillments = [{
           fulfillment_number: 1,
@@ -442,6 +445,7 @@ Deno.serve(async (req) => {
           address_country: order.address_country || 'US',
           delivery_notes: order.delivery_notes || '',
         }];
+        // DO NOT update order.line_items — preserve original customer-facing product
         if (!order.assigned_delivery_date) {
           order._deliveryDateAssigned = order.fulfillments[0].delivery_date;
         }

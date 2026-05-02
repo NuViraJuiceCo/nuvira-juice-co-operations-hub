@@ -476,22 +476,42 @@ Deno.serve(async (req) => {
     }
 
     // ── STEP 8: PRESERVE CRITICAL EXISTING FIELDS IF INCOMING IS EMPTY ──────
-    if (existingOrder) {
-      const preserveIfEmpty = ['customer_name', 'customer_phone', 'fulfillments', 'internal_notes', 'assigned_delivery_date', 'production_status', 'order_lock_status', 'total_price', 'subtotal'];
-      for (const field of preserveIfEmpty) {
-        const incomingVal = incomingData[field];
-        const existingVal = existingOrder[field];
-        // Preserve existing if incoming is empty/zero/null and existing has a real value
-        const incomingEmpty = incomingVal === undefined || incomingVal === null || incomingVal === '' || incomingVal === 0;
-        const existingHasValue = existingVal !== undefined && existingVal !== null && existingVal !== '' && existingVal !== 0;
-        if (incomingEmpty && existingHasValue) {
-          incomingData[field] = existingVal;
+     if (existingOrder) {
+       const preserveIfEmpty = ['customer_name', 'customer_phone', 'fulfillments', 'internal_notes', 'assigned_delivery_date', 'production_status', 'order_lock_status', 'total_price', 'subtotal'];
+       for (const field of preserveIfEmpty) {
+         const incomingVal = incomingData[field];
+         const existingVal = existingOrder[field];
+         // Preserve existing if incoming is empty/zero/null and existing has a real value
+         const incomingEmpty = incomingVal === undefined || incomingVal === null || incomingVal === '' || incomingVal === 0;
+         const existingHasValue = existingVal !== undefined && existingVal !== null && existingVal !== '' && existingVal !== 0;
+         if (incomingEmpty && existingHasValue) {
+           incomingData[field] = existingVal;
+         }
+       }
+       // Never downgrade production_status
+       const meaningfulStatuses = ['awaiting_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery', 'fulfilled', 'canceled', 'refunded'];
+       if (incomingData.production_status === 'new' && meaningfulStatuses.includes(existingOrder.production_status)) {
+         incomingData.production_status = existingOrder.production_status;
+       }
+     }
+
+    // ── STEP 8.1: ONE-TIME ORDER LINE_ITEMS GUARDRAIL ──────────────────────────
+    // CRITICAL: For one_time + single_delivery orders, line_items is the customer-facing product identity.
+    // Production recalculation may update fulfillments (internal components) but MUST NOT replace line_items.
+    // line_items = what customer ordered; fulfillments.items = internal decomposition for production.
+    if (existingOrder && existingOrder.order_type === 'one_time' && existingOrder.fulfillment_mode === 'single_delivery' && source !== 'customer_app') {
+      // Only stripe_webhook and manual_recovery can update line_items on one-time orders (order correction scenarios)
+      // All other sources (operations, rebuild_subscriptions) must NOT overwrite line_items
+      if (!['stripe_webhook', 'manual_recovery', 'admin'].includes(source)) {
+        if (incomingData.line_items && existingOrder.line_items?.length > 0) {
+          const incomingTitles = (incomingData.line_items || []).map(i => i.title).sort().join(',');
+          const existingTitles = (existingOrder.line_items || []).map(i => i.title).sort().join(',');
+          if (incomingTitles !== existingTitles) {
+            console.warn(`[SAFE-SYNC] GUARDRAIL: ${source} attempted to replace line_items on one-time order ${existingOrder.id}. This is forbidden. Preserving existing line_items.`);
+            incomingData.line_items = existingOrder.line_items;
+            fieldsRejected.push('line_items');
+          }
         }
-      }
-      // Never downgrade production_status
-      const meaningfulStatuses = ['awaiting_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery', 'fulfilled', 'canceled', 'refunded'];
-      if (incomingData.production_status === 'new' && meaningfulStatuses.includes(existingOrder.production_status)) {
-        incomingData.production_status = existingOrder.production_status;
       }
     }
 
