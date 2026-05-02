@@ -563,7 +563,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      // FINAL GATE: if still no address after all attempts, quarantine and reject
+      // FINAL GATE: if still no address after all attempts, only hard-block NEW order creation.
+      // For UPDATES to existing orders, allow the write to proceed — blocking an update just because
+      // an address is still missing makes the problem permanently unresolvable (address can never sync in).
       const finalHasParentAddress = incomingData.address_line1 && incomingData.address_city && 
                                     incomingData.address_state && incomingData.address_postal_code;
       const finalHasFulfillmentAddress = (incomingData.fulfillments?.[0]?.address_line1 && 
@@ -572,19 +574,25 @@ Deno.serve(async (req) => {
                                           incomingData.fulfillments[0].address_postal_code) || false;
 
       if (!finalHasParentAddress && !finalHasFulfillmentAddress && source !== 'admin') {
-        console.error(`[SAFE-SYNC] Delivery order ${existingOrder?.id || incomingData.customer_email} missing complete address — quarantining`);
-        await quarantine(base44, {
-          incident_type: 'missing_customer_info',
-          customer_email: incomingData.customer_email || existingOrder?.customer_email,
-          customer_name: incomingData.customer_name || existingOrder?.customer_name,
-          existing_order_id: existingOrder?.id || null,
-          existing_order_number: existingOrder?.shopify_order_number || incomingData.shopify_order_number,
-          incoming_payload: incomingData,
-          incoming_source: source,
-          issue_description: `Delivery order missing complete address at both parent and fulfillment levels. Cannot enter Driver Portal.`,
-          recommended_action: 'manual_review',
-        });
-        return Response.json({ status: 'rejected', reason: 'delivery_order_missing_address' }, { status: 400 });
+        if (!existingOrder) {
+          // Only hard-block NEW order creation with no address
+          console.error(`[SAFE-SYNC] NEW delivery order from ${incomingData.customer_email} missing complete address — rejecting creation`);
+          await quarantine(base44, {
+            incident_type: 'missing_customer_info',
+            customer_email: incomingData.customer_email || null,
+            customer_name: incomingData.customer_name || null,
+            existing_order_id: null,
+            existing_order_number: incomingData.shopify_order_number,
+            incoming_payload: incomingData,
+            incoming_source: source,
+            issue_description: `New delivery order creation rejected — missing complete address.`,
+            recommended_action: 'manual_review',
+          });
+          return Response.json({ status: 'rejected', reason: 'delivery_order_missing_address' }, { status: 400 });
+        } else {
+          // For existing orders: log a warning but ALLOW the update to proceed so address can sync in later
+          console.warn(`[SAFE-SYNC] Delivery order ${existingOrder.id} still missing address — allowing update to proceed so address can sync in`);
+        }
       }
     }
 
