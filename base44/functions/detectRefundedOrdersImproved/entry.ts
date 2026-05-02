@@ -110,6 +110,8 @@ Deno.serve(async (req) => {
 
     // Match refunds to orders
     const ordersWithRefunds = [];
+    const unmatched_refunds = [];
+    
     for (const refund of refunds) {
       const matchedOrder = orders.find(
         o => o.shopify_order_number === refund.order_number ||
@@ -127,7 +129,14 @@ Deno.serve(async (req) => {
           refund_reason: refund.reason || 'manual',
         });
       } else {
-        console.warn(`[DETECT-REFUNDS] No matched order for refund on PI ${refund.payment_intent}, order_number ${refund.order_number}`);
+        // Collect unmatched refunds for debugging
+        unmatched_refunds.push({
+          refund_id: refund.refund_id,
+          amount: refund.amount / 100,
+          payment_intent: refund.payment_intent,
+          order_number: refund.order_number,
+          reason: refund.reason,
+        });
       }
     }
 
@@ -136,7 +145,13 @@ Deno.serve(async (req) => {
       customer_email,
       total_refunds_found: refunds.length,
       refunds_matched_to_orders: ordersWithRefunds.length,
-      refunds: ordersWithRefunds,
+      matched_refunds: ordersWithRefunds,
+      unmatched_refunds: unmatched_refunds,
+      customer_orders: orders.map(o => ({
+        order_number: o.shopify_order_number,
+        payment_intent_id: o.stripe_payment_intent_id,
+        payment_status: o.payment_status,
+      })),
     });
 
   } catch (error) {
