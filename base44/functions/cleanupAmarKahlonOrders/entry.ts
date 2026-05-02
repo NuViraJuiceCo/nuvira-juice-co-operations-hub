@@ -9,32 +9,54 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    // Target specific order numbers
     const targetOrders = ['NV-MONI2Z3R', 'NV-MONGOVGM', 'NV-MONHJHUY', 'NV-MONL4I2M'];
-    const allOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 200);
-    const amarOrders = allOrders.filter(o => 
-      o.customer_email === 'amar.kahlon23@yahoo.com' && 
+    const customerEmail = 'amar.kahlon23@yahoo.com';
+    const cleanup = {};
+
+    // Delete from ShopifyOrder
+    const orders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 200);
+    const matchingOrders = orders.filter(o => 
+      (o.customer_email === customerEmail || o.customer_name?.toLowerCase().includes('amar')) && 
       targetOrders.includes(o.shopify_order_number)
     );
-
-    if (!amarOrders || amarOrders.length === 0) {
-      return Response.json({ message: 'No matching orders found' });
-    }
-
-    // Delete these orders
-    const deleted = [];
-    for (const order of amarOrders) {
+    for (const order of matchingOrders) {
       await base44.asServiceRole.entities.ShopifyOrder.delete(order.id);
-      deleted.push(order.shopify_order_number);
     }
+    cleanup.shopifyOrders = matchingOrders.length;
 
-    // Recalculate production batches to reflect true demand
-    const recalcRes = await base44.functions.invoke('recalculateProductionBatches', {});
+    // Delete from FulfillmentTask (if exists)
+    try {
+      const tasks = await base44.asServiceRole.entities.FulfillmentTask.list('-created_date', 100);
+      const matchingTasks = tasks.filter(t => targetOrders.includes(t.order_id));
+      for (const task of matchingTasks) {
+        await base44.asServiceRole.entities.FulfillmentTask.delete(task.id);
+      }
+      cleanup.fulfillmentTasks = matchingTasks.length;
+    } catch {}
+
+    // Delete from OrderReviewQueue
+    try {
+      const queue = await base44.asServiceRole.entities.OrderReviewQueue.list('-created_date', 100);
+      const matchingQueue = queue.filter(q => q.existing_order_number && targetOrders.includes(q.existing_order_number));
+      for (const item of matchingQueue) {
+        await base44.asServiceRole.entities.OrderReviewQueue.delete(item.id);
+      }
+      cleanup.reviewQueue = matchingQueue.length;
+    } catch {}
+
+    // Recalculate production
+    let recalcMessage = 'skipped';
+    try {
+      const recalcRes = await base44.functions.invoke('recalculateProductionBatches', {});
+      recalcMessage = recalcRes.data?.message || 'recalculated';
+    } catch (e) {
+      console.log('Recalc skipped:', e.message);
+    }
 
     return Response.json({
-      message: `Cleaned up ${amarOrders.length} orders (${deleted.join(', ')})`,
-      deleted_orders: deleted,
-      recalculation: recalcRes.data
+      message: 'Cleanup complete',
+      cleanup,
+      recalculation: recalcMessage
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
