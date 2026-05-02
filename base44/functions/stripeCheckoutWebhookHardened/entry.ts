@@ -94,8 +94,19 @@ async function findOrReconcileOrder(base44, event, rawData) {
   }
 
   // PHASE 3: Build address from Stripe (do this FIRST)
-  const shippingDetails = rawData.shipping_details?.address || rawData.billing_details?.address || rawData.customer_details?.address || {};
-  const shippingName = rawData.shipping_details?.name || rawData.customer_name || rawData.billing_details?.name || rawData.customer_details?.name || 'Unknown';
+  // Priority: shipping_details → metadata (customer app stores address in metadata) → customer_details → billing_details
+  const meta = rawData.metadata || {};
+  const metaAddress = (meta.delivery_address_line1 || meta.address_line1) ? {
+    line1: meta.delivery_address_line1 || meta.address_line1 || '',
+    line2: meta.delivery_address_line2 || meta.address_line2 || '',
+    city: meta.delivery_city || meta.address_city || '',
+    state: meta.delivery_state || meta.address_state || '',
+    postal_code: meta.delivery_postal_code || meta.address_postal_code || '',
+    country: meta.delivery_country || meta.address_country || 'US',
+  } : null;
+
+  const shippingDetails = rawData.shipping_details?.address || metaAddress || rawData.customer_details?.address || rawData.billing_details?.address || {};
+  const shippingName = rawData.shipping_details?.name || meta.customer_name || rawData.customer_name || rawData.billing_details?.name || rawData.customer_details?.name || 'Unknown';
 
   // CRITICAL: Never process without valid email AND customer name
   if (!email || email === 'unknown@unknown.com') {
@@ -159,13 +170,16 @@ async function findOrReconcileOrder(base44, event, rawData) {
     shopify_order_number: order?.shopify_order_number || `#STR${Math.floor(Date.now() / 1000)}`,
     customer_email: email,
     customer_name: shippingName,
-    customer_phone: rawData.customer_phone || rawData.billing_details?.phone || order?.customer_phone || '',
+    customer_phone: rawData.customer_phone || meta.customer_phone || rawData.billing_details?.phone || order?.customer_phone || '',
     line_items: lineItems.length > 0 ? lineItems : order?.line_items || [],
     total_price: amount,
     subtotal: amount,
     payment_status: rawData.payment_status === 'paid' ? 'paid' : 'pending',
     source_channel: rawData.subscription ? 'subscription' : 'online',
-    fulfillment_method: 'delivery',
+    fulfillment_method: meta.delivery_method || 'delivery',
+    requested_delivery_date: meta.requested_delivery_date || '',
+    order_type: meta.order_type || (rawData.subscription ? 'subscription' : 'one_time'),
+    fulfillment_mode: meta.fulfillment_mode || (rawData.subscription ? 'multi_delivery' : 'single_delivery'),
     production_status: order?.production_status || 'new',
     sync_status: 'synced',
     last_sync_at: new Date().toISOString(),
