@@ -25,6 +25,12 @@ async function getRefundsForCustomer(customerEmail) {
   const customerRefunds = [];
 
   for (const refund of refunds) {
+    // Skip failed or reversed refunds
+    if (refund.status === 'failed' || refund.status === 'reversed') {
+      console.log(`[DETECT-REFUNDS] Skipping ${refund.status} refund ${refund.id}`);
+      continue;
+    }
+
     // Refunds can have a charge OR a payment_intent directly
     let paymentIntentId = null;
 
@@ -65,6 +71,7 @@ async function getRefundsForCustomer(customerEmail) {
             order_number: pi.metadata?.order_number,
             created: refund.created,
             reason: refund.reason,
+            status: refund.status,
           });
         }
       }
