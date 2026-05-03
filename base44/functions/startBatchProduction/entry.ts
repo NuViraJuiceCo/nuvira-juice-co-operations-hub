@@ -24,6 +24,10 @@ Deno.serve(async (req) => {
       final_ingredients,
       default_formula_ingredients,
       manual_ingredient_override,
+      pH_result,
+      formula_mixed_time,
+      bottling_start_time,
+      refrigeration_time,
     } = body;
 
     if (!batch_id) {
@@ -58,6 +62,10 @@ Deno.serve(async (req) => {
       refrigerator_temp_checked: refrigerator_temp_checked || false,
       notes: notes || '',
       ingredient_lot_notes: ingredient_lot_notes || null,
+      ...(pH_result ? { pH_result: parseFloat(pH_result) } : {}),
+      ...(formula_mixed_time ? { formula_mixed_time } : {}),
+      ...(bottling_start_time ? { bottling_start_time } : {}),
+      ...(refrigeration_time ? { refrigeration_time } : {}),
       ...(final_ingredients?.length ? { ingredients_used: final_ingredients } : {}),
       ...(default_formula_ingredients?.length ? { formula_or_recipe_used: default_formula_ingredients.map(i => i.ingredient_name).join(', ') } : {}),
       ...(manual_ingredient_override ? { ingredient_lot_notes: `[MANUAL OVERRIDE] ${ingredient_lot_notes || ''}` } : {}),
