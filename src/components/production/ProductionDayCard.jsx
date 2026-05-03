@@ -140,9 +140,12 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
 
 export default function ProductionDayCard({ date, batches, today, onEdit, onDelete, onToggleLock, onStart }) {
   const isToday = date === today;
-  const isSoon = !isToday && moment(date).diff(moment(), 'days') <= 3;
+  const isPast = date < today;
+  const isSoon = !isToday && !isPast && moment(date).diff(moment(), 'days') <= 3;
   const dateLabel = isToday
     ? `Today — ${moment(date).format("dddd, MMMM D, YYYY")}`
+    : isPast
+    ? `📦 Retrospective — ${moment(date).format("dddd, MMMM D, YYYY")}`
     : isSoon
     ? `${moment(date).format("dddd, MMMM D, YYYY")} (in ${moment(date).diff(moment().startOf('day'), 'days')} days)`
     : moment(date).format("dddd, MMMM D, YYYY");
@@ -157,7 +160,7 @@ export default function ProductionDayCard({ date, batches, today, onEdit, onDele
   return (
     <div>
       {/* Date header */}
-      <div className={`flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl ${isToday ? 'bg-primary/5 border border-primary/20' : isSoon ? 'bg-amber-50 border border-amber-200' : 'bg-muted/30'}`}>
+      <div className={`flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl ${isToday ? 'bg-primary/5 border border-primary/20' : isPast ? 'bg-slate-50 border border-slate-200' : isSoon ? 'bg-amber-50 border border-amber-200' : 'bg-muted/30'}`}>
         <div>
           <h3 className={`text-sm font-bold ${isToday ? 'text-primary' : 'text-foreground'}`}>{dateLabel}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">

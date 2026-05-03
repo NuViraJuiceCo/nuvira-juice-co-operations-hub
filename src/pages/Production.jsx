@@ -129,10 +129,10 @@ export default function Production() {
     return true;
   });
 
-  // Group by production date, include past 2 days + future for active work
-  const twoDaysAgo = moment(today).subtract(2, 'days').format('YYYY-MM-DD');
+  // Group by production date, include past 7 days + future (allows retrospective batch logging)
+  const sevenDaysAgo = moment(today).subtract(7, 'days').format('YYYY-MM-DD');
   const grouped = _.groupBy(
-    filtered.filter(b => b.production_date >= twoDaysAgo),
+    filtered.filter(b => b.production_date >= sevenDaysAgo),
     b => b.production_date
   );
 
