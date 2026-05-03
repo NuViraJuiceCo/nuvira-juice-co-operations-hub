@@ -91,10 +91,15 @@ Deno.serve(async (req) => {
     };
 
     // Map ShopifyOrder to driver portal format — INCLUDE ALL orders, flag missing addresses
-    // HARD GATE: Only paid orders may appear in Driver Portal. pending/unpaid orders must never be exposed.
+    // HARD GATE: Strict delivery eligibility — all conditions must be met.
+    // payment_status = paid + delivery-ready production_status only.
+    // "bottled", "labeled", "qc_checked" are NOT delivery-ready — product exists but not dispatch-approved.
+    // Only packed/in_cold_storage/assigned_for_delivery are considered dispatch-ready.
+    const DELIVERY_READY_STATUSES = ['packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery'];
     const queuedOrders = orders
       .filter(o => o.payment_status === 'paid')
-      .filter(o => !['fulfilled', 'canceled', 'refunded'].includes(o.production_status))
+      .filter(o => DELIVERY_READY_STATUSES.includes(o.production_status) || o.production_status === 'fulfilled')
+      .filter(o => o.production_status !== 'fulfilled')
       .map(o => {
         const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
         let fulfillmentsForDate = o.fulfillments || [];

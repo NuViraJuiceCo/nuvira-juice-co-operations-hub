@@ -43,13 +43,22 @@ function getNextProductionDate(fromDate) {
   return fallbackStr < FIRST_PRODUCTION_DATE ? FIRST_PRODUCTION_DATE : fallbackStr;
 }
 
+/**
+ * Map delivery date to production date using NuVira's schedule:
+ *   Wednesday delivery → Tuesday production (1 day prior)
+ *   Saturday delivery  → Friday production  (1 day prior)
+ *   Sunday delivery    → Saturday production (1 day prior)
+ *
+ * General rule: production is always 1 day before the delivery day,
+ * snapping to the nearest valid PRODUCTION_DAY (Tue=2, Fri=5, Sat=6)
+ * searching backwards up to 7 days.
+ *
+ * CRITICAL: Do NOT use delivery date as production date.
+ */
 function getProductionDateForDelivery(deliveryDateStr) {
-  const d = new Date(deliveryDateStr);
-  d.setHours(0, 0, 0, 0);
-  // production is 3 days before delivery
-  d.setDate(d.getDate() - 3);
-  // snap to nearest prior production day
-  for (let i = 0; i <= 7; i++) {
+  const d = new Date(deliveryDateStr + 'T00:00:00');
+  // Production is 1 day before delivery — snap backwards to nearest valid production day
+  for (let i = 1; i <= 7; i++) {
     const check = new Date(d);
     check.setDate(d.getDate() - i);
     if (PRODUCTION_DAYS.includes(check.getDay())) {
@@ -57,8 +66,11 @@ function getProductionDateForDelivery(deliveryDateStr) {
       return result < FIRST_PRODUCTION_DATE ? FIRST_PRODUCTION_DATE : result;
     }
   }
-  const result = d.toISOString().split('T')[0];
-  return result < FIRST_PRODUCTION_DATE ? FIRST_PRODUCTION_DATE : result;
+  // Fallback: 1 day prior
+  const fallback = new Date(d);
+  fallback.setDate(d.getDate() - 1);
+  const fallbackStr = fallback.toISOString().split('T')[0];
+  return fallbackStr < FIRST_PRODUCTION_DATE ? FIRST_PRODUCTION_DATE : fallbackStr;
 }
 
 function normalizeProductName(name) {
@@ -323,6 +335,15 @@ Deno.serve(async (req) => {
       }
 
       if (!activeStatuses.includes(order.production_status)) continue;
+
+      // GUARDRAIL: Skip already-bottled/produced orders — they are NOT new production needs.
+      // bottled, labeled, qc_checked, packed, in_cold_storage = physically produced, just awaiting delivery.
+      // Including them would cause duplicate batch quantities (more bottles made than needed).
+      const alreadyProducedStatuses = ['bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery'];
+      if (alreadyProducedStatuses.includes(order.production_status)) {
+        console.log(`[RECALC] Skipping already-produced order ${order.shopify_order_number} (${order.production_status}) — not a new production need`);
+        continue;
+      }
 
       // CRITICAL FIX: For subscriptions, read from fulfillments directly instead of parent line_items
       // Parent line_items are empty; fulfillments contain the actual weekly quantities
