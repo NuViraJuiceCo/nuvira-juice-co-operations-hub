@@ -645,9 +645,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ─── SAVE UPDATED ORDERS (fulfillments, assigned_delivery_date) ────────────
-    // Direct writes for fulfillments/delivery dates — these fields don't trigger recalc automation
-    // (fulfillments and assigned_delivery_date are not in the trigger conditions)
+    // ─── SAVE UPDATED ORDERS (fulfillments only — never overwrite identity/payment/address fields) ────────────
+    // GUARDRAIL: Only update fulfillments and assigned_delivery_date.
+    // NEVER overwrite: payment_status, address_*, customer_*, production_status, delivery_status, ready_for_driver.
+    // These are owned by the source of truth (Stripe/Customer App) or Systems Control repairs.
+    const PROTECTED_FIELDS = new Set([
+      'payment_status', 'production_status', 'delivery_status', 'ready_for_driver',
+      'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code',
+      'address_country', 'customer_name', 'customer_email', 'customer_phone',
+      'stripe_payment_intent_id', 'stripe_customer_id', 'total_price', 'subtotal',
+      'line_items', 'order_lock_status', 'internal_notes',
+    ]);
     const ordersToUpdate = allOrders.filter(o => o.fulfillments || o._deliveryDateAssigned);
     for (const order of ordersToUpdate) {
       const updateData = {};
@@ -657,6 +665,8 @@ Deno.serve(async (req) => {
       if (order._deliveryDateAssigned && !order.assigned_delivery_date) {
         updateData.assigned_delivery_date = order._deliveryDateAssigned;
       }
+      // Strip any protected fields that may have been accidentally included
+      for (const f of PROTECTED_FIELDS) delete updateData[f];
       if (Object.keys(updateData).length > 0) {
         try {
           await base44.asServiceRole.entities.ShopifyOrder.update(order.id, updateData);
