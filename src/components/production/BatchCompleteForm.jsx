@@ -74,8 +74,8 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
       setError('At least one staff member on duty is required.');
       return;
     }
-    if (formData.pH_result === '' || formData.pH_result === null) {
-      setError('pH Result is required.');
+    if (formData.pH_result === '' || formData.pH_result === null || formData.pH_result === undefined || isNaN(formData.pH_result)) {
+      setError('pH Result is required and must be a valid number.');
       return;
     }
     if (formData.final_ingredients.length === 0 && !formData.ingredient_lot_notes.trim()) {
