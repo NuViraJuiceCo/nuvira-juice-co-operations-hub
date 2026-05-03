@@ -18,6 +18,8 @@ Deno.serve(async (req) => {
       sanitizer_log_reference,
       refrigerator_temp_checked,
       notes,
+      actual_start_time_override,
+      retrospective_reason,
     } = body;
 
     if (!batch_id) {
@@ -38,11 +40,12 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date().toISOString();
+    const startTime = actual_start_time_override || now;
 
     // Update batch to in_production
     const updateData = {
       status: 'in_production',
-      actual_start_time: now,
+      actual_start_time: startTime,
       started_by: user.email,
       staff_on_duty: staff_on_duty || [user.email],
       equipment_used: equipment_used || [],
@@ -50,6 +53,7 @@ Deno.serve(async (req) => {
       sanitizer_log_reference: sanitizer_log_reference || null,
       refrigerator_temp_checked: refrigerator_temp_checked || false,
       notes: notes || '',
+      ...(retrospective_reason ? { notes: `[RETROSPECTIVE] ${retrospective_reason}${notes ? ' | ' + notes : ''}` } : {}),
     };
 
     // Add to audit trail
@@ -58,10 +62,11 @@ Deno.serve(async (req) => {
     }
     batch.audit_trail.push({
       timestamp: now,
-      action: 'BatchStarted',
+      action: retrospective_reason ? 'RetrospectiveBatchStarted' : 'BatchStarted',
       performed_by: user.email,
       before: { status: batch.status },
       after: { status: 'in_production' },
+      reason: retrospective_reason || undefined,
     });
     updateData.audit_trail = batch.audit_trail;
 

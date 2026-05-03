@@ -1,15 +1,21 @@
 import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
-import { X, AlertCircle } from 'lucide-react';
+import { X, AlertCircle, History } from 'lucide-react';
+import moment from 'moment';
 
 export default function BatchStartForm({ batch, onClose, onSave }) {
+  const today = moment().format('YYYY-MM-DD');
+  const isRetrospective = batch.production_date < today;
+
   const [formData, setFormData] = useState({
     staff_on_duty: [],
     equipment_used: [],
     pre_op_sanitation_confirmed: false,
     refrigerator_temp_checked: false,
     notes: '',
+    retrospective_reason: '',
+    actual_start_time_override: isRetrospective ? `${batch.production_date}T06:00` : '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -52,12 +58,19 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isRetrospective && !formData.retrospective_reason.trim()) {
+      setError('A reason is required for retrospective batch logging.');
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
       await base44.functions.invoke('startBatchProduction', {
         batch_id: batch.batch_id,
         ...formData,
+        actual_start_time_override: isRetrospective && formData.actual_start_time_override
+          ? new Date(formData.actual_start_time_override).toISOString()
+          : undefined,
       });
       onSave();
     } catch (err) {
@@ -76,6 +89,16 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
           </button>
         </div>
 
+        {isRetrospective && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex gap-2">
+            <History className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-600" />
+            <div>
+              <p className="font-semibold">Retrospective Logging Mode</p>
+              <p className="mt-0.5">This batch is for a past production date ({batch.production_date}). Logging will create compliance records only — it will <strong>not</strong> affect delivery status, Driver Portal, or customer notifications.</p>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex gap-2">
             <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
@@ -93,6 +116,30 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
             <label className="text-sm font-medium">Product</label>
             <p className="text-sm text-muted-foreground mt-1">{batch.product_name}</p>
           </div>
+
+          {isRetrospective && (
+            <>
+              <div>
+                <label className="text-sm font-medium text-amber-700">Retrospective Reason <span className="text-red-500">*</span></label>
+                <textarea
+                  value={formData.retrospective_reason}
+                  onChange={(e) => setFormData(prev => ({ ...prev, retrospective_reason: e.target.value }))}
+                  className="mt-1 w-full p-2 border border-amber-300 rounded-lg bg-background h-14 resize-none text-sm"
+                  placeholder="e.g. May 1 production was completed before batch logging workflow was active. Logging for compliance accuracy."
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-amber-700">Actual Start Time (Historical)</label>
+                <input
+                  type="datetime-local"
+                  value={formData.actual_start_time_override}
+                  onChange={(e) => setFormData(prev => ({ ...prev, actual_start_time_override: e.target.value }))}
+                  className="mt-1 w-full p-2 border border-amber-300 rounded-lg bg-background text-sm"
+                />
+              </div>
+            </>
+          )}
 
           <div>
             <label className="text-sm font-medium">Staff on Duty</label>
@@ -193,8 +240,8 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
             <Button type="button" variant="outline" onClick={onClose} className="flex-1">
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? 'Starting...' : 'Start Batch'}
+            <Button type="submit" disabled={loading} className={`flex-1 ${isRetrospective ? 'bg-amber-600 hover:bg-amber-700' : ''}`}>
+              {loading ? 'Starting...' : isRetrospective ? '📦 Log Retrospective Batch' : 'Start Batch'}
             </Button>
           </div>
         </form>
