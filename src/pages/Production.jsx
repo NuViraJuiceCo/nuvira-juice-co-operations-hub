@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import AdminGuide from "../components/shared/AdminGuide";
-import BatchEditForm from "../components/production/BatchEditForm";
+
 import BatchStartForm from "../components/production/BatchStartForm";
 import BatchCompleteForm from "../components/production/BatchCompleteForm";
 import BatchVerifyForm from "../components/production/BatchVerifyForm";
@@ -26,7 +26,7 @@ export default function Production() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [tab, setTab] = useState("today");
-  const [editingBatch, setEditingBatch] = useState(null);
+
   const [startingBatch, setStartingBatch] = useState(null);
   const [completingBatch, setCompletingBatch] = useState(null);
   const [verifyingBatch, setVerifyingBatch] = useState(null);
@@ -99,21 +99,11 @@ export default function Production() {
   };
 
   const handleEditBatch = (batch) => {
-    // Route to the appropriate form based on batch status
-    const status = (batch.status || '').toLowerCase();
-    if (status === 'in_production' || status === 'completed_pending_verification' || status === 'completed') {
-      // In progress or completed batches should go to completion form, not edit
-      setCompletingBatch(batch);
-    } else {
-      // Other statuses use basic edit form
-      setEditingBatch(batch);
-    }
+    // All batches go to the completion form, which handles all statuses
+    setCompletingBatch(batch);
   };
 
-  const handleSaveEdit = async () => {
-    setEditingBatch(null);
-    await load();
-  };
+
 
   const handleDelete = async (id) => {
     await base44.entities.ProductionBatch.delete(id);
@@ -413,13 +403,7 @@ export default function Production() {
         </div>
       </PullToRefresh>
 
-      {editingBatch && (
-        <BatchEditForm
-          batch={editingBatch}
-          onClose={() => setEditingBatch(null)}
-          onSave={handleSaveEdit}
-        />
-      )}
+
 
       {startingBatch && (
         <BatchStartForm
