@@ -57,43 +57,45 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
   const canStart = ['planned', 'ready_for_production'].includes(statusLower);
 
   return (
-    <div className={`bg-card border border-border border-l-4 ${categoryColor} rounded-xl p-5 hover:shadow-sm transition-shadow`}>
-      {/* Header row */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h4 className="font-semibold text-foreground">{batch.product_name}</h4>
+    <div className={`bg-card border border-border border-l-4 ${categoryColor} rounded-xl p-5 hover:shadow-sm transition-shadow overflow-hidden flex flex-col h-full`}>
+      {/* Header row - flex wrap to prevent title/badges collision */}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-1 justify-between">
+          <h4 className="font-semibold text-foreground break-words flex-1 min-w-0">{batch.product_name}</h4>
+          <div className="flex items-center gap-1 shrink-0 ml-2">
             {batch.product_category === 'shot' && (
-              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">Shot</span>
+              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">Shot</span>
             )}
             {batch.is_locked && (
-              <span className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+              <span className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 whitespace-nowrap">
                 <Lock className="h-2.5 w-2.5" /> Locked
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">{batch.batch_id}</p>
         </div>
-        <div className="flex items-center gap-1.5">
-          {canStart && onStart && (
-            <button
-              onClick={() => onStart(batch)}
-              className="text-green-600 hover:text-green-700 p-1"
-              title="Start batch production"
-            >
-              <Play className="h-3.5 w-3.5" />
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground break-words flex-1 min-w-0">{batch.batch_id}</p>
+          <div className="flex items-center gap-1 shrink-0">
+            {canStart && onStart && (
+              <button
+                onClick={() => onStart(batch)}
+                className="text-green-600 hover:text-green-700 p-1 shrink-0"
+                title="Start batch production"
+              >
+                <Play className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button onClick={() => onToggleLock(batch)} className="text-muted-foreground hover:text-foreground p-1 shrink-0" title={batch.is_locked ? "Unlock" : "Lock"}>
+              {batch.is_locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
             </button>
-          )}
-          <button onClick={() => onToggleLock(batch)} className="text-muted-foreground hover:text-foreground p-1" title={batch.is_locked ? "Unlock" : "Lock"}>
-            {batch.is_locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-          </button>
-          <button onClick={() => onEdit(batch)} className="text-primary hover:text-primary/80 p-1">
-            <Edit2 className="h-3.5 w-3.5" />
-          </button>
-          <button onClick={() => onDelete(batch.id)} className="text-red-500 hover:text-red-600 p-1">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-          <StatusBadge status={batch.status} />
+            <button onClick={() => onEdit(batch)} className="text-primary hover:text-primary/80 p-1 shrink-0">
+              <Edit2 className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => onDelete(batch.id)} className="text-red-500 hover:text-red-600 p-1 shrink-0">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+            <StatusBadge status={batch.status} />
+          </div>
         </div>
       </div>
 
@@ -113,13 +115,13 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
         </div>
         <div>
           <p className="text-xs text-muted-foreground">Delivery</p>
-          <p className="text-xs font-medium text-foreground">{batch.delivery_window_label || '—'}</p>
+          <p className="text-xs font-medium text-foreground truncate">{batch.delivery_window_label || '—'}</p>
         </div>
       </div>
 
-      {/* Notes */}
+      {/* Notes - truncated to 2 lines */}
       {batch.notes && (
-        <p className="text-xs text-muted-foreground mt-3 italic">{batch.notes}</p>
+        <p className="text-xs text-muted-foreground mt-3 italic line-clamp-2 break-words">{batch.notes}</p>
       )}
 
       {/* Expand source breakdown */}
