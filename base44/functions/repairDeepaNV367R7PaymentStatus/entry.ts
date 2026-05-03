@@ -77,7 +77,9 @@ Deno.serve(async (req) => {
         customer_app_touched: false,
         stripe_touched: false
       },
-      details: 'Minimal targeted repair. No other fields altered. Loyalty backfill for NV-MON367R7 proceeds separately.'
+      details: {
+        summary: 'Minimal targeted repair. No other fields altered. Loyalty backfill for NV-MON367R7 proceeds separately.'
+      }
     });
 
     return Response.json({
