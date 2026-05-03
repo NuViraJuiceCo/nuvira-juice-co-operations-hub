@@ -2,10 +2,15 @@ import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { X, AlertCircle } from 'lucide-react';
+import moment from 'moment';
 
 export default function BatchCompleteForm({ batch, onClose, onSave }) {
+  const [staffInput, setStaffInput] = useState('');
+
   const [formData, setFormData] = useState({
-    actual_quantity_produced: '',
+    actual_quantity_produced: batch.planned_units || '',
+    staff_on_duty: batch.staff_on_duty || [],
+    actual_end_time: '',
     bottles_produced: '',
     bottles_rejected_or_wasted: '',
     final_usable_quantity: '',
@@ -29,6 +34,16 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
     preventive_steps: '',
     notes: '',
   });
+
+  const handleAddStaff = () => {
+    if (staffInput.trim()) {
+      setFormData(prev => ({ ...prev, staff_on_duty: [...prev.staff_on_duty, staffInput.trim()] }));
+      setStaffInput('');
+    }
+  };
+  const handleRemoveStaff = (idx) => {
+    setFormData(prev => ({ ...prev, staff_on_duty: prev.staff_on_duty.filter((_, i) => i !== idx) }));
+  };
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -38,12 +53,25 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.actual_end_time) {
+      setError('End Time is required.');
+      return;
+    }
+    if (formData.staff_on_duty.length === 0) {
+      setError('At least one staff member on duty is required.');
+      return;
+    }
+    if (formData.pH_result === '' || formData.pH_result === null) {
+      setError('pH Result is required.');
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
       await base44.functions.invoke('completeBatchProduction', {
         batch_id: batch.batch_id,
         ...formData,
+        actual_end_time: formData.actual_end_time ? new Date(formData.actual_end_time).toISOString() : undefined,
       });
       onSave();
     } catch (err) {
@@ -73,14 +101,22 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Batch Info */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="bg-muted/30 rounded-lg p-3 grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm font-medium">Batch ID</label>
-              <p className="text-sm text-muted-foreground mt-1">{batch.batch_id}</p>
+              <p className="text-xs text-muted-foreground">Batch ID</p>
+              <p className="text-sm font-medium">{batch.batch_id}</p>
             </div>
             <div>
-              <label className="text-sm font-medium">Product</label>
-              <p className="text-sm text-muted-foreground mt-1">{batch.product_name}</p>
+              <p className="text-xs text-muted-foreground">Juice / Product</p>
+              <p className="text-sm font-medium">{batch.product_name}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Start Time</p>
+              <p className="text-sm font-medium">{batch.actual_start_time ? moment(batch.actual_start_time).format('MMM D, HH:mm') : '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Planned Qty</p>
+              <p className="text-sm font-medium">{batch.planned_units || '—'}</p>
             </div>
           </div>
 
@@ -88,6 +124,16 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
           <div className="border-t pt-4 space-y-4">
             <h3 className="font-semibold text-sm">Production Output</h3>
             <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">End Time *</label>
+                <input
+                  type="datetime-local"
+                  value={formData.actual_end_time}
+                  onChange={(e) => handleChange('actual_end_time', e.target.value)}
+                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                  required
+                />
+              </div>
               <div>
                 <label className="text-sm font-medium">Actual Quantity Produced *</label>
                 <input
@@ -149,24 +195,50 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
             </div>
           </div>
 
+          {/* Staff on Duty */}
+          <div className="border-t pt-4 space-y-3">
+            <h3 className="font-semibold text-sm">Staff on Duty *</h3>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={staffInput}
+                onChange={(e) => setStaffInput(e.target.value)}
+                placeholder="Add staff member"
+                className="flex-1 p-2 border border-border rounded-lg bg-background text-sm"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddStaff(); } }}
+              />
+              <Button type="button" variant="outline" size="sm" onClick={handleAddStaff}>Add</Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {formData.staff_on_duty.map((s, i) => (
+                <div key={i} className="bg-primary/10 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                  {s}
+                  <button type="button" onClick={() => handleRemoveStaff(i)} className="text-primary hover:text-primary/70">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Compliance */}
           <div className="border-t pt-4 space-y-4">
-            <h3 className="font-semibold text-sm">Compliance Data</h3>
+            <h3 className="font-semibold text-sm">Quality Check</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium">pH Result *</label>
                 <input
                   type="number"
                   step="0.1"
+                  min="0"
+                  max="14"
                   value={formData.pH_result}
                   onChange={(e) => handleChange('pH_result', parseFloat(e.target.value) || '')}
                   className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
-                  placeholder="pH value"
+                  placeholder="0.0 – 14.0"
                   required
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">pH Result *</label>
+                <label className="text-sm font-medium">pH Pass/Fail *</label>
                 <select
                   value={formData.pH_passed_failed}
                   onChange={(e) => handleChange('pH_passed_failed', e.target.value)}
@@ -188,7 +260,7 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Batch Status *</label>
+                <label className="text-sm font-medium">Batch Passed / Failed *</label>
                 <select
                   value={formData.passed_failed}
                   onChange={(e) => handleChange('passed_failed', e.target.value)}

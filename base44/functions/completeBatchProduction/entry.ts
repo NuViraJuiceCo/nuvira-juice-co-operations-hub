@@ -13,6 +13,8 @@ Deno.serve(async (req) => {
     const {
       batch_id,
       actual_quantity_produced,
+      staff_on_duty,
+      actual_end_time,
       bottles_produced,
       bottles_rejected_or_wasted,
       final_usable_quantity,
@@ -75,12 +77,14 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date().toISOString();
+    const endTime = actual_end_time || now;
 
     // Update batch to completed_pending_verification
     const updateData = {
       status: 'completed_pending_verification',
-      actual_end_time: now,
+      actual_end_time: endTime,
       completed_by: user.email,
+      ...(staff_on_duty && staff_on_duty.length > 0 ? { staff_on_duty } : {}),
       actual_quantity_produced: actual_quantity_produced,
       bottles_produced: bottles_produced || null,
       bottles_rejected_or_wasted: bottles_rejected_or_wasted || null,

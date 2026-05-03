@@ -20,6 +20,7 @@ Deno.serve(async (req) => {
       notes,
       actual_start_time_override,
       retrospective_reason,
+      ingredient_lot_notes,
     } = body;
 
     if (!batch_id) {
@@ -53,6 +54,7 @@ Deno.serve(async (req) => {
       sanitizer_log_reference: sanitizer_log_reference || null,
       refrigerator_temp_checked: refrigerator_temp_checked || false,
       notes: notes || '',
+      ingredient_lot_notes: ingredient_lot_notes || null,
       ...(retrospective_reason ? { notes: `[RETROSPECTIVE] ${retrospective_reason}${notes ? ' | ' + notes : ''}` } : {}),
     };
 

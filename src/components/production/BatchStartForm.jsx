@@ -9,13 +9,14 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
   const isRetrospective = batch.production_date < today;
 
   const [formData, setFormData] = useState({
-    staff_on_duty: [],
-    equipment_used: [],
+    staff_on_duty: batch.staff_on_duty || [],
+    equipment_used: batch.equipment_used || [],
     pre_op_sanitation_confirmed: false,
     refrigerator_temp_checked: false,
     notes: '',
     retrospective_reason: '',
     actual_start_time_override: isRetrospective ? `${batch.production_date}T06:00` : '',
+    ingredients_notes: batch.ingredient_lot_notes || '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -68,6 +69,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
       await base44.functions.invoke('startBatchProduction', {
         batch_id: batch.batch_id,
         ...formData,
+        ingredient_lot_notes: formData.ingredients_notes,
         actual_start_time_override: isRetrospective && formData.actual_start_time_override
           ? new Date(formData.actual_start_time_override).toISOString()
           : undefined,
@@ -107,14 +109,37 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium">Batch ID</label>
-            <p className="text-sm text-muted-foreground mt-1">{batch.batch_id}</p>
+          {/* Batch Details */}
+          <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Batch Details</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Batch ID</p>
+                <p className="text-sm font-medium">{batch.batch_id}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Juice / Product</p>
+                <p className="text-sm font-medium">{batch.product_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Category</p>
+                <p className="text-sm font-medium capitalize">{batch.product_category || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Planned Quantity</p>
+                <p className="text-sm font-medium">{batch.planned_units || '—'}</p>
+              </div>
+            </div>
           </div>
 
           <div>
-            <label className="text-sm font-medium">Product</label>
-            <p className="text-sm text-muted-foreground mt-1">{batch.product_name}</p>
+            <label className="text-sm font-medium">Ingredients / Formula Notes</label>
+            <textarea
+              value={formData.ingredients_notes}
+              onChange={(e) => setFormData(prev => ({ ...prev, ingredients_notes: e.target.value }))}
+              className="mt-1 w-full p-2 border border-border rounded-lg bg-background h-14 resize-none text-sm"
+              placeholder="e.g. Cold-pressed apple, ginger, lemon — lot #A214"
+            />
           </div>
 
           {isRetrospective && (
