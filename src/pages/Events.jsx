@@ -30,7 +30,7 @@ export default function Events() {
   const [deleting, setDeleting] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(moment().format('YYYY-MM-DD'));
 
   useEffect(() => {
     base44.entities.Event.list("date", 50).then(data => {
@@ -92,15 +92,25 @@ export default function Events() {
           "Confirmed events appear on the Operations Calendar for team visibility.",
         ]}
       />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Events</h1>
-          <p className="text-muted-foreground mt-1">{events.length} total events</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Events</h1>
+            <p className="text-muted-foreground mt-1">{events.length} total events</p>
+          </div>
+          <Button onClick={() => setIsCreating(true)} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Event</Button>
         </div>
-        <Button onClick={() => {
-          setSelectedDate(moment().format('YYYY-MM-DD'));
-          setIsCreating(true);
-        }} className="gap-2 self-start sm:self-auto"><Plus className="h-4 w-4" /> Add Event</Button>
+
+        <div className="bg-card border border-border rounded-xl p-4">
+          <label className="text-sm font-medium">Selected Event Date</label>
+          <p className="text-xs text-muted-foreground mb-2">New events will default to this date</p>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="w-full sm:w-64 p-2 border border-border rounded-lg bg-background text-sm"
+          />
+        </div>
       </div>
 
       {selected.size > 0 && (
