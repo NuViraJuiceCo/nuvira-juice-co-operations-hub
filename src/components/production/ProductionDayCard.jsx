@@ -53,7 +53,8 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
     ? 'border-l-amber-400'
     : 'border-l-primary';
 
-  const canStart = ['planned', 'ready_for_production'].includes(batch.status);
+  const statusLower = (batch.status || '').toLowerCase();
+  const canStart = ['planned', 'ready_for_production'].includes(statusLower);
 
   return (
     <div className={`bg-card border border-border border-l-4 ${categoryColor} rounded-xl p-5 hover:shadow-sm transition-shadow`}>
