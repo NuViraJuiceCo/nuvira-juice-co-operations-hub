@@ -98,6 +98,17 @@ export default function Production() {
     }
   };
 
+  const handleEditBatch = (batch) => {
+    // Route to the appropriate form based on batch status
+    if (batch.status === 'in_production') {
+      // In progress batches should go to completion form, not edit
+      setCompletingBatch(batch);
+    } else {
+      // Other statuses use basic edit form
+      setEditingBatch(batch);
+    }
+  };
+
   const handleSaveEdit = async () => {
     setEditingBatch(null);
     await load();
@@ -282,15 +293,15 @@ export default function Production() {
                       {sortedDates.map(date => (
                         <div key={date}>
                           <ProductionDayCard
-                            date={date}
-                            batches={grouped[date]}
-                            orders={orders}
-                            today={today}
-                            onEdit={setEditingBatch}
-                            onDelete={handleDelete}
-                            onToggleLock={handleToggleLock}
-                            onStart={setStartingBatch}
-                          />
+                             date={date}
+                             batches={grouped[date]}
+                             orders={orders}
+                             today={today}
+                             onEdit={handleEditBatch}
+                             onDelete={handleDelete}
+                             onToggleLock={handleToggleLock}
+                             onStart={setStartingBatch}
+                           />
                           <IngredientPlanningPanel
                             dateData={ingredientData[date]}
                             loading={ingredientLoading}
