@@ -11,6 +11,7 @@ import BulkActionsBar from "../components/shared/BulkActionsBar";
 import ColumnSorter from "../components/shared/ColumnSorter";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import SelectMobile from "../components/SelectMobile";
+import { getDisplayPaymentStatus } from "../lib/paymentStatusHelper";
 import moment from "moment";
 
 export default function Orders() {
@@ -350,7 +351,7 @@ export default function Orders() {
                     </td>
                     <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.source_channel}</td>
                     <td className="px-5 py-3.5"><StatusBadge status={order.production_status} /></td>
-                    <td className="px-5 py-3.5"><StatusBadge status={order.payment_status} /></td>
+                    <td className="px-5 py-3.5"><StatusBadge status={getDisplayPaymentStatus(order)} /></td>
                     <td className="px-5 py-3.5 text-sm text-muted-foreground">
                       {order.fulfillment_method}{order.address_line1 ? ` · ${order.address_line1.substring(0, 20)}...` : (order.delivery_address ? ` · ${order.delivery_address.substring(0, 20)}...` : " · -")}
                     </td>
@@ -463,13 +464,13 @@ export default function Orders() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <p className="text-muted-foreground">Channel</p>
-                  <p className="font-medium">{order.source_channel}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Payment</p>
-                  <StatusBadge status={order.payment_status} />
+              <div>
+                <p className="text-muted-foreground">Channel</p>
+                <p className="font-medium">{order.source_channel}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Payment</p>
+                <StatusBadge status={getDisplayPaymentStatus(order)} />
                 </div>
                 <div>
                   <p className="text-muted-foreground">Status</p>
