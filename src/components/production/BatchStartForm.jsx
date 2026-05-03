@@ -23,6 +23,10 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
     ingredients_notes: batch.ingredient_lot_notes || '',
     final_ingredients: batch.ingredients_used || [],
     manual_ingredient_override: false,
+    pH_result: '',
+    formula_mixed_time: '',
+    bottling_start_time: '',
+    refrigeration_time: '',
   });
 
   // Auto-fill formula ingredients once recipe loads
@@ -336,6 +340,52 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
               />
               Refrigerator temp checked
             </label>
+          </div>
+
+          <div className="border-t pt-4 space-y-4">
+            <h3 className="font-semibold text-sm">Quality & Timing</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">pH Result</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="14"
+                  value={formData.pH_result}
+                  onChange={(e) => setFormData(prev => ({ ...prev, pH_result: parseFloat(e.target.value) || '' }))}
+                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                  placeholder="0.0 – 14.0"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Formula Mixed Time</label>
+                <input
+                  type="time"
+                  value={formData.formula_mixed_time}
+                  onChange={(e) => setFormData(prev => ({ ...prev, formula_mixed_time: e.target.value }))}
+                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Bottling Start Time</label>
+                <input
+                  type="time"
+                  value={formData.bottling_start_time}
+                  onChange={(e) => setFormData(prev => ({ ...prev, bottling_start_time: e.target.value }))}
+                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Time to Fridge</label>
+                <input
+                  type="time"
+                  value={formData.refrigeration_time}
+                  onChange={(e) => setFormData(prev => ({ ...prev, refrigeration_time: e.target.value }))}
+                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                />
+              </div>
+            </div>
           </div>
 
           <div>
