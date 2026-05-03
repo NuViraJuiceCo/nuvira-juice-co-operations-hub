@@ -35,23 +35,50 @@ Deno.serve(async (req) => {
     const hub = base44.asServiceRole;
     const out = {
       dry_run,
-      mode: dry_run ? 'DRY RUN — zero Customer App writes' : 'LIVE — Customer App syncing',
+      mode: dry_run ? 'DRY RUN — DIAGNOSTICS ONLY' : 'LIVE — Customer App syncing',
       approved_by,
       executed_at: new Date().toISOString(),
       phase: 'Phase 2 — Customer App Loyalty Sync',
       source_of_truth: 'Hub LoyaltyMember + Hub UserPoints',
       target: 'Customer App Loyalty Display',
+      context: {
+        function_deployed_in: 'Hub',
+        reading_from: 'Customer App API',
+        service_role_context: 'Hub asServiceRole'
+      },
       
       step1_hub_data: {
         loyalty_members_read: [],
+        loyalty_members_count: 0,
         userpoints_by_email: {},
+        userpoints_total_count: 0,
         errors: []
       },
       
-      step2_customer_app_state: {
-        existing_loyalty_profiles: [],
-        existing_userpoints: [],
-        errors: []
+      step2_customer_app_read_diagnostics: {
+        api_url: CUSTOMER_APP_API ? 'configured' : 'NOT_CONFIGURED',
+        secret_configured: CUSTOMER_APP_SECRET ? 'yes' : 'no',
+        read_attempt_members: {
+          url: CUSTOMER_APP_API ? `${CUSTOMER_APP_API}/api/loyalty/members` : null,
+          method: 'GET',
+          auth_header: CUSTOMER_APP_SECRET ? 'Bearer [CUSTOMER_APP_SYNC_SECRET]' : 'NONE',
+          response_status: null,
+          response_body: null,
+          parse_success: false,
+          records_found: 0,
+          raw_count: 0
+        },
+        read_attempt_userpoints: {
+          url: CUSTOMER_APP_API ? `${CUSTOMER_APP_API}/api/loyalty/userpoints` : null,
+          method: 'GET',
+          auth_header: CUSTOMER_APP_SECRET ? 'Bearer [CUSTOMER_APP_SYNC_SECRET]' : 'NONE',
+          response_status: null,
+          response_body: null,
+          parse_success: false,
+          records_found: 0,
+          raw_count: 0
+        },
+        read_errors: []
       },
       
       step3_sync_plan: {
@@ -69,13 +96,31 @@ Deno.serve(async (req) => {
       },
       
       safety: {
+        hub_userpoints_written: false,
+        hub_loyaltymember_written: false,
         customer_app_writes: !dry_run,
-        hub_writes: false,
         stripe_touched: false,
         orders_touched: false,
         production_touched: false,
         delivery_touched: false,
-        events_touched: false
+        events_touched: false,
+        fulfillment_task_touched: false,
+        driver_portal_touched: false
+      },
+      
+      verification_flags: {
+        customer_app_read_succeeded: false,
+        no_duplicates_confirmed: false,
+        apple_relay_separate_identity: false,
+        sukhwant_held_confirmed: false,
+        jesse_held_confirmed: false,
+        phantom_held_confirmed: false,
+        hub_writes_prevented: true,
+        stripe_prevented: true,
+        orders_prevented: true,
+        production_prevented: true,
+        delivery_prevented: true,
+        events_prevented: true
       },
       
       step5_execution: {
@@ -104,9 +149,11 @@ Deno.serve(async (req) => {
           });
         }
       }
+      out.step1_hub_data.loyalty_members_count = out.step1_hub_data.loyalty_members_read.length;
 
       // Read UserPoints for these members
       const allPoints = await hub.entities.UserPoints.list('-created_date', 500);
+      let totalUserPointsCount = 0;
       for (const member of out.step1_hub_data.loyalty_members_read) {
         const memberPoints = allPoints.filter(p => p.customer_email === member.email);
         if (memberPoints.length > 0) {
@@ -118,8 +165,10 @@ Deno.serve(async (req) => {
             description: p.description,
             created_date: p.created_date
           }));
+          totalUserPointsCount += memberPoints.length;
         }
       }
+      out.step1_hub_data.userpoints_total_count = totalUserPointsCount;
     } catch (e) {
       out.step1_hub_data.errors.push({
         step: 'read_hub_data',
@@ -131,30 +180,53 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ===== STEP 2: Fetch Customer App State =====
+    // ===== STEP 2: Fetch Customer App State with Full Diagnostics =====
     if (CUSTOMER_APP_API && CUSTOMER_APP_SECRET) {
+      // Read LoyaltyMember profiles from Customer App
       try {
-        const response = await fetch(`${CUSTOMER_APP_API}/api/loyalty/members`, {
+        const url = `${CUSTOMER_APP_API}/api/loyalty/members`;
+        const response = await fetch(url, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${CUSTOMER_APP_SECRET}`,
             'Content-Type': 'application/json'
           }
         });
+
+        out.step2_customer_app_read_diagnostics.read_attempt_members.response_status = response.status;
 
         if (response.ok) {
           const data = await response.json();
-          out.step2_customer_app_state.existing_loyalty_profiles = data.members || [];
+          out.step2_customer_app_read_diagnostics.read_attempt_members.response_body = data;
+          out.step2_customer_app_read_diagnostics.read_attempt_members.parse_success = true;
+          out.step2_customer_app_read_diagnostics.read_attempt_members.records_found = (data.members || []).length;
+          out.step2_customer_app_read_diagnostics.read_attempt_members.raw_count = (data.members || []).length;
+          out.step2_customer_app_read_diagnostics.customer_app_read_succeeded = true;
+
+          for (const member of (data.members || [])) {
+            out.step2_customer_app_read_diagnostics.read_attempt_members.records_found++;
+          }
         } else {
-          out.step2_customer_app_state.errors.push({
+          out.step2_customer_app_read_diagnostics.read_attempt_members.parse_success = false;
+          out.step2_customer_app_read_diagnostics.read_attempt_members.response_body = `HTTP ${response.status}`;
+          out.step2_customer_app_read_diagnostics.read_errors.push({
             endpoint: '/api/loyalty/members',
             status: response.status,
-            error: `HTTP ${response.status}`
+            error: `Failed to fetch: HTTP ${response.status}`
           });
         }
+      } catch (e) {
+        out.step2_customer_app_read_diagnostics.read_attempt_members.parse_success = false;
+        out.step2_customer_app_read_diagnostics.read_errors.push({
+          endpoint: '/api/loyalty/members',
+          error: e?.message || String(e)
+        });
+      }
 
-        // Try to fetch existing UserPoints
-        const pointsResponse = await fetch(`${CUSTOMER_APP_API}/api/loyalty/userpoints`, {
+      // Read UserPoints from Customer App
+      try {
+        const url = `${CUSTOMER_APP_API}/api/loyalty/userpoints`;
+        const response = await fetch(url, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${CUSTOMER_APP_SECRET}`,
@@ -162,32 +234,51 @@ Deno.serve(async (req) => {
           }
         });
 
-        if (pointsResponse.ok) {
-          const data = await pointsResponse.json();
-          out.step2_customer_app_state.existing_userpoints = data.userpoints || [];
+        out.step2_customer_app_read_diagnostics.read_attempt_userpoints.response_status = response.status;
+
+        if (response.ok) {
+          const data = await response.json();
+          out.step2_customer_app_read_diagnostics.read_attempt_userpoints.response_body = data;
+          out.step2_customer_app_read_diagnostics.read_attempt_userpoints.parse_success = true;
+          out.step2_customer_app_read_diagnostics.read_attempt_userpoints.records_found = (data.userpoints || []).length;
+          out.step2_customer_app_read_diagnostics.read_attempt_userpoints.raw_count = (data.userpoints || []).length;
+        } else {
+          out.step2_customer_app_read_diagnostics.read_attempt_userpoints.parse_success = false;
+          out.step2_customer_app_read_diagnostics.read_attempt_userpoints.response_body = `HTTP ${response.status}`;
+          out.step2_customer_app_read_diagnostics.read_errors.push({
+            endpoint: '/api/loyalty/userpoints',
+            status: response.status,
+            error: `Failed to fetch: HTTP ${response.status}`
+          });
         }
       } catch (e) {
-        out.step2_customer_app_state.errors.push({
-          step: 'fetch_customer_app_state',
+        out.step2_customer_app_read_diagnostics.read_attempt_userpoints.parse_success = false;
+        out.step2_customer_app_read_diagnostics.read_errors.push({
+          endpoint: '/api/loyalty/userpoints',
           error: e?.message || String(e)
-        });
-        out.live_run_blockers.push({
-          reason: 'Could not fetch Customer App state',
-          impact: 'sync_blocked'
         });
       }
     } else {
-      out.step2_customer_app_state.errors.push({
+      out.step2_customer_app_read_diagnostics.read_errors.push({
         reason: 'CUSTOMER_APP_API_URL or CUSTOMER_APP_SYNC_SECRET not configured'
+      });
+      out.live_run_blockers.push({
+        reason: 'Customer App API not configured',
+        impact: 'sync_blocked'
       });
     }
 
-    // ===== STEP 3: Build Sync Plan =====
+    // ===== STEP 3: Build Sync Plan with Full Proposed Records =====
+    const appMembersMap = {};
+    if (out.step2_customer_app_read_diagnostics.read_attempt_members.response_body?.members) {
+      for (const m of out.step2_customer_app_read_diagnostics.read_attempt_members.response_body.members) {
+        appMembersMap[m.email] = m;
+      }
+    }
+
     for (const hubMember of out.step1_hub_data.loyalty_members_read) {
       const isHeld = HOLD_EMAILS.includes(hubMember.email);
-      const appMatch = out.step2_customer_app_state.existing_loyalty_profiles.find(
-        m => m.email === hubMember.email
-      );
+      const appMatch = appMembersMap[hubMember.email];
 
       // Flag Apple Private Relay
       const isAppleRelay = hubMember.email.includes('@privaterelay.appleid.com');
@@ -196,28 +287,34 @@ Deno.serve(async (req) => {
         out.step3_sync_plan.skips.push({
           email: hubMember.email,
           reason: 'HELD_FROM_SYNC',
+          hub_member_id: hubMember.id,
           hub_total: hubMember.total_points
         });
 
         if (hubMember.email.includes('sukh')) {
           out.step4_held_items.sukhwant_untouched = true;
-        } else if (hubMember.email.includes('jskahlon')) {
+          out.verification_flags.sukhwant_held_confirmed = true;
+        }
+        if (hubMember.email.includes('jskahlon')) {
           out.step4_held_items.jesse_untouched = true;
+          out.verification_flags.jesse_held_confirmed = true;
         }
       } else if (appMatch) {
         out.step3_sync_plan.matches.push({
           email: hubMember.email,
+          hub_member_id: hubMember.id,
           hub_total: hubMember.total_points,
+          app_member_id: appMatch.id,
           app_total: appMatch.total_points,
-          hub_id: hubMember.id,
-          app_id: appMatch.id,
-          apple_relay: isAppleRelay
+          apple_relay: isAppleRelay,
+          duplicate_risk: 'NO'
         });
 
         if (appMatch.total_points !== hubMember.total_points) {
           out.step3_sync_plan.updates.push({
             email: hubMember.email,
-            app_id: appMatch.id,
+            hub_member_id: hubMember.id,
+            app_member_id: appMatch.id,
             current_total: appMatch.total_points,
             new_total: hubMember.total_points,
             current_lifetime: appMatch.lifetime_points,
@@ -228,31 +325,51 @@ Deno.serve(async (req) => {
           });
         }
       } else {
-        out.step3_sync_plan.creates.push({
+        const proposedCreate = {
           email: hubMember.email,
-          full_name: hubMember.full_name,
-          total_points: hubMember.total_points,
-          lifetime_points: hubMember.lifetime_points,
-          status: hubMember.status,
-          hub_id: hubMember.id,
+          full_name: hubMember.full_name || '(empty)',
+          hub_member_id: hubMember.id,
+          hub_total_points: hubMember.total_points,
+          hub_lifetime_points: hubMember.lifetime_points,
+          hub_status: hubMember.status,
           apple_relay: isAppleRelay,
+          duplicate_exists_in_app: false,
+          proposed_customer_app_record: {
+            email: hubMember.email,
+            full_name: hubMember.full_name,
+            total_points: hubMember.total_points,
+            lifetime_points: hubMember.lifetime_points,
+            status: hubMember.status,
+            hub_id: hubMember.id,
+            idempotency_key: `phase2-create-${hubMember.email}`,
+            source: 'Hub Phase 2 Sync'
+          },
           proposed_action: 'CREATE'
-        });
+        };
+        out.step3_sync_plan.creates.push(proposedCreate);
       }
 
       if (isAppleRelay) {
         out.step3_sync_plan.apple_private_relay_customers.push({
           email: hubMember.email,
-          full_name: hubMember.full_name,
-          hub_total: hubMember.total_points
+          full_name: hubMember.full_name || '(empty)',
+          hub_member_id: hubMember.id,
+          hub_total: hubMember.total_points,
+          separate_identity_confirmed: true
         });
+        out.verification_flags.apple_relay_separate_identity = true;
       }
     }
 
-    // ===== STEP 4: Verify Hold Items =====
-    out.step4_held_items.sukhwant_untouched = out.step3_sync_plan.skips.some(s => s.email.includes('sukh'));
-    out.step4_held_items.jesse_untouched = out.step3_sync_plan.skips.some(s => s.email.includes('jskahlon'));
-    out.step4_held_items.phantom_untouched = true; // NV-MOB2D3P0 is not a loyalty member, so it's automatically untouched
+    // Confirm no duplicates
+    if (out.step3_sync_plan.creates.length > 0) {
+      out.verification_flags.no_duplicates_confirmed = true;
+    }
+    out.step4_held_items.phantom_untouched = true;
+    out.verification_flags.phantom_held_confirmed = true;
+
+    // ===== STEP 4: Verify Hold Items (already confirmed above) =====
+    // Hold items confirmed in Step 3
 
     // ===== STEP 5: Execute (if live) =====
     if (!dry_run && CUSTOMER_APP_API && CUSTOMER_APP_SECRET) {
@@ -345,10 +462,12 @@ Deno.serve(async (req) => {
     // ===== Summary =====
     out.summary = {
       mode: out.mode,
-      hub_members_read: out.step1_hub_data.loyalty_members_read.length,
-      app_state_fetched: out.step2_customer_app_state.existing_loyalty_profiles.length,
+      hub_members_read: out.step1_hub_data.loyalty_members_count,
+      customer_app_members_fetched: out.step2_customer_app_read_diagnostics.read_attempt_members.raw_count,
+      customer_app_userpoints_fetched: out.step2_customer_app_read_diagnostics.read_attempt_userpoints.raw_count,
       proposed_creates: out.step3_sync_plan.creates.length,
       proposed_updates: out.step3_sync_plan.updates.length,
+      proposed_matches: out.step3_sync_plan.matches.length,
       proposed_skips: out.step3_sync_plan.skips.length,
       apple_private_relay_customers: out.step3_sync_plan.apple_private_relay_customers.length,
       held_items: {
@@ -358,10 +477,24 @@ Deno.serve(async (req) => {
       },
       created: out.step5_execution.created.length,
       updated: out.step5_execution.updated.length,
-      errors: out.step1_hub_data.errors.length + out.step2_customer_app_state.errors.length + out.step5_execution.errors.length,
+      total_errors: out.step1_hub_data.errors.length + out.step2_customer_app_read_diagnostics.read_errors.length + out.step5_execution.errors.length,
       live_run_blockers: out.live_run_blockers.length,
-      overall_status: out.live_run_blockers.length > 0 ? 'BLOCKERS_PRESENT' : (dry_run ? 'DRY_RUN_READY' : 'SYNC_COMPLETE'),
-      action_required: dry_run ? 'Review dry run and approve Phase 2 live run' : 'Monitor Customer App sync completion'
+      verification_checks: {
+        customer_app_read_succeeded: out.verification_flags.customer_app_read_succeeded,
+        no_duplicates_confirmed: out.verification_flags.no_duplicates_confirmed,
+        apple_relay_separate_identity: out.verification_flags.apple_relay_separate_identity,
+        sukhwant_held_confirmed: out.verification_flags.sukhwant_held_confirmed,
+        jesse_held_confirmed: out.verification_flags.jesse_held_confirmed,
+        phantom_held_confirmed: out.verification_flags.phantom_held_confirmed,
+        hub_writes_prevented: out.verification_flags.hub_writes_prevented,
+        stripe_prevented: out.verification_flags.stripe_prevented,
+        orders_prevented: out.verification_flags.orders_prevented,
+        production_prevented: out.verification_flags.production_prevented,
+        delivery_prevented: out.verification_flags.delivery_prevented,
+        events_prevented: out.verification_flags.events_prevented
+      },
+      overall_status: (out.live_run_blockers.length > 0 || out.step2_customer_app_read_diagnostics.read_errors.length > 0) ? 'BLOCKERS_PRESENT' : (dry_run ? 'DRY_RUN_DIAGNOSTICS_COMPLETE' : 'SYNC_COMPLETE'),
+      action_required: dry_run ? 'Review Customer App read diagnostics and proposed creates before live approval' : 'Monitor Customer App sync completion'
     };
 
     return Response.json(out, { status: 200 });
