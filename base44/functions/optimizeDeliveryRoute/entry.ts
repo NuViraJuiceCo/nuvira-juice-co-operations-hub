@@ -91,7 +91,9 @@ Deno.serve(async (req) => {
     };
 
     // Map ShopifyOrder to driver portal format — INCLUDE ALL orders, flag missing addresses
+    // HARD GATE: Only paid orders may appear in Driver Portal. pending/unpaid orders must never be exposed.
     const queuedOrders = orders
+      .filter(o => o.payment_status === 'paid')
       .filter(o => !['fulfilled', 'canceled', 'refunded'].includes(o.production_status))
       .map(o => {
         const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');

@@ -339,7 +339,10 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Determine production date for this order
+      // Determine production date for this order.
+      // CRITICAL: assigned_delivery_date is the source of truth — it may have been manually
+      // corrected (e.g. from Saturday to Wednesday). Always derive production date from it.
+      // NEVER use fulfillments[0].production_date as the primary source — it may be stale/past.
       let productionDate;
       if (order.assigned_delivery_date) {
         // Clamp delivery to FIRST_DELIVERY_DATE minimum
