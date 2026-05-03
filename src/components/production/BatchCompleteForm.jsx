@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
-import { X, AlertCircle } from 'lucide-react';
+import { X, AlertCircle, FlaskConical } from 'lucide-react';
 import moment from 'moment';
+import { useProductFormula } from '@/hooks/useProductFormula';
 
 export default function BatchCompleteForm({ batch, onClose, onSave }) {
   const [staffInput, setStaffInput] = useState('');
+  const { recipe, loading: recipeLoading, notFound: recipeNotFound } = useProductFormula(batch.product_name);
+  const [formulaOverridden, setFormulaOverridden] = useState(false);
 
   const [formData, setFormData] = useState({
     actual_quantity_produced: batch.planned_units || '',
@@ -16,6 +19,9 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
     final_usable_quantity: '',
     storage_location: '',
     use_by_date: '',
+    final_ingredients: batch.ingredients_used || [],
+    ingredient_lot_notes: batch.ingredient_lot_notes || '',
+    manual_ingredient_override: false,
     pH_result: '',
     pH_passed_failed: 'passed',
     pH_meter_id: '',
@@ -34,6 +40,13 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
     preventive_steps: '',
     notes: '',
   });
+
+  // Auto-fill formula ingredients once recipe loads
+  useEffect(() => {
+    if (recipe && !formulaOverridden && !batch.ingredients_used?.length) {
+      setFormData(prev => ({ ...prev, final_ingredients: recipe.ingredients || [] }));
+    }
+  }, [recipe]);
 
   const handleAddStaff = () => {
     if (staffInput.trim()) {
@@ -65,6 +78,10 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
       setError('pH Result is required.');
       return;
     }
+    if (formData.final_ingredients.length === 0 && !formData.ingredient_lot_notes.trim()) {
+      setError('Ingredients are required. Please confirm the formula or enter ingredients manually.');
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -72,6 +89,10 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
         batch_id: batch.batch_id,
         ...formData,
         actual_end_time: formData.actual_end_time ? new Date(formData.actual_end_time).toISOString() : undefined,
+        final_ingredients: formData.final_ingredients,
+        default_formula_ingredients: recipe?.ingredients || [],
+        ingredient_lot_notes: formData.ingredient_lot_notes,
+        manual_ingredient_override: formData.manual_ingredient_override || false,
       });
       onSave();
     } catch (err) {
@@ -192,6 +213,83 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
                   className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Formula / Ingredients */}
+          <div className="border-t pt-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm flex items-center gap-1.5">
+                <FlaskConical className="h-3.5 w-3.5 text-primary" />
+                Ingredients
+              </h3>
+              {recipe && !formulaOverridden && (
+                <span className="text-xs text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+                  Auto-filled from Product Formula
+                </span>
+              )}
+              {formulaOverridden && (
+                <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                  Manual Override
+                </span>
+              )}
+              {recipeNotFound && (
+                <span className="text-xs text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                  Formula Missing — Enter Ingredients
+                </span>
+              )}
+              {recipeLoading && (
+                <span className="text-xs text-muted-foreground">Loading formula…</span>
+              )}
+            </div>
+
+            {formData.final_ingredients.length > 0 ? (
+              <div className="bg-muted/30 rounded-lg p-3 space-y-1.5">
+                {formData.final_ingredients.map((ing, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="font-medium">{ing.ingredient_name}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {ing.quantity_oz ? `${ing.quantity_oz} ${ing.unit || 'oz'}` : ''}
+                      {ing.notes ? ` · ${ing.notes}` : ''}
+                    </span>
+                  </div>
+                ))}
+                {!formulaOverridden && (
+                  <button
+                    type="button"
+                    onClick={() => { setFormulaOverridden(true); setFormData(prev => ({ ...prev, manual_ingredient_override: true })); }}
+                    className="text-xs text-amber-600 hover:underline mt-1"
+                  >
+                    Edit ingredients (manual override)
+                  </button>
+                )}
+              </div>
+            ) : recipeNotFound ? (
+              <textarea
+                value={formData.ingredient_lot_notes}
+                onChange={(e) => handleChange('ingredient_lot_notes', e.target.value)}
+                className="w-full p-2 border border-red-300 rounded-lg bg-background h-16 resize-none text-sm"
+                placeholder="Formula not found — manually enter ingredients (e.g. Apple, Ginger, Lemon)"
+              />
+            ) : null}
+
+            {formulaOverridden && (
+              <textarea
+                value={formData.ingredient_lot_notes}
+                onChange={(e) => handleChange('ingredient_lot_notes', e.target.value)}
+                className="w-full p-2 border border-amber-300 rounded-lg bg-background h-16 resize-none text-sm"
+                placeholder="Override ingredients here…"
+              />
+            )}
+
+            <div>
+              <label className="text-xs text-muted-foreground font-medium">Ingredient Lot / Source Notes</label>
+              <textarea
+                value={formData.ingredient_lot_notes}
+                onChange={(e) => handleChange('ingredient_lot_notes', e.target.value)}
+                className="mt-1 w-full p-2 border border-border rounded-lg bg-background h-12 resize-none text-sm"
+                placeholder="Lot #, source farm, prep notes, deviations…"
+              />
             </div>
           </div>
 

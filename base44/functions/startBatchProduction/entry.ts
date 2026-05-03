@@ -21,6 +21,9 @@ Deno.serve(async (req) => {
       actual_start_time_override,
       retrospective_reason,
       ingredient_lot_notes,
+      final_ingredients,
+      default_formula_ingredients,
+      manual_ingredient_override,
     } = body;
 
     if (!batch_id) {
@@ -55,6 +58,9 @@ Deno.serve(async (req) => {
       refrigerator_temp_checked: refrigerator_temp_checked || false,
       notes: notes || '',
       ingredient_lot_notes: ingredient_lot_notes || null,
+      ...(final_ingredients?.length ? { ingredients_used: final_ingredients } : {}),
+      ...(default_formula_ingredients?.length ? { formula_or_recipe_used: default_formula_ingredients.map(i => i.ingredient_name).join(', ') } : {}),
+      ...(manual_ingredient_override ? { ingredient_lot_notes: `[MANUAL OVERRIDE] ${ingredient_lot_notes || ''}` } : {}),
       ...(retrospective_reason ? { notes: `[RETROSPECTIVE] ${retrospective_reason}${notes ? ' | ' + notes : ''}` } : {}),
     };
 
