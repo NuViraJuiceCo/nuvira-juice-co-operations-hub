@@ -100,7 +100,8 @@ export default function Production() {
 
   const handleEditBatch = (batch) => {
     // Route to the appropriate form based on batch status
-    if (batch.status === 'in_production' || batch.status === 'completed_pending_verification' || batch.status === 'completed') {
+    const status = (batch.status || '').toLowerCase();
+    if (status === 'in_production' || status === 'completed_pending_verification' || status === 'completed') {
       // In progress or completed batches should go to completion form, not edit
       setCompletingBatch(batch);
     } else {
