@@ -104,8 +104,8 @@ export default function BatchCompleteForm({ batch, onClose, onSave }) {
   const showCorrectiveActionFields = formData.corrective_action_required;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-card rounded-xl shadow-lg max-w-2xl w-full p-6 my-8">
+    <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-card rounded-xl shadow-lg max-w-2xl w-full p-6 mt-4 mb-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Complete Batch Production</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
