@@ -42,8 +42,8 @@ Deno.serve(async (req) => {
 
     const batch = batches[0];
 
-    // Validate batch is in ready state
-    if (!['planned', 'ready_for_production'].includes(batch.status)) {
+    // Validate batch is in ready state (allow any status for retrospective logging)
+    if (!retrospective_reason && !['planned', 'ready_for_production'].includes(batch.status)) {
       return Response.json({ error: `Cannot start batch with status: ${batch.status}` }, { status: 400 });
     }
 
