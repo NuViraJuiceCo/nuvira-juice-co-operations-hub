@@ -103,13 +103,6 @@ const BALANCE_RECALC_TARGETS = [
     new_total: 100,
     new_lifetime: 0,
     calc: 'earn(+439)+reversal(-439)+welcome(+100)=100|lifetime=0'
-  },
-  {
-    email: 'henrryalbert23@yahoo.com',
-    memberId: null,
-    new_total: 519,
-    new_lifetime: 519,
-    calc: 'NV-MOPV2CIK_backfill(+519)=519'
   }
 ];
 
@@ -494,6 +487,8 @@ Deno.serve(async (req) => {
 
         return Response.json(out, { status: 200 });
       }
+    } else {
+      out.balance_update_allowed = true;
     }
 
     for (const target of BALANCE_RECALC_TARGETS) {
@@ -533,7 +528,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    const henrry = BALANCE_RECALC_TARGETS.find(t => t.email === 'henrryalbert23@yahoo.com');
+    const henrry = {
+      email: 'henrryalbert23@yahoo.com',
+      memberId: null,
+      new_total: 519,
+      new_lifetime: 519,
+      calc: 'NV-MOPV2CIK_backfill(+519)=519'
+    };
 
     try {
       const existing = await hub.entities.LoyaltyMember.filter({
@@ -679,7 +680,7 @@ Deno.serve(async (req) => {
       backfill_orders_created: out.step2_backfill.created.length,
       reversal_transactions_queued: reversalQueued.length,
       reversal_transactions_created: out.step3_reversals.created.length,
-      balances_queued: out.step4_balance_recalc.previewed.length + 1,
+      balances_queued: out.step4_balance_recalc.previewed.length + (out.step5_henrry_member.preview ? 1 : 0),
       balances_updated: out.step4_balance_recalc.updated.length + (out.step5_henrry_member.action_taken ? 1 : 0),
       audit_logs_created: out.step6_audit_log.created.length,
       errors: out.errors.length,
