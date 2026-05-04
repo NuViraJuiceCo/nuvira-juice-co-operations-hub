@@ -796,10 +796,11 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         return null;
       }
     } else {
-      // Single-delivery: use FulfillmentTask.scheduled_date as primary source (not parent order production date)
-      const taskScheduledDate = order.scheduled_date; // From FulfillmentTask, primary source
-      const fallbackDeliveryDate = order.assigned_delivery_date || order.requested_delivery_date;
-      const isAssignedToThisDate = taskScheduledDate === date || (taskScheduledDate === null && fallbackDeliveryDate === date);
+      // Single-delivery: use FulfillmentTask delivery date field hierarchy (not parent order production date)
+      const taskAssignedDeliveryDate = order.assigned_delivery_date; // Primary: assigned_delivery_date from FulfillmentTask
+      const taskScheduledDate = order.scheduled_date; // Secondary: scheduled_date from FulfillmentTask
+      const fallbackDeliveryDate = order.requested_delivery_date; // Fallback: requested_delivery_date from order
+      const isAssignedToThisDate = taskAssignedDeliveryDate === date || taskScheduledDate === date || fallbackDeliveryDate === date;
       
       if (isAssignedToThisDate) {
         const fulfillmentForDate = order.fulfillments?.length > 0 ? order.fulfillments[0] : null;
