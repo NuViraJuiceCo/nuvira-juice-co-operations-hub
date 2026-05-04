@@ -267,7 +267,7 @@ export default function Production() {
                     onClick={() => setShowCompletedBatches(!showCompletedBatches)}
                     className="text-xs font-semibold px-3 py-2 rounded-lg border border-muted bg-muted/30 hover:bg-muted/50 transition-colors text-muted-foreground"
                   >
-                    {showCompletedBatches ? '✓ Hide' : 'Show'} Completed ({hiddenCompletedCount})
+                    {showCompletedBatches ? 'Hide' : 'Show'} Completed ({hiddenCompletedCount})
                   </button>
                 )}
                 <Button

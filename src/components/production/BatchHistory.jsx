@@ -13,15 +13,24 @@ export default function BatchHistory() {
     flavor: '',
     status: 'all',
     passFail: 'all',
-    startDate: moment().subtract(30, 'days').format('YYYY-MM-DD'),
+    startDate: moment().subtract(90, 'days').format('YYYY-MM-DD'),
     endDate: moment().format('YYYY-MM-DD'),
   });
 
   const { data: batches = [], isLoading } = useQuery({
     queryKey: ['batch_history', filters],
     queryFn: async () => {
-      const allBatches = await base44.asServiceRole.entities.ProductionBatch.list('-production_date', 500);
+      // Query ALL ProductionBatch records directly — do not filter by status first
+      const allBatches = await base44.asServiceRole.entities.ProductionBatch.list('-production_date', 1000);
+      
+      // Filter: only include batches with actual historical dates (completed, verified, archived, or locked retrospective)
+      const historyStatuses = ['completed_pending_verification', 'verified_logged', 'archived', 'completed', 'fulfilled'];
+      
       return allBatches.filter(b => {
+        // Only show batches that are truly historical (have one of the historical statuses)
+        const isHistorical = historyStatuses.includes(b.status) || b.is_locked;
+        if (!isHistorical) return false;
+        
         const dateMatch = b.production_date >= filters.startDate && b.production_date <= filters.endDate;
         const idMatch = !filters.batchId || b.batch_id.toLowerCase().includes(filters.batchId.toLowerCase());
         const flavorMatch = !filters.flavor || b.product_name.toLowerCase().includes(filters.flavor.toLowerCase());
@@ -138,7 +147,8 @@ export default function BatchHistory() {
               >
                 <option value="all">All</option>
                 <option value="verified_logged">Verified</option>
-                <option value="completed_pending_verification">Pending</option>
+                <option value="completed_pending_verification">Pending Verification</option>
+                <option value="completed">Completed</option>
                 <option value="archived">Archived</option>
               </select>
             </div>
