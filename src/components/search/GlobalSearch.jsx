@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, X, Loader2 } from 'lucide-react';
 import { globalSearch } from '@/lib/globalSearch';
@@ -85,8 +86,74 @@ export default function GlobalSearch({ mobile = false }) {
 
   const totalCount = Object.values(results).reduce((s, arr) => s + arr.length, 0);
 
-  // ── Mobile: icon button that opens full-screen overlay ──────────────────
+  // ── Mobile: icon button that opens full-screen overlay via portal ────────
   if (mobile) {
+    const overlay = open ? createPortal(
+      <div
+        className="fixed inset-0 bg-background flex flex-col"
+        style={{ zIndex: 9999, paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        {/* Search bar row */}
+        <div
+          className="flex items-center gap-3 px-4 border-b border-border bg-background"
+          style={{ minHeight: '56px' }}
+        >
+          {loading
+            ? <Loader2 className="h-5 w-5 text-muted-foreground animate-spin shrink-0" />
+            : <Search className="h-5 w-5 text-muted-foreground shrink-0" />
+          }
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={handleChange}
+            placeholder="Search orders, customers, batches..."
+            className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground outline-none py-4"
+            style={{ fontSize: '16px' }}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+          />
+          {query ? (
+            <button
+              onClick={clearQuery}
+              className="flex items-center justify-center h-11 w-11 rounded-full bg-muted text-muted-foreground shrink-0"
+              aria-label="Clear"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+          <button
+            onClick={close}
+            className="shrink-0 font-semibold text-primary px-2 py-3"
+            style={{ fontSize: '16px', minWidth: '64px', minHeight: '44px' }}
+            aria-label="Cancel search"
+          >
+            Cancel
+          </button>
+        </div>
+
+        {/* Results — scrollable inside overlay */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <SearchBody
+            query={query}
+            results={displayResults}
+            allResults={results}
+            allCategories={allCategories}
+            activeCategory={activeCategory}
+            setActiveCategory={setActiveCategory}
+            loading={loading}
+            totalCount={totalCount}
+            isAdmin={isAdmin}
+            includeArchived={includeArchived}
+            setIncludeArchived={setIncludeArchived}
+            onClose={close}
+          />
+        </div>
+      </div>,
+      document.body
+    ) : null;
+
     return (
       <>
         <button
@@ -96,66 +163,7 @@ export default function GlobalSearch({ mobile = false }) {
         >
           <Search className="h-5 w-5" />
         </button>
-
-        {open && (
-          <div
-            className="fixed inset-0 z-[60] bg-background flex flex-col"
-            style={{ paddingTop: 'env(safe-area-inset-top)' }}
-          >
-            {/* Search bar row */}
-            <div className="flex items-center gap-3 px-4 border-b border-border" style={{ minHeight: '56px' }}>
-              {loading
-                ? <Loader2 className="h-5 w-5 text-muted-foreground animate-spin shrink-0" />
-                : <Search className="h-5 w-5 text-muted-foreground shrink-0" />
-              }
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={handleChange}
-                placeholder="Search orders, customers, batches..."
-                className="flex-1 bg-transparent text-base text-foreground placeholder:text-muted-foreground outline-none py-4"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck="false"
-              />
-              {query ? (
-                <button
-                  onClick={clearQuery}
-                  className="flex items-center justify-center h-8 w-8 rounded-full bg-muted text-muted-foreground shrink-0"
-                  aria-label="Clear"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              ) : null}
-              <button
-                onClick={close}
-                className="shrink-0 text-base font-semibold text-primary px-2 py-3 min-w-[60px] text-right"
-                aria-label="Cancel search"
-              >
-                Cancel
-              </button>
-            </div>
-
-            {/* Results */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              <SearchBody
-                query={query}
-                results={displayResults}
-                allResults={results}
-                allCategories={allCategories}
-                activeCategory={activeCategory}
-                setActiveCategory={setActiveCategory}
-                loading={loading}
-                totalCount={totalCount}
-                isAdmin={isAdmin}
-                includeArchived={includeArchived}
-                setIncludeArchived={setIncludeArchived}
-                onClose={close}
-              />
-            </div>
-          </div>
-        )}
+        {overlay}
       </>
     );
   }
