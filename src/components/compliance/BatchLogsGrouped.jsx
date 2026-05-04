@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Printer, Download, FileText } from 'lucide-react';
 import moment from 'moment';
 import PrintableLogSheet from './PrintableLogSheet';
+import { resolveIngredients } from '@/lib/batchIngredientResolver';
 
 // Normalize product names so variations group together
 function normalizeProduct(name) {
@@ -56,21 +57,29 @@ function exportProductMonthPDF(productName, monthLabel, logs) {
         ${row('Verified By', log.verified_by || '—')}
         ${row('Verified At', log.verified_at ? moment(log.verified_at).format('MMM D, YYYY HH:mm') : '—')}
         ${log.notes ? `<div style="margin-top:6px;padding:6px;background:#fefce8;border-radius:4px;font-size:10px;color:#78350f;">Notes: ${log.notes}</div>` : ''}
-        ${log.ingredients?.length ? `
-          <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:10px;">
-            <thead><tr style="background:#f9fafb;">
-              <th style="text-align:left;padding:4px 6px;border-bottom:1px solid #e5e7eb;">Ingredient</th>
-              <th style="text-align:left;padding:4px 6px;border-bottom:1px solid #e5e7eb;">Qty</th>
-              <th style="text-align:left;padding:4px 6px;border-bottom:1px solid #e5e7eb;">Unit</th>
-              <th style="text-align:left;padding:4px 6px;border-bottom:1px solid #e5e7eb;">Lot #</th>
-            </tr></thead>
-            <tbody>${log.ingredients.map(ing => `<tr>
-              <td style="padding:3px 6px;">${ing.ingredient_name || '—'}</td>
-              <td style="padding:3px 6px;">${ing.quantity ?? '—'}</td>
-              <td style="padding:3px 6px;">${ing.unit || '—'}</td>
-              <td style="padding:3px 6px;">${ing.lot_number || '—'}</td>
-            </tr>`).join('')}</tbody>
-          </table>` : ''}
+        ${(() => {
+          const { ingredients, source, lotNotes } = resolveIngredients(log);
+          const hasQty = ingredients?.some(i => i.quantity || i.quantity_oz);
+          if (!ingredients?.length) {
+            return `<div style="margin-top:8px;padding:5px 8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:4px;font-size:10px;color:#92400e;">⚠️ Formula not found — manual review required</div>`;
+          }
+          return `<div style="margin-top:8px;">
+            <div style="font-size:9px;font-weight:bold;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Ingredients Used${source ? ` (${source})` : ''}</div>
+            <table style="width:100%;border-collapse:collapse;font-size:10px;">
+              <thead><tr style="background:#f9fafb;">
+                <th style="text-align:left;padding:3px 6px;border-bottom:1px solid #e5e7eb;">Ingredient</th>
+                ${hasQty ? '<th style="text-align:left;padding:3px 6px;border-bottom:1px solid #e5e7eb;">Qty</th><th style="text-align:left;padding:3px 6px;border-bottom:1px solid #e5e7eb;">Unit</th>' : ''}
+                <th style="text-align:left;padding:3px 6px;border-bottom:1px solid #e5e7eb;">Lot #</th>
+              </tr></thead>
+              <tbody>${ingredients.map(ing => `<tr>
+                <td style="padding:3px 6px;">${ing.ingredient_name || '—'}</td>
+                ${hasQty ? `<td style="padding:3px 6px;">${ing.quantity ?? ing.quantity_oz ?? '—'}</td><td style="padding:3px 6px;">${ing.unit || '—'}</td>` : ''}
+                <td style="padding:3px 6px;">${ing.lot_number || '—'}</td>
+              </tr>`).join('')}</tbody>
+            </table>
+            ${lotNotes ? `<div style="margin-top:4px;font-size:9px;color:#6b7280;">Lot/Source Notes: ${lotNotes}</div>` : ''}
+          </div>`;
+        })()}
       </div>`;
     }).join('');
 
@@ -230,7 +239,7 @@ function ProductGroupCard({ productName, logs, monthLabel, onPrintLog }) {
                   variant="outline"
                   size="sm"
                   className="gap-1.5 text-xs shrink-0"
-                  onClick={() => onPrintLog(log)}
+                  onClick={() => onPrintLog({ ...log, source: 'production_batch' })}
                 >
                   <Printer className="w-3.5 h-3.5" />
                   Export Log
@@ -318,9 +327,14 @@ export default function BatchLogsGrouped({ batchLogs, onPrintLog }) {
           </div>
           ${logs.sort((a, b) => (a.date || '') > (b.date || '') ? 1 : -1).map(log => {
             const pf = (log.passed_failed || '').toLowerCase();
+            const { ingredients, source } = resolveIngredients(log);
+            const ingLine = ingredients?.length
+              ? ingredients.map(i => i.ingredient_name).join(', ')
+              : '⚠️ Formula not found';
             return `<div style="border:1px solid #e5e7eb;border-left:3px solid ${pf === 'passed' ? '#16a34a' : pf === 'failed' ? '#dc2626' : '#d1d5db'};border-radius:4px;padding:8px 12px;margin-bottom:6px;font-size:10px;">
               <strong>${log.batch_id || '—'}</strong> — ${moment(log.date || log.log_date).format('MMM D, YYYY')} &nbsp;|&nbsp; ${log.quantity_produced ?? '—'} units &nbsp;|&nbsp; pH: ${log.pH_result ?? '—'} &nbsp;|&nbsp; <span style="font-weight:bold;color:${pf === 'passed' ? '#16a34a' : '#dc2626'}">${(log.passed_failed || '').toUpperCase()}</span>
               ${log.staff_on_duty?.length ? `<br><span style="color:#6b7280;">Staff: ${log.staff_on_duty.join(', ')}</span>` : ''}
+              <br><span style="color:#374151;">Ingredients (${source || 'lookup'}): ${ingLine}</span>
             </div>`;
           }).join('')}
         </div>`;
