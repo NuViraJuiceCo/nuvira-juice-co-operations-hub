@@ -21,7 +21,7 @@ export default function BatchHistory() {
     queryKey: ['batch_history', filters],
     queryFn: async () => {
       // Query ALL ProductionBatch records directly — do not filter by status first
-      const allBatches = await base44.asServiceRole.entities.ProductionBatch.list('-production_date', 1000);
+      const allBatches = await base44.entities.ProductionBatch.list('-production_date', 1000);
       
       // Filter: only include batches with actual historical dates (completed, verified, archived, or locked retrospective)
       const historyStatuses = ['completed_pending_verification', 'verified_logged', 'archived', 'completed', 'fulfilled'];
