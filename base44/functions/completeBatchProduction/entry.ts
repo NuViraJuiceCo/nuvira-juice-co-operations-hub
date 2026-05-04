@@ -55,8 +55,9 @@ Deno.serve(async (req) => {
 
     const batch = batches[0];
 
-    // Validate batch is in_production
-    if (batch.status !== 'in_production') {
+    // Validate batch is not already completed/verified/archived
+    const terminalStatuses = ['completed_pending_verification', 'verified_logged', 'archived'];
+    if (terminalStatuses.includes(batch.status)) {
       return Response.json({ error: `Cannot complete batch with status: ${batch.status}` }, { status: 400 });
     }
 
