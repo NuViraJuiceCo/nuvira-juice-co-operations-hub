@@ -42,15 +42,15 @@ export default function MobileNav() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-3 px-1 min-h-[60px] transition-colors ${
+                className={`relative flex-1 flex flex-col items-center justify-center gap-1.5 py-3.5 px-1 min-h-[68px] transition-colors ${
                   isActive ? "text-primary" : "text-foreground/55"
                 }`}
               >
-                <Icon className={`h-[22px] w-[22px] shrink-0 transition-transform ${isActive ? "scale-110" : ""}`} />
-                <span className={`text-[10px] font-medium leading-tight ${isActive ? "font-semibold" : ""}`}>{item.label}</span>
                 {isActive && (
-                  <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-10 bg-primary rounded-b-full" />
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-12 bg-primary rounded-b-full" />
                 )}
+                <Icon className={`h-[24px] w-[24px] shrink-0 transition-transform ${isActive ? "scale-110" : ""}`} />
+                <span className={`text-[11px] leading-tight ${isActive ? "font-semibold" : "font-medium"}`}>{item.label}</span>
               </Link>
             );
           })}
@@ -58,15 +58,15 @@ export default function MobileNav() {
           {/* More tab */}
           <button
             onClick={() => setMoreOpen(true)}
-            className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-3 px-1 min-h-[60px] transition-colors ${
+            className={`relative flex-1 flex flex-col items-center justify-center gap-1.5 py-3.5 px-1 min-h-[68px] transition-colors ${
               isMoreActive ? "text-primary" : "text-foreground/55"
             }`}
           >
-            <Grid3X3 className={`h-[22px] w-[22px] shrink-0 transition-transform ${isMoreActive ? "scale-110" : ""}`} />
-            <span className={`text-[10px] font-medium leading-tight ${isMoreActive ? "font-semibold" : ""}`}>More</span>
             {isMoreActive && (
-              <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-10 bg-primary rounded-b-full" />
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-12 bg-primary rounded-b-full" />
             )}
+            <Grid3X3 className={`h-[24px] w-[24px] shrink-0 transition-transform ${isMoreActive ? "scale-110" : ""}`} />
+            <span className={`text-[11px] leading-tight ${isMoreActive ? "font-semibold" : "font-medium"}`}>More</span>
           </button>
         </div>
       </nav>

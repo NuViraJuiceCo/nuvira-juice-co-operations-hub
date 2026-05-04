@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/AuthContext";
+import { useRef } from "react";
 import {
   CalendarDays, CalendarCheck, Truck, FlaskConical, ClipboardList,
   ShieldCheck, Package, ShoppingBag, Gift, Handshake, BarChart3,
@@ -54,15 +55,34 @@ const sections = [
 
 export default function MobileMoreSheet({ open, onClose }) {
   const { logout } = useAuth();
+  const dragStartY = useRef(null);
+
+  const handleTouchStart = (e) => {
+    dragStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (dragStartY.current === null) return;
+    const delta = e.changedTouches[0].clientY - dragStartY.current;
+    if (delta > 60) onClose(); // swipe down ≥ 60px closes
+    dragStartY.current = null;
+  };
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
       <SheetContent
         side="bottom"
         className="h-[92vh] p-0 rounded-t-2xl overflow-hidden flex flex-col [&>button]:hidden"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
-        {/* Header — single close control (SheetContent's built-in X is hidden via [&>button]:hidden) */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border shrink-0">
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1 shrink-0">
+          <div className="h-1 w-10 bg-muted-foreground/25 rounded-full" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-2 pb-3 border-b border-border shrink-0">
           <div>
             <h2 className="text-base font-bold text-foreground">More</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Operations, compliance, and admin tools</p>
