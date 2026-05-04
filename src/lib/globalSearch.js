@@ -343,7 +343,7 @@ async function searchSystemAudit(query, isAdmin) {
 
 // ── Main search entry point ───────────────────────────────────────────────────
 export async function globalSearch(query, { isAdmin = false, includeArchived = false } = {}) {
-  if (!query || query.trim().length < 2) return {};
+  if (!query || query.trim().length < 1) return {};
 
   const [pages, orders, batches, compliance, fulfillment, events, loyalty, labels, haccp, alertRecs, system] = await Promise.all([
     searchPages(query),

@@ -60,7 +60,7 @@ export default function GlobalSearch({ mobile = false }) {
   }, [open, mobile]);
 
   const runSearch = useCallback(async (q) => {
-    if (!q || q.trim().length < 2) { setResults({}); setLoading(false); return; }
+    if (!q || q.trim().length < 1) { setResults({}); setLoading(false); return; }
     setLoading(true);
     const res = await globalSearch(q, { isAdmin, includeArchived });
     setResults(res);
@@ -93,22 +93,25 @@ export default function GlobalSearch({ mobile = false }) {
         className="fixed inset-0 bg-background flex flex-col"
         style={{ zIndex: 9999, paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        {/* Search bar row */}
+        {/* Search bar row — entire row is tappable and focuses input */}
         <div
-          className="flex items-center gap-3 px-4 border-b border-border bg-background"
-          style={{ minHeight: '56px' }}
+          className="flex items-center border-b border-border bg-background"
+          style={{ minHeight: '56px', paddingLeft: '16px', paddingRight: '8px' }}
+          onClick={() => inputRef.current?.focus()}
         >
-          {loading
-            ? <Loader2 className="h-5 w-5 text-muted-foreground animate-spin shrink-0" />
-            : <Search className="h-5 w-5 text-muted-foreground shrink-0" />
-          }
+          <div className="shrink-0 mr-3 pointer-events-none">
+            {loading
+              ? <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+              : <Search className="h-5 w-5 text-muted-foreground" />
+            }
+          </div>
           <input
             ref={inputRef}
             value={query}
             onChange={handleChange}
-            placeholder="Search orders, customers, batches..."
-            className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground outline-none py-4"
-            style={{ fontSize: '16px' }}
+            placeholder="Search orders, batches, customers..."
+            className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground outline-none"
+            style={{ fontSize: '16px', minHeight: '52px', width: '100%' }}
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -116,17 +119,18 @@ export default function GlobalSearch({ mobile = false }) {
           />
           {query ? (
             <button
-              onClick={clearQuery}
-              className="flex items-center justify-center h-11 w-11 rounded-full bg-muted text-muted-foreground shrink-0"
+              onClick={(e) => { e.stopPropagation(); clearQuery(); }}
+              className="flex items-center justify-center shrink-0 ml-2"
+              style={{ minHeight: '44px', minWidth: '44px' }}
               aria-label="Clear"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4 text-muted-foreground" />
             </button>
           ) : null}
           <button
-            onClick={close}
-            className="shrink-0 font-semibold text-primary px-2 py-3"
-            style={{ fontSize: '16px', minWidth: '64px', minHeight: '44px' }}
+            onClick={(e) => { e.stopPropagation(); close(); }}
+            className="shrink-0 font-semibold text-primary ml-1"
+            style={{ fontSize: '16px', minWidth: '64px', minHeight: '44px', paddingLeft: '8px', paddingRight: '8px' }}
             aria-label="Cancel search"
           >
             Cancel
@@ -135,7 +139,7 @@ export default function GlobalSearch({ mobile = false }) {
 
         {/* Results — scrollable inside overlay */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          <SearchBody
+          <MobileSearchBody
             query={query}
             results={displayResults}
             allResults={results}
@@ -144,9 +148,6 @@ export default function GlobalSearch({ mobile = false }) {
             setActiveCategory={setActiveCategory}
             loading={loading}
             totalCount={totalCount}
-            isAdmin={isAdmin}
-            includeArchived={includeArchived}
-            setIncludeArchived={setIncludeArchived}
             onClose={close}
           />
         </div>
@@ -158,8 +159,9 @@ export default function GlobalSearch({ mobile = false }) {
       <>
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center justify-center h-9 w-9 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-          aria-label="Search"
+          className="flex items-center justify-center active:bg-muted rounded-lg transition-colors text-muted-foreground"
+          style={{ minHeight: '44px', minWidth: '44px' }}
+          aria-label="Open global search"
         >
           <Search className="h-5 w-5" />
         </button>
@@ -222,8 +224,95 @@ export default function GlobalSearch({ mobile = false }) {
   );
 }
 
+const QUICK_LINKS = [
+  { title: 'Dashboard', route: '/' },
+  { title: 'Orders', route: '/orders' },
+  { title: 'Production', route: '/production' },
+  { title: 'Fulfillment', route: '/fulfillment' },
+  { title: 'Compliance Logs', route: '/compliance' },
+  { title: 'Driver Portal', route: '/driver-portal' },
+  { title: 'Events', route: '/events' },
+  { title: 'Alerts', route: '/alerts' },
+];
+
+function MobileSearchBody({ query, results, allResults, allCategories, activeCategory, setActiveCategory, loading, totalCount, onClose }) {
+  const navigate = useNavigate();
+  const hasQuery = query.trim().length >= 1;
+  const hasResults = totalCount > 0;
+
+  // Empty state — show quick links
+  if (!hasQuery) {
+    return (
+      <div className="overflow-y-auto flex-1 px-4 py-4">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-3">Quick Links</p>
+        <div className="space-y-1">
+          {QUICK_LINKS.map(link => (
+            <button
+              key={link.route}
+              onClick={() => { navigate(link.route); onClose(); }}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-muted/40 hover:bg-muted active:bg-muted/80 text-left transition-colors"
+            >
+              <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-sm font-medium text-foreground">{link.title}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col overflow-hidden flex-1">
+      {/* Category chips */}
+      {hasResults && Object.keys(allResults).length > 1 && (
+        <div className="flex gap-1.5 px-4 py-2 overflow-x-auto border-b border-border" style={{ scrollbarWidth: 'none' }}>
+          {allCategories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                activeCategory === cat
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {cat}{cat === 'All' ? ` (${totalCount})` : allResults[cat] ? ` (${allResults[cat].length})` : ''}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="overflow-y-auto flex-1 p-2">
+        {loading && (
+          <div className="px-3 py-10 text-center">
+            <Loader2 className="h-6 w-6 text-primary animate-spin mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Searching...</p>
+          </div>
+        )}
+        {!loading && !hasResults && (
+          <div className="px-3 py-10 text-center">
+            <Search className="h-8 w-8 text-muted mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No results for "{query}"</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Try a different term</p>
+          </div>
+        )}
+        {!loading && Object.entries(results).map(([category, items]) => (
+          <div key={category} className="mb-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-3 py-1">{category}</p>
+            <div className="space-y-0.5">
+              {items.map(result => (
+                <SearchResultItem key={result.id} result={result} query={query} onClose={onClose} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SearchBody({ query, results, allResults, allCategories, activeCategory, setActiveCategory, loading, totalCount, isAdmin, includeArchived, setIncludeArchived, onClose }) {
-  const hasQuery = query.trim().length >= 2;
+  const hasQuery = query.trim().length >= 1;
   const hasResults = totalCount > 0;
 
   return (
@@ -258,7 +347,7 @@ function SearchBody({ query, results, allResults, allCategories, activeCategory,
         {!hasQuery && (
           <div className="px-3 py-8 text-center">
             <Search className="h-8 w-8 text-muted mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">Type at least 2 characters to search</p>
+            <p className="text-sm text-muted-foreground">Start typing to search</p>
             <p className="text-xs text-muted-foreground/60 mt-1">Orders, batches, customers, pages & more</p>
           </div>
         )}
