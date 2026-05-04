@@ -902,7 +902,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
               </button>
             </div>
             <input type="date" value={date} onChange={e => { setDate(e.target.value); setShowCalendar(false); }}
-              className="w-full bg-background border border-border text-xs text-foreground px-2.5 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary appearance-none" style={{minWidth: 0}} />
+              className="w-full bg-background border border-border text-sm text-foreground px-3 py-2.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer" style={{minWidth: 0}} />
             <p className="text-[9px] text-muted-foreground">
               <span className="font-medium text-foreground">{getDateLabel(date)}</span>
             </p>
