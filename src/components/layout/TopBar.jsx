@@ -5,6 +5,7 @@ import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import moment from "moment";
 import AdminProfileMenu from "./AdminProfileMenu";
+import GlobalSearch from "@/components/search/GlobalSearch";
 
 const alertIcon = { warning: AlertTriangle, success: CheckCircle2, info: Info, urgent: AlertTriangle };
 const alertStyle = {
@@ -176,7 +177,15 @@ export default function TopBar({ onMenuClick }) {
       {/* Brand — mobile */}
       <span className="lg:hidden font-display font-bold text-primary text-lg">nuVira</span>
 
+      {/* Global Search — desktop inline bar (hidden on mobile, handled by icon below) */}
+      <GlobalSearch mobile={false} />
+
       <div className="flex-1" />
+
+      {/* Mobile Search icon */}
+      <div className="lg:hidden">
+        <GlobalSearch mobile={true} />
+      </div>
 
       {/* Alerts Bell */}
       <div className="relative" ref={panelRef}>
