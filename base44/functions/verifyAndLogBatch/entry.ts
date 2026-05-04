@@ -69,21 +69,20 @@ Deno.serve(async (req) => {
       locked: true,
     });
 
-    // 2. If CCP check complete, create CCPMonitoringLog
+    // 2. If CCP check complete, create CCPLog
     let ccpLogId = null;
     if (batch.ccp_check_complete) {
+      const startTime = batch.actual_start_time ? new Date(batch.actual_start_time).toTimeString().slice(0, 5) : '00:00';
       const ccpLog = await base44.asServiceRole.entities.CCPLog.create({
-        date: batch.production_date,
-        time: batch.actual_start_time,
+        log_date: batch.production_date,
+        log_time: startTime,
+        staff_member: (batch.staff_on_duty || [])[0] || user.email,
+        ccp_point: 'pH Control',
         batch_id: batch.batch_id,
-        juice_name: batch.product_name,
-        critical_control_point: 'pH',
-        measurement_type: 'pH',
-        measurement_result: batch.pH_result,
-        within_limit: batch.pH_passed_failed === 'passed',
-        corrective_action_required: batch.corrective_action_required || false,
-        initials: user.email.split('@')[0].toUpperCase().slice(0, 2),
-        source_batch_id: batch.id,
+        measurement: String(batch.pH_result),
+        critical_limit: '< 4.6',
+        result: batch.pH_passed_failed === 'passed' ? 'Pass' : 'Fail',
+        notes: batch.notes || '',
       });
       ccpLogId = ccpLog.id;
     }
@@ -91,17 +90,17 @@ Deno.serve(async (req) => {
     // 3. If corrective action required, create CorrectiveActionLog
     let correctiveLogId = null;
     if (batch.corrective_action_required) {
+      const startTime = batch.actual_start_time ? new Date(batch.actual_start_time).toTimeString().slice(0, 5) : '00:00';
       const correctiveLog = await base44.asServiceRole.entities.CorrectiveActionLog.create({
-        date: batch.production_date,
-        issue_identified: batch.issue_identified,
-        detection_method: batch.detection_method,
-        product_involved: batch.product_involved,
-        action_taken: batch.action_taken,
-        disposed: batch.disposed || false,
-        quantity_disposed: batch.quantity_disposed || null,
-        initials: user.email.split('@')[0].toUpperCase().slice(0, 2),
-        preventive_steps: batch.preventive_steps || '',
-        source_batch_id: batch.id,
+        log_date: batch.production_date,
+        log_time: startTime,
+        staff_member: (batch.staff_on_duty || [])[0] || user.email,
+        issue_type: batch.pH_passed_failed === 'failed' ? 'pH Failure' : 'CCP Failure',
+        issue_description: batch.issue_identified || '',
+        corrective_action_taken: batch.action_taken || '',
+        verified_by: user.email,
+        status: 'Completed',
+        notes: [batch.detection_method, batch.preventive_steps].filter(Boolean).join(' | ') || '',
       });
       correctiveLogId = correctiveLog.id;
     }
@@ -113,17 +112,18 @@ Deno.serve(async (req) => {
       if (batch.sanitizer_log_reference) {
         sanitationLogId = batch.sanitizer_log_reference;
       } else {
+        const startTime = batch.actual_start_time ? new Date(batch.actual_start_time).toTimeString().slice(0, 5) : '00:00';
         const sanitationLog = await base44.asServiceRole.entities.SanitationLog.create({
-          date: batch.production_date,
-          time: batch.actual_start_time,
-          equipment_or_area: 'Production Equipment',
-          sanitizer_used: 'Standard',
-          concentration: 'Per SOP',
-          contact_time_minutes: 15,
+          log_date: batch.production_date,
+          log_time: startTime,
+          staff_member: (batch.staff_on_duty || [])[0] || user.email,
+          area: 'Production Floor',
+          sanitizer_type: 'Standard',
+          sanitizer_level: 'Adequate',
+          cleaned: true,
+          sanitized: true,
           verified_by: user.email,
-          initials: user.email.split('@')[0].toUpperCase().slice(0, 2),
-          notes: 'Pre-production sanitation',
-          source_batch_id: batch.id,
+          notes: 'Pre-production sanitation — auto-logged from batch verification',
         });
         sanitationLogId = sanitationLog.id;
       }
