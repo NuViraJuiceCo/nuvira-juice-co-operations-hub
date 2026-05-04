@@ -1,7 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Menu } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { ArrowLeft, Menu } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
 import AdminProfileMenu from "./AdminProfileMenu";
@@ -14,12 +12,7 @@ export default function TopBar({ onMenuClick }) {
   const navigate = useNavigate();
   const location = useLocation();
   const isRootPage = location.pathname === "/";
-  const [showPanel, setShowPanel] = useState(false);
-  const panelRef = useRef(null);
-
   // (alert subscriptions handled by AlertsDrawer)
-
-
 
   return (
     <header className="sticky top-0 z-30 h-14 bg-background/95 backdrop-blur border-b border-border flex items-center px-3 gap-2">
