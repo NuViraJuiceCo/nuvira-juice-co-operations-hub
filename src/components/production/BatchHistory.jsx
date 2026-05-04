@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Filter, Download, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { Filter, Download, CheckCircle2, AlertCircle, Clock, ChevronDown, ChevronUp, Lock, FileCheck } from 'lucide-react';
 import moment from 'moment';
 
 export default function BatchHistory() {
@@ -65,6 +65,51 @@ export default function BatchHistory() {
     document.body.removeChild(link);
   };
 
+  // Resolve actual quantity produced with fallbacks
+  const resolveQuantity = (batch) => {
+    const candidates = [
+      batch.actual_quantity_produced,
+      batch.actual_units,
+      batch.produced_quantity,
+      batch.quantity_produced,
+      batch.quantity,
+      batch.actual_quantity
+    ];
+    for (const val of candidates) {
+      if (val !== null && val !== undefined && val !== '') return val;
+    }
+    return null;
+  };
+
+  // Resolve planned/needed quantity with fallbacks
+  const resolvePlannedQuantity = (batch) => {
+    const candidates = [
+      batch.planned_quantity,
+      batch.needed_quantity,
+      batch.quantity_needed,
+      batch.expected_quantity,
+      batch.planned_units
+    ];
+    for (const val of candidates) {
+      if (val !== null && val !== undefined && val !== '') return val;
+    }
+    return null;
+  };
+
+  // Count delivered orders
+  const getDeliveryCompletion = (batch) => {
+    if (!batch.order_sources || batch.order_sources.length === 0) return null;
+    const delivered = batch.order_sources.filter(os => os.delivery_status === 'delivered').length;
+    return { delivered, total: batch.order_sources.length };
+  };
+
+  // Resolve ingredients list
+  const resolveIngredients = (batch) => {
+    if (batch.final_batch_ingredients?.length > 0) return batch.final_batch_ingredients;
+    if (batch.ingredients_used?.length > 0) return batch.ingredients_used;
+    return null;
+  };
+
   const getStatusColor = (status) => {
     const colors = {
       planned:                        'bg-muted text-foreground/80 border border-border',
@@ -76,6 +121,238 @@ export default function BatchHistory() {
     };
     return colors[status] || 'bg-muted text-foreground/80 border border-border';
   };
+
+  // Batch card component
+  function BatchDetailCard({ batch }) {
+    const [expanded, setExpanded] = useState({
+      orders: false,
+      ingredients: false,
+      compliance: false,
+      notes: false,
+    });
+
+    const produced = resolveQuantity(batch);
+    const planned = resolvePlannedQuantity(batch);
+    const delivery = getDeliveryCompletion(batch);
+    const ingredients = resolveIngredients(batch);
+    const isRetrospective = batch.notes?.includes('[RETROSPECTIVE]');
+
+    const toggleSection = (section) => {
+      setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
+    };
+
+    return (
+      <Card key={batch.id} className={batch.passed_failed === 'failed' ? 'border-status-danger-border' : ''}>
+        <CardContent className="pt-6">
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <h3 className="font-bold text-foreground text-base">{batch.batch_id}</h3>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${getStatusColor(batch.status)}`}>
+                    {batch.status.replace(/_/g, ' ')}
+                  </span>
+                  {batch.is_locked && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-foreground border border-border flex items-center gap-1">
+                      <Lock className="h-3 w-3" /> Locked
+                    </span>
+                  )}
+                  {isRetrospective && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100/50 text-amber-700 border border-amber-200">
+                      📦 Retrospective
+                    </span>
+                  )}
+                  {batch.compliance_log_id && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100/50 text-green-700 border border-green-200 flex items-center gap-1">
+                      <FileCheck className="h-3 w-3" /> Log
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm font-medium text-foreground/80">
+                  {batch.product_name} <span className="text-foreground/50">•</span> {batch.production_date}
+                </p>
+              </div>
+              {batch.verified_at && (
+                <div className="text-right text-xs text-foreground/60">
+                  <p>Verified {moment(batch.verified_at).fromNow()}</p>
+                  <p>by {batch.verified_by?.split('@')[0] || 'Unknown'}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Quantity Summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-muted/20 rounded-lg text-sm">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Produced</p>
+                <p className="font-semibold text-foreground">{produced ?? 'Not recorded'}</p>
+              </div>
+              {planned && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Planned</p>
+                  <p className="font-semibold text-foreground">{planned}</p>
+                </div>
+              )}
+              {delivery && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Delivered</p>
+                  <p className="font-semibold text-foreground">{delivery.delivered}/{delivery.total}</p>
+                </div>
+              )}
+              {batch.order_sources?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Orders</p>
+                  <p className="font-semibold text-foreground">{batch.order_sources.length}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">pH</p>
+                <p className={`font-semibold ${batch.pH_result ? 'text-foreground' : 'text-foreground/50'}`}>
+                  {batch.pH_result ? `${batch.pH_result} ${batch.pH_passed_failed === 'passed' ? '✓' : '✗'}` : '—'}
+                </p>
+              </div>
+            </div>
+
+            {/* Staff & Timing */}
+            {(batch.staff_on_duty?.length > 0 || batch.actual_start_time || batch.actual_end_time) && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm border-t pt-3">
+                {batch.staff_on_duty?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Staff</p>
+                    <p className="text-foreground text-xs">{batch.staff_on_duty.join(', ')}</p>
+                  </div>
+                )}
+                {batch.actual_start_time && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Started</p>
+                    <p className="font-semibold text-foreground">{moment(batch.actual_start_time).format('MMM D, HH:mm')}</p>
+                  </div>
+                )}
+                {batch.actual_end_time && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Ended</p>
+                    <p className="font-semibold text-foreground">{moment(batch.actual_end_time).format('HH:mm')}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Expandable Sections */}
+            {batch.order_sources?.length > 0 && (
+              <div className="border-t pt-3">
+                <button
+                  onClick={() => toggleSection('orders')}
+                  className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 w-full"
+                >
+                  {expanded.orders ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  Order Sources ({batch.order_sources.length})
+                </button>
+                {expanded.orders && (
+                  <div className="mt-2 ml-4 space-y-2 text-xs border-l border-border pl-3">
+                    {batch.order_sources.map((os, i) => (
+                      <div key={i} className="text-foreground/80">
+                        <p className="font-semibold">{os.order_number}</p>
+                        <p className="text-[11px]">{os.customer_name || os.customer_email}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {os.source_type} • Qty: {os.quantity}
+                          {os.source_item && ` (${os.source_item})`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {ingredients && (
+              <div className="border-t pt-3">
+                <button
+                  onClick={() => toggleSection('ingredients')}
+                  className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 w-full"
+                >
+                  {expanded.ingredients ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  Ingredients / Formula
+                </button>
+                {expanded.ingredients && (
+                  <div className="mt-2 ml-4 space-y-1 text-xs border-l border-border pl-3 text-foreground/80">
+                    {ingredients.map((ing, i) => (
+                      <p key={i} className="text-[11px]">
+                        {ing.ingredient_name}
+                        {ing.quantity_oz && ` (${ing.quantity_oz} ${ing.unit || 'oz'})`}
+                        {ing.lot_number && ` • Lot: ${ing.lot_number}`}
+                      </p>
+                    ))}
+                    {batch.ingredient_lot_notes && (
+                      <p className="text-[10px] text-muted-foreground italic border-t mt-1 pt-1">
+                        {batch.ingredient_lot_notes}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Compliance Details */}
+            {(batch.pH_result || batch.ccp_check_complete || batch.corrective_action_required) && (
+              <div className="border-t pt-3">
+                <button
+                  onClick={() => toggleSection('compliance')}
+                  className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 w-full"
+                >
+                  {expanded.compliance ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  Compliance Details
+                </button>
+                {expanded.compliance && (
+                  <div className="mt-2 ml-4 space-y-1.5 text-xs border-l border-border pl-3">
+                    {batch.pH_result && (
+                      <p className="text-foreground/80">
+                        <span className="font-semibold">pH:</span> {batch.pH_result}
+                        <span className={`ml-2 ${batch.pH_passed_failed === 'passed' ? 'text-status-success' : 'text-status-danger'}`}>
+                          {batch.pH_passed_failed?.toUpperCase() || '—'}
+                        </span>
+                      </p>
+                    )}
+                    {batch.ccp_check_complete && (
+                      <p className="text-foreground/80"><span className="font-semibold">CCP Check:</span> ✓ Complete</p>
+                    )}
+                    {batch.sanitation_verification_complete && (
+                      <p className="text-foreground/80"><span className="font-semibold">Sanitation:</span> ✓ Verified</p>
+                    )}
+                    {batch.corrective_action_required && (
+                      <div className="bg-status-warning-bg border border-status-warning-border p-2 rounded">
+                        <p className="font-semibold text-status-warning text-[10px]">⚠️ Corrective Action</p>
+                        {batch.issue_identified && (
+                          <p className="text-[10px] text-foreground/80 mt-1">{batch.issue_identified}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Notes */}
+            {batch.notes && (
+              <div className="border-t pt-3">
+                <button
+                  onClick={() => toggleSection('notes')}
+                  className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 w-full"
+                >
+                  {expanded.notes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  Notes
+                </button>
+                {expanded.notes && (
+                  <div className="mt-2 ml-4 text-xs text-foreground/80 border-l border-border pl-3">
+                    {batch.notes}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -177,69 +454,7 @@ export default function BatchHistory() {
         ) : batches.length === 0 ? (
           <p className="text-center text-muted-foreground py-8">No batches found for the selected filters.</p>
         ) : (
-          batches.map(batch => (
-            <Card key={batch.id} className={batch.passed_failed === 'failed' ? 'border-status-danger-border' : ''}>
-              <CardContent className="pt-6">
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <h3 className="font-bold text-foreground">{batch.batch_id}</h3>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${getStatusColor(batch.status)}`}>
-                          {batch.status.replace(/_/g, ' ')}
-                        </span>
-                        {batch.passed_failed === 'failed' && (
-                          <AlertCircle className="h-4 w-4 text-status-danger" />
-                        )}
-                        {batch.passed_failed === 'passed' && (
-                          <CheckCircle2 className="h-4 w-4 text-status-success" />
-                        )}
-                      </div>
-                      <p className="text-sm font-medium text-foreground/80">
-                        {batch.product_name} <span className="text-foreground/50">•</span> {batch.production_date}
-                      </p>
-                    </div>
-                    {batch.verified_at && (
-                      <div className="text-right text-xs text-foreground/60">
-                        <p>Verified {moment(batch.verified_at).fromNow()}</p>
-                        <p>by {batch.verified_by?.split('@')[0]}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t text-sm">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Quantity</p>
-                      <p className="font-semibold text-foreground">{batch.actual_quantity_produced || '-'} units</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">pH</p>
-                      <p className="font-semibold text-foreground">{batch.pH_result || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Staff</p>
-                      <p className="font-semibold text-foreground">{(batch.staff_on_duty || []).length} members</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Compliance Log</p>
-                      <p className="font-semibold text-foreground">
-                        {batch.compliance_log_id ? '✓ Created' : '—'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {(batch.corrective_action_required || batch.issue_identified) && (
-                    <div className="pt-2 mt-2 border-t border-status-warning-border bg-status-warning-bg p-2 rounded text-sm">
-                      <p className="font-semibold text-xs mb-1 text-status-warning">⚠️ Corrective Action Required</p>
-                      {batch.issue_identified && (
-                        <p className="text-xs text-foreground/80">{batch.issue_identified}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))
+          batches.map(batch => <BatchDetailCard key={batch.id} batch={batch} />)
         )}
       </div>
 
