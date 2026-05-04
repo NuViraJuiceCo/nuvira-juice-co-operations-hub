@@ -74,7 +74,7 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
           </div>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground break-words flex-1 min-w-0">{batch.batch_id}</p>
+          <p className="text-xs text-muted-foreground truncate flex-1 min-w-0">{batch.batch_id}</p>
           <div className="flex items-center gap-1 shrink-0">
             {canStart && onStart && (
               <button
