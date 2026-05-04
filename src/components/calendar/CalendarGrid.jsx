@@ -1,16 +1,18 @@
 import moment from "moment";
 
 const typeStyles = {
-  production: "bg-amber-100 text-amber-800 border-l-2 border-amber-400",
-  delivery: "bg-cyan-100 text-cyan-800 border-l-2 border-cyan-400",
-  event: "bg-purple-100 text-purple-800 border-l-2 border-purple-400",
-  followup: "bg-rose-100 text-rose-800 border-l-2 border-rose-400",
+  production: "bg-status-info-bg text-status-info border-l-2 border-status-info-border",
+  delivery:   "bg-status-success-bg text-status-success border-l-2 border-status-success-border",
+  event:      "bg-status-admin-bg text-status-admin border-l-2 border-status-admin-border",
+  compliance: "bg-status-warning-bg text-status-warning border-l-2 border-status-warning-border",
+  followup:   "bg-status-danger-bg text-status-danger border-l-2 border-status-danger-border",
 };
 
 const typeIcons = {
   production: "🧃",
   delivery: "🚚",
   event: "🏢",
+  compliance: "📋",
   followup: "📧",
 };
 

@@ -92,12 +92,12 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
-        <StatCard label="New Orders" value={newOrders} icon={ShoppingCart} />
-        <StatCard label="In Production" value={inProduction} icon={Factory} />
-        <StatCard label="To Fulfill" value={toFulfill} icon={Truck} />
-        <StatCard label="Low Stock" value={lowStock} icon={AlertTriangle} />
-        <StatCard label="Revenue" value={`$${revenue.toFixed(2)}`} icon={DollarSign} />
-        <StatCard label="Exceptions" value={0} icon={AlertCircle} />
+        <StatCard label="New Orders" value={newOrders} icon={ShoppingCart} variant={newOrders > 0 ? "warning" : "default"} />
+        <StatCard label="In Production" value={inProduction} icon={Factory} variant="info" />
+        <StatCard label="To Fulfill" value={toFulfill} icon={Truck} variant={toFulfill > 0 ? "warning" : "default"} />
+        <StatCard label="Low Stock" value={lowStock} icon={AlertTriangle} variant={lowStock > 0 ? "danger" : "default"} />
+        <StatCard label="Revenue" value={`$${revenue.toFixed(0)}`} icon={DollarSign} variant="success" />
+        <StatCard label="Exceptions" value={0} icon={AlertCircle} variant="default" />
       </div>
 
       {/* Sync Panel */}
