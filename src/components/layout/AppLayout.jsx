@@ -30,7 +30,7 @@ export default function AppLayout() {
         <div className="flex-1 flex flex-col min-w-0 lg:ml-56">
           <TopBar onMenuClick={() => setSidebarOpen(true)} />
           <main className="flex-1 overflow-y-auto">
-            <div className="p-4 sm:p-6 lg:p-8 pb-24 sm:pb-20 lg:pb-6 min-h-full">
+            <div className="p-4 sm:p-6 lg:p-8 pb-28 sm:pb-28 lg:pb-6 min-h-full">
               <div className="max-w-[1440px] mx-auto w-full">
                 <Outlet />
               </div>
