@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,116 +9,91 @@ import AdminGuide from '@/components/shared/AdminGuide';
 import UnifiedComplianceForm from '@/components/compliance/UnifiedComplianceForm';
 import PrintableLogSheet from '@/components/compliance/PrintableLogSheet';
 import MonthlyBinderExport from '@/components/compliance/MonthlyBinderExport';
+import BatchLogsGrouped from '@/components/compliance/BatchLogsGrouped';
 import { useAuth } from '@/lib/AuthContext';
 import moment from 'moment';
 
 export default function ComplianceLogs() {
-  const queryClient = useQueryClient();
   const [startDate, setStartDate] = useState(moment().subtract(30, 'days').format('YYYY-MM-DD'));
   const [endDate, setEndDate] = useState(moment().format('YYYY-MM-DD'));
   const [logTypeFilter, setLogTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [deletingId, setDeletingId] = useState(null);
   const [printingLog, setPrintingLog] = useState(null);
   const [showMonthlyExport, setShowMonthlyExport] = useState(false);
+  const [activeTab, setActiveTab] = useState('batch');
   const { user } = useAuth();
 
-  const { data: logs = [], isLoading, refetch } = useQuery({
-    queryKey: ['compliance_logs', startDate, endDate, logTypeFilter, statusFilter],
-    queryFn: async () => {
-      // Fetch both ComplianceLog and BatchComplianceLog
-      const [complianceLogs, batchLogs] = await Promise.all([
-        base44.entities.ComplianceLog?.list('-log_date', 500).catch(() => []),
-        base44.entities.BatchComplianceLog?.list('-date', 500).catch(() => []),
-      ]);
-
-      const allLogs = (complianceLogs || []).map(log => ({
-        ...log,
-        source: 'manual',
-      })).concat((batchLogs || []).map(log => ({
-        ...log,
-        log_date: log.date,
-        log_type: 'batch_log',
-        source: 'production_batch',
-      })));
-
-      return allLogs.filter(log => {
-        const matchDate = log.log_date >= startDate && log.log_date <= endDate;
-        const matchType = logTypeFilter === 'all' || log.log_type === logTypeFilter;
-        return matchDate && matchType;
-      }).sort((a, b) => new Date(b.log_date) - new Date(a.log_date));
-    }
+  // Fetch all batch compliance logs (used by the grouped batch tab)
+  const { data: batchLogs = [], isLoading: batchLoading } = useQuery({
+    queryKey: ['batch_compliance_logs'],
+    queryFn: () => base44.entities.BatchComplianceLog?.list('-date', 500).catch(() => []),
   });
 
-  const handleExport = () => {
-    if (logs.length === 0) {
+  // Fetch other compliance logs (manual: temp, pH, CCP, sanitation, corrective)
+  const { data: otherLogs = [], isLoading: otherLoading } = useQuery({
+    queryKey: ['other_compliance_logs', startDate, endDate, logTypeFilter, statusFilter],
+    queryFn: async () => {
+      const logs = await base44.entities.ComplianceLog?.list('-log_date', 500).catch(() => []);
+      return (logs || []).filter(log => {
+        const matchDate = (log.log_date || '') >= startDate && (log.log_date || '') <= endDate;
+        const matchType = logTypeFilter === 'all' || log.log_type === logTypeFilter;
+        const pf = (log.passed_failed || log.status || '').toLowerCase();
+        const matchStatus = statusFilter === 'all'
+          || (statusFilter === 'pass' && (pf === 'pass' || pf === 'passed'))
+          || (statusFilter === 'fail' && (pf === 'fail' || pf === 'failed'))
+          || (statusFilter === 'complete' && pf === 'complete')
+          || (statusFilter === 'incomplete' && pf === 'incomplete');
+        return matchDate && matchType && matchStatus;
+      }).sort((a, b) => new Date(b.log_date) - new Date(a.log_date));
+    },
+  });
+
+  const handleExportOtherLogs = () => {
+    if (otherLogs.length === 0) {
       alert('No logs to export for the selected date range.');
       return;
     }
-
     const rows = [
-      ['Date', 'Time', 'Type', 'Source', 'Staff', 'Batch ID', 'Product / Flavor', 'pH Result', 'Pass/Fail', 'Notes', 'Verified By', 'Verified At']
+      ['Date', 'Time', 'Type', 'Staff', 'Pass/Fail', 'Notes', 'Verified By', 'Verified At']
     ];
-
-    logs.forEach(log => {
+    otherLogs.forEach(log => {
       rows.push([
-        log.log_date || log.date || '',
+        log.log_date || '',
         log.log_time || '',
-        log.log_type || log.source || '',
-        log.source === 'production_batch' ? 'AUTO' : 'MANUAL',
-        log.staff_member || log.verified_by?.split('@')[0] || '',
-        log.batch_id || '',
-        log.juice_flavor || log.product_name || '',
-        log.pH_result ?? '',
+        log.log_type || '',
+        log.staff_member || '',
         log.passed_failed || log.status || '',
         (log.notes || '').replace(/,/g, ';'),
         log.verified_by || '',
         log.verified_at ? moment(log.verified_at).format('YYYY-MM-DD HH:mm') : '',
       ]);
     });
-
     const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `NuVira-Compliance-${startDate}-to-${endDate}.csv`;
+    link.download = `NuVira-OtherLogs-${startDate}-to-${endDate}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  const handleDelete = async (logId) => {
-    // Compliance records should NOT be deleted per audit requirements
-    // Instead, show a warning
-    alert('⚠️ Compliance logs cannot be deleted — they must be preserved for health department audits. Contact admin if a record needs to be marked as void.');
-  };
-
-  const failedLogs = logs.filter(l => l.passed_failed === 'failed' || l.status === 'fail');
-  const passedLogs = logs.filter(l => l.passed_failed === 'passed' || l.status === 'pass');
-
   const getStatusIcon = (log) => {
-    const passFail = log.passed_failed || log.status;
-    if (passFail === 'pass' || passFail === 'passed') {
-      return <CheckCircle2 className="w-4 h-4 text-green-600" />;
-    } else if (passFail === 'fail' || passFail === 'failed') {
-      return <AlertCircle className="w-4 h-4 text-red-600" />;
-    }
+    const pf = (log.passed_failed || log.status || '').toLowerCase();
+    if (pf === 'pass' || pf === 'passed') return <CheckCircle2 className="w-4 h-4 text-green-600" />;
+    if (pf === 'fail' || pf === 'failed') return <AlertCircle className="w-4 h-4 text-red-600" />;
     return <AlertCircle className="w-4 h-4 text-slate-400" />;
   };
 
-  const getLogTypeLabel = (type) => {
-    const labels = {
-      temperature: '🌡️ Temperature',
-      pH: '🧪 pH',
-      CCP: '⚠️ CCP',
-      sanitation: '🧹 Sanitation',
-      corrective_action: '🔧 Corrective Action',
-      daily_checklist: '📋 Daily Checklist',
-      batch_log: '📦 Batch Log'
-    };
-    return labels[type] || type;
+  const LOG_TYPE_LABELS = {
+    temperature: '🌡️ Temperature',
+    pH: '🧪 pH',
+    CCP: '⚠️ CCP',
+    sanitation: '🧹 Sanitation',
+    corrective_action: '🔧 Corrective Action',
+    daily_checklist: '📋 Daily Checklist',
   };
 
   return (
@@ -126,32 +101,29 @@ export default function ComplianceLogs() {
       <AdminGuide
         title="Admin Guide — Compliance Logs"
         steps={[
-          "Use the form at the top to log a new compliance entry — select the log type (Temperature, pH, CCP, Sanitation, etc.).",
-          "Each log requires a date, time, staff member name, and relevant measurements or checklist data.",
-          "Logs with a 'Fail' status will be highlighted in red — these require a Corrective Action entry.",
-          "Use the date range and filters to review logs for a specific period.",
-          "Click 'Export Audit PDF' to generate a downloadable audit packet for health inspections or regulatory review.",
+          "Use the form below to log a new compliance entry (Temperature, pH, CCP, Sanitation, etc.).",
+          "Batch Logs tab shows production batch records grouped by product and month — populated after Verify & Log in Production.",
+          "Logs with a Fail status are highlighted in red and require a Corrective Action entry.",
+          "Use Export Product Month Logs on any product card to get a PDF for just that product.",
+          "Use Export Monthly Binder to generate a full compliance binder for any month.",
         ]}
         tips={[
-          "Temperature logs should be entered twice daily (morning and evening) per food safety standards.",
+          "Temperature logs should be entered twice daily per food safety standards.",
           "Every failed CCP or temperature log must have a corresponding Corrective Action log.",
-          "The Daily Checklist log type covers multiple tasks in one entry — use it to track shift completions.",
+          "Batch logs are read-only and auto-populated when batches are verified in Production.",
         ]}
       />
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-bold">Compliance Logs</h1>
-          <p className="text-muted-foreground mt-1">Temperature, pH, CCP, Sanitation & Corrective Actions</p>
+          <p className="text-muted-foreground mt-1">Temperature, pH, CCP, Sanitation, Batch & Corrective Actions</p>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           <Button variant="outline" onClick={() => setShowMonthlyExport(true)} className="gap-2">
             <BookOpen className="w-4 h-4" />
             Export Monthly Binder
-          </Button>
-          <Button onClick={handleExport} className="gap-2">
-            <Download className="w-4 h-4" />
-            Export All Logs
           </Button>
         </div>
       </div>
@@ -159,143 +131,129 @@ export default function ComplianceLogs() {
       {/* New Log Form */}
       <UnifiedComplianceForm />
 
-      {/* Stats */}
-      {!isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Tabs */}
+      <div className="flex gap-1 border-b">
+        {[
+          { key: 'batch', label: '📦 Batch Logs' },
+          { key: 'other', label: '📋 Other Logs' },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab.key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── BATCH LOGS TAB ── */}
+      {activeTab === 'batch' && (
+        <BatchLogsGrouped
+          batchLogs={batchLogs}
+          onPrintLog={setPrintingLog}
+        />
+      )}
+
+      {/* ── OTHER LOGS TAB ── */}
+      {activeTab === 'other' && (
+        <div className="space-y-4">
+          {/* Export button */}
+          <div className="flex justify-end">
+            <Button onClick={handleExportOtherLogs} variant="outline" className="gap-2" size="sm">
+              <Download className="w-4 h-4" />
+              Export CSV
+            </Button>
+          </div>
+
+          {/* Filters */}
           <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">Total Logs</p>
-              <p className="text-3xl font-bold mt-2">{logs.length}</p>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Filter className="w-4 h-4" /> Filters
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="text-sm font-medium">From Date</label>
+                  <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">To Date</label>
+                  <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Log Type</label>
+                  <select value={logTypeFilter} onChange={e => setLogTypeFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-lg bg-background">
+                    <option value="all">All Types</option>
+                    <option value="temperature">Temperature</option>
+                    <option value="pH">pH</option>
+                    <option value="CCP">CCP</option>
+                    <option value="sanitation">Sanitation</option>
+                    <option value="corrective_action">Corrective Action</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Status</label>
+                  <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="mt-1 w-full p-2 border rounded-lg bg-background">
+                    <option value="all">All Status</option>
+                    <option value="pass">Pass</option>
+                    <option value="fail">Fail</option>
+                    <option value="complete">Complete</option>
+                    <option value="incomplete">Incomplete</option>
+                  </select>
+                </div>
+              </div>
             </CardContent>
           </Card>
-          <Card className="border-green-200">
-            <CardContent className="pt-6">
-              <p className="text-sm text-green-700">Passed</p>
-              <p className="text-3xl font-bold text-green-600 mt-2">{passedLogs.length}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-red-200">
-            <CardContent className="pt-6">
-              <p className="text-sm text-red-700">Failed/Issues</p>
-              <p className="text-3xl font-bold text-red-600 mt-2">{failedLogs.length}</p>
-            </CardContent>
-          </Card>
+
+          {/* Log list */}
+          <div className="space-y-3">
+            {otherLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" />
+              </div>
+            ) : otherLogs.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No logs found for the selected date range.</p>
+            ) : (
+              otherLogs.map(log => (
+                <Card key={log.id} className={log.passed_failed === 'failed' || log.status === 'fail' ? 'border-red-200' : ''}>
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          {getStatusIcon(log)}
+                          <span className="font-semibold">{LOG_TYPE_LABELS[log.log_type] || log.log_type}</span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-muted">{(log.passed_failed || log.status || '').toUpperCase()}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {log.log_date} {log.log_time || ''} · {log.staff_member || '—'} · Shift: {log.shift || '—'}
+                        </p>
+                        {log.notes && <p className="text-sm mt-1.5 text-muted-foreground">📝 {log.notes}</p>}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs ml-4 shrink-0"
+                        onClick={() => setPrintingLog(log)}
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Export PDF
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
         </div>
       )}
 
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-4 h-4" /> Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="text-sm font-medium">From Date</label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">To Date</label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Log Type</label>
-              <select
-                value={logTypeFilter}
-                onChange={(e) => setLogTypeFilter(e.target.value)}
-                className="mt-1 w-full p-2 border rounded-lg"
-              >
-                <option value="all">All Types</option>
-                <option value="batch_log">Batch Logs</option>
-                <option value="temperature">Temperature</option>
-                <option value="pH">pH</option>
-                <option value="CCP">CCP</option>
-                <option value="sanitation">Sanitation</option>
-                <option value="corrective_action">Corrective Action</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="mt-1 w-full p-2 border rounded-lg"
-              >
-                <option value="all">All Status</option>
-                <option value="pass">Pass</option>
-                <option value="fail">Fail</option>
-                <option value="complete">Complete</option>
-                <option value="incomplete">Incomplete</option>
-              </select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Log List */}
-      <div className="space-y-3">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-32">
-            <div className="w-6 h-6 border-2 border-muted border-t-primary rounded-full animate-spin" />
-          </div>
-        ) : logs.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">No logs found for the selected date range.</p>
-        ) : (
-          logs.map(log => (
-            <Card key={log.id} className={log.passed_failed === 'failed' || log.status === 'fail' ? 'border-red-200' : ''}>
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      {getStatusIcon(log)}
-                      <span className="font-semibold">{getLogTypeLabel(log.log_type || log.source)}</span>
-                      <span className="text-xs px-2 py-1 rounded bg-muted">
-                        {log.source === 'production_batch' ? 'AUTO' : 'MANUAL'}
-                      </span>
-                      <span className="text-xs px-2 py-1 rounded bg-muted">
-                        {(log.passed_failed || log.status || '').toUpperCase()}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      {log.log_date} {log.log_time ? log.log_time : ''} • {log.staff_member || (log.verified_by?.split('@')[0]) || '-'} • {log.source === 'production_batch' ? `Batch: ${log.batch_id}` : `Shift: ${log.shift || '-'}`}
-                    </p>
-
-                    {log.juice_flavor && (
-                      <p className="text-sm text-muted-foreground">🧃 {log.juice_flavor} • pH: {log.pH_result || '-'}</p>
-                    )}
-
-                    {log.notes && <p className="text-sm mt-2 text-muted-foreground">📝 {log.notes}</p>}
-                  </div>
-                  <div className="flex items-center gap-2 ml-4 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs"
-                      onClick={() => setPrintingLog(log)}
-                      title="Export only this individual log record"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      Export PDF
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
       {printingLog && (
         <PrintableLogSheet log={printingLog} onClose={() => setPrintingLog(null)} />
       )}
