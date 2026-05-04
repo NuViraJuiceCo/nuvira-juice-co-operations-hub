@@ -16,7 +16,6 @@ export default function ComplianceLogs() {
   const [endDate, setEndDate] = useState(moment().format('YYYY-MM-DD'));
   const [logTypeFilter, setLogTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isExporting, setIsExporting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [printingLog, setPrintingLog] = useState(null);
 
@@ -47,38 +46,43 @@ export default function ComplianceLogs() {
     }
   });
 
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      const response = await base44.functions.invoke('generateAuditPacket', {
-        start_date: startDate,
-        end_date: endDate,
-        log_types: logTypeFilter === 'all' ? null : [logTypeFilter]
-      });
-
-      if (response.data && response.data.file_url) {
-        // Support both data URI and HTTP URLs
-        if (response.data.file_url.startsWith('data:')) {
-          // Data URI: trigger download
-          const link = document.createElement('a');
-          link.href = response.data.file_url;
-          link.download = `NuVira-Compliance-Audit-${startDate}-to-${endDate}.pdf`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        } else {
-          // HTTP URL: open in new tab
-          window.open(response.data.file_url, '_blank');
-        }
-      } else {
-        alert('Error: No PDF generated. Please try again.');
-      }
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert(`Export failed: ${error.message || 'Unknown error'}`);
-    } finally {
-      setIsExporting(false);
+  const handleExport = () => {
+    if (logs.length === 0) {
+      alert('No logs to export for the selected date range.');
+      return;
     }
+
+    const rows = [
+      ['Date', 'Time', 'Type', 'Source', 'Staff', 'Batch ID', 'Product / Flavor', 'pH Result', 'Pass/Fail', 'Notes', 'Verified By', 'Verified At']
+    ];
+
+    logs.forEach(log => {
+      rows.push([
+        log.log_date || log.date || '',
+        log.log_time || '',
+        log.log_type || log.source || '',
+        log.source === 'production_batch' ? 'AUTO' : 'MANUAL',
+        log.staff_member || log.verified_by?.split('@')[0] || '',
+        log.batch_id || '',
+        log.juice_flavor || log.product_name || '',
+        log.pH_result ?? '',
+        log.passed_failed || log.status || '',
+        (log.notes || '').replace(/,/g, ';'),
+        log.verified_by || '',
+        log.verified_at ? moment(log.verified_at).format('YYYY-MM-DD HH:mm') : '',
+      ]);
+    });
+
+    const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `NuVira-Compliance-${startDate}-to-${endDate}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleDelete = async (logId) => {
@@ -136,9 +140,9 @@ export default function ComplianceLogs() {
           <h1 className="text-3xl font-bold">Compliance Logs</h1>
           <p className="text-muted-foreground mt-1">Temperature, pH, CCP, Sanitation & Corrective Actions</p>
         </div>
-        <Button onClick={handleExport} disabled={isExporting} className="gap-2">
+        <Button onClick={handleExport} className="gap-2">
           <Download className="w-4 h-4" />
-          {isExporting ? 'Generating...' : 'Export Audit PDF'}
+          Export CSV
         </Button>
       </div>
 
