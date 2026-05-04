@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { Menu, Bell, X, AlertTriangle, CheckCircle2, Clock, Info, ArrowLeft } from "lucide-react";
+import { Bell, X, AlertTriangle, CheckCircle2, Clock, Info, ArrowLeft, Menu } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import moment from "moment";
+import AdminProfileMenu from "./AdminProfileMenu";
 
 const alertIcon = { warning: AlertTriangle, success: CheckCircle2, info: Info, urgent: AlertTriangle };
 const alertStyle = {
@@ -145,26 +146,32 @@ export default function TopBar({ onMenuClick }) {
   const clearAll = () => setAlerts([]);
 
   return (
-    <header className="sticky top-0 z-30 h-14 bg-background/95 backdrop-blur border-b border-border flex items-center px-4 gap-3">
-      {/* Back Button — mobile, non-root pages */}
-      {!isRootPage && (
+    <header className="sticky top-0 z-30 h-14 bg-background/95 backdrop-blur border-b border-border flex items-center px-3 gap-2">
+      {/* Back button — mobile, non-root pages */}
+      {!isRootPage ? (
         <button
-          onClick={() => navigate(-1)}
-          className="lg:hidden p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          onClick={() => {
+            if (window.history.length > 1) {
+              navigate(-1);
+            } else {
+              navigate("/");
+            }
+          }}
+          className="lg:hidden flex items-center justify-center h-11 w-11 rounded-xl hover:bg-muted active:bg-muted/80 transition-colors text-muted-foreground -ml-1"
           aria-label="Go back"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-6 w-6" />
+        </button>
+      ) : (
+        /* Desktop hamburger — hidden on mobile since bottom nav handles it */
+        <button
+          onClick={onMenuClick}
+          className="hidden lg:flex items-center justify-center h-9 w-9 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
         </button>
       )}
-
-      {/* Desktop hamburger only — mobile nav handled by bottom bar */}
-      <button
-        onClick={onMenuClick}
-        className="hidden lg:hidden p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-        aria-label="Open menu"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
 
       {/* Brand — mobile */}
       <span className="lg:hidden font-display font-bold text-primary text-lg">nuVira</span>
@@ -236,10 +243,8 @@ export default function TopBar({ onMenuClick }) {
         )}
       </div>
 
-      {/* Avatar */}
-      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-semibold flex-shrink-0">
-        {user?.full_name?.split(" ").map(n => n[0]).join("").slice(0, 2) || "?"}
-      </div>
+      {/* Admin profile menu */}
+      <AdminProfileMenu onOpenAlerts={openPanel} />
     </header>
   );
 }
