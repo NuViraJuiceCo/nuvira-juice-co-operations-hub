@@ -34,6 +34,7 @@ export default function Production() {
   const [lastCalc, setLastCalc] = useState(null);
   const [ingredientData, setIngredientData] = useState({}); // date -> dateData
   const [ingredientLoading, setIngredientLoading] = useState(false);
+  const [showCompletedBatches, setShowCompletedBatches] = useState(false);
 
   const loadIngredients = useCallback(async () => {
     setIngredientLoading(true);
@@ -127,6 +128,12 @@ export default function Production() {
 
   const today = moment().format("YYYY-MM-DD");
 
+  // Helper: check if batch is fully completed/verified and delivered
+  const isBatchDone = (b) => {
+    const completedStatuses = ['verified_logged', 'completed', 'archived', 'fulfilled'];
+    return completedStatuses.includes(b.status);
+  };
+
   // Filter
   const filtered = batches.filter(b => {
     if (statusFilter !== "all" && b.status !== statusFilter) return false;
@@ -134,18 +141,27 @@ export default function Production() {
     return true;
   });
 
+  // For "today" tab: hide completed/verified delivered batches by default unless toggle is on
+  const visibleForActiveView = tab === "today" && !showCompletedBatches
+    ? filtered.filter(b => !isBatchDone(b))
+    : filtered;
+
   // Group by production date (include past 7 days + all future existing batches)
-  // Display all existing ProductionBatches regardless of parent order assigned_production_date status
   const sevenDaysAgo = moment(today).subtract(7, 'days').format('YYYY-MM-DD');
   const grouped = _.groupBy(
-    filtered.filter(b => b.production_date >= sevenDaysAgo),
+    visibleForActiveView.filter(b => b.production_date >= sevenDaysAgo),
     b => b.production_date
   );
 
   const sortedDates = Object.keys(grouped).sort();
   // Future batches are those with production_date > today; they display as "scheduled" even if orders lack assigned_production_date
-  const activeBatches = filtered.filter(b => b.status !== "completed" && b.production_date >= today);
+  const activeBatches = visibleForActiveView.filter(b => b.status !== "completed" && b.production_date >= today);
   const totalUnits = activeBatches.reduce((s, b) => s + (b.planned_units || 0), 0);
+  
+  // Count hidden completed batches for the summary chip
+  const hiddenCompletedCount = tab === "today" && !showCompletedBatches
+    ? filtered.filter(b => isBatchDone(b) && b.production_date >= sevenDaysAgo).length
+    : 0;
 
   // Build fulfillment tasks lookup map by order_id for efficient rendering
   const fulfillmentTasksByOrderId = {};
@@ -192,6 +208,11 @@ export default function Production() {
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 {activeBatches.length} active · {totalUnits} units
+                {hiddenCompletedCount > 0 && (
+                  <span className="ml-2 px-2 py-0.5 bg-muted rounded text-xs font-medium">
+                    {hiddenCompletedCount} completed hidden
+                  </span>
+                )}
               </p>
               {lastCalc && (
                 <p className="text-xs text-green-600 mt-1">{lastCalc}</p>
@@ -241,6 +262,14 @@ export default function Production() {
                     <SelectItem value="verified_logged">Verified</SelectItem>
                   </SelectContent>
                 </SelectMobile>
+                {tab === "today" && hiddenCompletedCount > 0 && (
+                  <button
+                    onClick={() => setShowCompletedBatches(!showCompletedBatches)}
+                    className="text-xs font-semibold px-3 py-2 rounded-lg border border-muted bg-muted/30 hover:bg-muted/50 transition-colors text-muted-foreground"
+                  >
+                    {showCompletedBatches ? '✓ Hide' : 'Show'} Completed ({hiddenCompletedCount})
+                  </button>
+                )}
                 <Button
                   onClick={handleRecalculate}
                   disabled={recalculating}
