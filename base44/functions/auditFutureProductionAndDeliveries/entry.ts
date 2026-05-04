@@ -3,41 +3,43 @@ import moment from 'npm:moment-timezone@0.5.45';
 
 const TZ = 'America/Chicago';
 
-// NuVira schedule rules
+// NuVira schedule rules - corrected for immediate upcoming dates
 function calculateExpectedSchedule(orderCreatedAt) {
   const orderTime = moment.tz(orderCreatedAt, TZ);
   const dayOfWeek = orderTime.day(); // 0=Sun, 1=Mon, ..., 6=Sat
   const hour = orderTime.hour();
   
-  // Determine production and delivery dates based on order time
   let productionDate, deliveryDate;
   
-  // Saturday after 2 PM through Tuesday 2 PM -> Tuesday production, Wednesday delivery
+  // Window 1: Saturday after 2 PM through Tuesday 2 PM -> immediate upcoming Tuesday production, Wednesday delivery
   if ((dayOfWeek === 6 && hour >= 14) || (dayOfWeek === 0) || (dayOfWeek === 1) || (dayOfWeek === 2 && hour < 14)) {
-    productionDate = moment.tz(orderTime, TZ).day(2).add(1, 'week').format('YYYY-MM-DD'); // Next Tuesday
-    if (dayOfWeek === 2 && hour < 14) {
-      productionDate = moment.tz(orderTime, TZ).day(2).format('YYYY-MM-DD'); // This Tuesday
+    // Get the immediate upcoming Tuesday (not next week's Tuesday)
+    let targetTuesday = moment.tz(orderTime, TZ).clone().day(2); // Get Tuesday of current week
+    if (targetTuesday.isBefore(orderTime) || targetTuesday.isSame(orderTime, 'day')) {
+      targetTuesday = targetTuesday.add(1, 'week'); // Move to next week's Tuesday only if current Tuesday has passed
     }
-    deliveryDate = moment.tz(productionDate, TZ).add(1, 'day').format('YYYY-MM-DD'); // Wednesday
+    productionDate = targetTuesday.format('YYYY-MM-DD');
+    deliveryDate = targetTuesday.clone().add(1, 'day').format('YYYY-MM-DD'); // Wednesday
   }
-  // Tuesday after 2 PM through Friday 2 PM -> Friday production, Saturday delivery
+  // Window 2: Tuesday after 2 PM through Friday 2 PM -> immediate upcoming Friday production, Saturday delivery
   else if ((dayOfWeek === 2 && hour >= 14) || (dayOfWeek === 3) || (dayOfWeek === 4 && hour < 14)) {
-    productionDate = moment.tz(orderTime, TZ).day(5).format('YYYY-MM-DD'); // This Friday
-    if (dayOfWeek === 2 && hour >= 14 || (dayOfWeek === 3) || (dayOfWeek === 4 && hour < 14)) {
-      const nextFriday = moment.tz(orderTime, TZ).day(5);
-      if (nextFriday.isBefore(moment.tz(orderTime, TZ))) {
-        productionDate = moment.tz(orderTime, TZ).add(1, 'week').day(5).format('YYYY-MM-DD');
-      } else {
-        productionDate = nextFriday.format('YYYY-MM-DD');
-      }
+    // Get the immediate upcoming Friday
+    let targetFriday = moment.tz(orderTime, TZ).clone().day(5); // Get Friday of current week
+    if (targetFriday.isBefore(orderTime) || targetFriday.isSame(orderTime, 'day')) {
+      targetFriday = targetFriday.add(1, 'week'); // Move to next week's Friday only if current Friday has passed
     }
-    deliveryDate = moment.tz(productionDate, TZ).add(1, 'day').format('YYYY-MM-DD'); // Saturday
+    productionDate = targetFriday.format('YYYY-MM-DD');
+    deliveryDate = targetFriday.clone().add(1, 'day').format('YYYY-MM-DD'); // Saturday
   }
-  // Friday after 2 PM through Saturday 2 PM -> Saturday production (if threshold met) or Tuesday production
+  // Window 3: Friday after 2 PM through Saturday 2 PM -> Saturday production (if threshold) or Tuesday production
   else if ((dayOfWeek === 5 && hour >= 14) || (dayOfWeek === 6 && hour < 14)) {
-    // For now, default to Tuesday/Wednesday (threshold check would require order count)
-    productionDate = moment.tz(orderTime, TZ).add(3, 'days').day(2).format('YYYY-MM-DD'); // Next Tuesday
-    deliveryDate = moment.tz(productionDate, TZ).add(1, 'day').format('YYYY-MM-DD'); // Wednesday
+    // For now, default to immediate upcoming Tuesday/Wednesday (threshold check would require order count)
+    let targetTuesday = moment.tz(orderTime, TZ).clone().day(2);
+    if (targetTuesday.isBefore(orderTime) || targetTuesday.isSame(orderTime, 'day')) {
+      targetTuesday = targetTuesday.add(1, 'week');
+    }
+    productionDate = targetTuesday.format('YYYY-MM-DD');
+    deliveryDate = targetTuesday.clone().add(1, 'day').format('YYYY-MM-DD'); // Wednesday
   }
   
   return { productionDate, deliveryDate };
