@@ -777,7 +777,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   // Filter orders to show only fulfillments for the selected date
-  // Compare against scheduled_date on the order (from FulfillmentTask)
+  // Primary source: FulfillmentTask.scheduled_date (do NOT require parent order assigned_production_date)
   let displayOrders = (routeData?.optimized_orders || queuedOrders || []).map(order => {
     // Check if this is a subscription or one-time order
     const fulfillmentMode = order.fulfillment_mode || (order.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
@@ -796,9 +796,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         return null;
       }
     } else {
-      // Single-delivery: check if scheduled_date (from FulfillmentTask) matches selected date
-      const taskScheduledDate = order.scheduled_date || order.assigned_delivery_date || order.requested_delivery_date;
-      const isAssignedToThisDate = taskScheduledDate === date;
+      // Single-delivery: use FulfillmentTask.scheduled_date as primary source (not parent order production date)
+      const taskScheduledDate = order.scheduled_date; // From FulfillmentTask, primary source
+      const fallbackDeliveryDate = order.assigned_delivery_date || order.requested_delivery_date;
+      const isAssignedToThisDate = taskScheduledDate === date || (taskScheduledDate === null && fallbackDeliveryDate === date);
       
       if (isAssignedToThisDate) {
         const fulfillmentForDate = order.fulfillments?.length > 0 ? order.fulfillments[0] : null;

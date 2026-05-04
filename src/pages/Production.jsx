@@ -134,7 +134,8 @@ export default function Production() {
     return true;
   });
 
-  // Group by production date, include past 7 days + future (allows retrospective batch logging)
+  // Group by production date (include past 7 days + all future existing batches)
+  // Display all existing ProductionBatches regardless of parent order assigned_production_date status
   const sevenDaysAgo = moment(today).subtract(7, 'days').format('YYYY-MM-DD');
   const grouped = _.groupBy(
     filtered.filter(b => b.production_date >= sevenDaysAgo),
@@ -142,6 +143,7 @@ export default function Production() {
   );
 
   const sortedDates = Object.keys(grouped).sort();
+  // Future batches are those with production_date > today; they display as "scheduled" even if orders lack assigned_production_date
   const activeBatches = filtered.filter(b => b.status !== "completed" && b.production_date >= today);
   const totalUnits = activeBatches.reduce((s, b) => s + (b.planned_units || 0), 0);
 
