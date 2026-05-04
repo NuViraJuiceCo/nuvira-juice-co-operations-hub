@@ -3,16 +3,26 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { X, AlertCircle, CheckCircle2 } from 'lucide-react';
 
+const resolveBatchQuantity = (b) => {
+  const candidates = [b.actual_quantity_produced, b.actual_units, b.actual_quantity, b.completed_quantity, b.quantity];
+  for (const val of candidates) {
+    if (val !== null && val !== undefined && val !== '') return val;
+  }
+  return null;
+};
+
 export default function BatchVerifyForm({ batch, onClose, onSave }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const resolvedQuantity = resolveBatchQuantity(batch);
 
   // Validate required fields for verification
   const requiredFields = {
     'Production Date': batch.production_date,
     'Batch ID': batch.batch_id,
     'Product': batch.product_name,
-    'Quantity Produced': batch.actual_quantity_produced,
+    'Quantity Produced': resolvedQuantity !== null,
     'Start Time': batch.actual_start_time,
     'End Time': batch.actual_end_time,
     'Staff on Duty': batch.staff_on_duty?.length > 0,
@@ -73,7 +83,7 @@ export default function BatchVerifyForm({ batch, onClose, onSave }) {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Quantity Produced:</span>
-              <span className="font-medium">{batch.actual_quantity_produced}</span>
+              <span className="font-medium">{resolvedQuantity ?? '—'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">pH Result:</span>
