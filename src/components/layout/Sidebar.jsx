@@ -6,7 +6,7 @@ import {
   ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings, Gift, Activity, FlaskConical, Zap, AlertCircle,
 } from "lucide-react";
 import { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 
 const navGroups = [
   {
@@ -48,6 +48,7 @@ const navGroups = [
 export default function Sidebar({ open, onClose }) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const { logout } = useAuth();
 
   const NavLink = ({ item }) => {
     const isActive = location.pathname === item.path;
@@ -82,6 +83,7 @@ export default function Sidebar({ open, onClose }) {
           navGroups={navGroups}
           NavLink={NavLink}
           showCollapseBtn
+          onSignOut={logout}
         />
       </aside>
 
@@ -98,13 +100,14 @@ export default function Sidebar({ open, onClose }) {
           NavLink={NavLink}
           showCloseBtn
           onClose={onClose}
+          onSignOut={logout}
         />
       </aside>
     </>
   );
 }
 
-function SidebarContent({ collapsed, setCollapsed, navGroups, NavLink, showCollapseBtn, showCloseBtn, onClose }) {
+function SidebarContent({ collapsed, setCollapsed, navGroups, NavLink, showCollapseBtn, showCloseBtn, onClose, onSignOut }) {
   return (
     <>
       {/* Logo */}
@@ -158,7 +161,7 @@ function SidebarContent({ collapsed, setCollapsed, navGroups, NavLink, showColla
       {/* Footer */}
       <div className="px-3 pb-4 pt-2 border-t border-sidebar-border">
         <button
-          onClick={() => base44.auth.logout(window.location.origin)}
+          onClick={() => onSignOut(true)}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all w-full"
         >
           <LogOut className="h-[18px] w-[18px] flex-shrink-0" />
