@@ -20,17 +20,62 @@ export function normalizeProductName(name) {
   return n;
 }
 
-// Built-in fallback recipe map (ingredient names only — used when no structured data on log)
+// Built-in recipe map with quantities per 12oz bottle (oz unless noted)
+// quantity_oz = oz per bottle; unit shown on form
 const BUILT_IN_RECIPES = {
-  'Re-Nu': ['Cucumber', 'Green Apple', 'Red Apple', 'Celery', 'Kale'],
-  'Aura': ['Carrot', 'Pineapple', 'Orange', 'Ginger', 'Cucumber', 'Coconut Water', 'Sea Salt'],
-  'Oasis': ['Watermelon', 'Pineapple', 'Orange', 'Lemon', 'Ginger', 'Coconut Water', 'Sea Salt', 'Black Pepper'],
-  'Reset Shot': ['Pineapple', 'Lemon', 'Ginger', 'Black Salt'],
-  'Hydration Shot': ['Coconut Water', 'Lime Juice', 'Honey', 'Mint', 'Pink Salt'],
-  'Radiance Shot': ['Beetroot', 'Red Apple', 'Lemon'],
-  'Orange Juice': ['Orange'],
-  'Pineapple Juice': ['Pineapple'],
-  'Watermelon Juice': ['Watermelon'],
+  'Re-Nu': [
+    { ingredient_name: 'Cucumber',    quantity_oz: 3,   unit: 'oz' },
+    { ingredient_name: 'Green Apple', quantity_oz: 3,   unit: 'oz' },
+    { ingredient_name: 'Red Apple',   quantity_oz: 2,   unit: 'oz' },
+    { ingredient_name: 'Celery',      quantity_oz: 2,   unit: 'oz' },
+    { ingredient_name: 'Kale',        quantity_oz: 2,   unit: 'oz' },
+  ],
+  'Aura': [
+    { ingredient_name: 'Carrot',        quantity_oz: 3,    unit: 'oz' },
+    { ingredient_name: 'Pineapple',     quantity_oz: 2.5,  unit: 'oz' },
+    { ingredient_name: 'Orange',        quantity_oz: 2.5,  unit: 'oz' },
+    { ingredient_name: 'Ginger',        quantity_oz: 0.5,  unit: 'oz' },
+    { ingredient_name: 'Cucumber',      quantity_oz: 2,    unit: 'oz' },
+    { ingredient_name: 'Coconut Water', quantity_oz: 1,    unit: 'oz' },
+    { ingredient_name: 'Sea Salt',      quantity_oz: 0.25, unit: 'oz' },
+  ],
+  'Oasis': [
+    { ingredient_name: 'Watermelon',    quantity_oz: 3.5,  unit: 'oz' },
+    { ingredient_name: 'Pineapple',     quantity_oz: 2,    unit: 'oz' },
+    { ingredient_name: 'Orange',        quantity_oz: 2,    unit: 'oz' },
+    { ingredient_name: 'Lemon',         quantity_oz: 1,    unit: 'oz' },
+    { ingredient_name: 'Ginger',        quantity_oz: 0.5,  unit: 'oz' },
+    { ingredient_name: 'Coconut Water', quantity_oz: 1.5,  unit: 'oz' },
+    { ingredient_name: 'Sea Salt',      quantity_oz: 0.25, unit: 'oz' },
+    { ingredient_name: 'Black Pepper',  quantity_oz: 0.1,  unit: 'oz' },
+  ],
+  'Reset Shot': [
+    { ingredient_name: 'Pineapple',  quantity_oz: 1,    unit: 'oz' },
+    { ingredient_name: 'Lemon',      quantity_oz: 0.75, unit: 'oz' },
+    { ingredient_name: 'Ginger',     quantity_oz: 0.5,  unit: 'oz' },
+    { ingredient_name: 'Black Salt', quantity_oz: 0.1,  unit: 'oz' },
+  ],
+  'Hydration Shot': [
+    { ingredient_name: 'Coconut Water', quantity_oz: 1.5,  unit: 'oz' },
+    { ingredient_name: 'Lime Juice',    quantity_oz: 0.75, unit: 'oz' },
+    { ingredient_name: 'Honey',         quantity_oz: 0.5,  unit: 'oz' },
+    { ingredient_name: 'Mint',          quantity_oz: 0.25, unit: 'oz' },
+    { ingredient_name: 'Pink Salt',     quantity_oz: 0.1,  unit: 'oz' },
+  ],
+  'Radiance Shot': [
+    { ingredient_name: 'Beetroot',   quantity_oz: 1.5,  unit: 'oz' },
+    { ingredient_name: 'Red Apple',  quantity_oz: 0.75, unit: 'oz' },
+    { ingredient_name: 'Lemon',      quantity_oz: 0.5,  unit: 'oz' },
+  ],
+  'Orange Juice': [
+    { ingredient_name: 'Orange', quantity_oz: 12, unit: 'oz' },
+  ],
+  'Pineapple Juice': [
+    { ingredient_name: 'Pineapple', quantity_oz: 12, unit: 'oz' },
+  ],
+  'Watermelon Juice': [
+    { ingredient_name: 'Watermelon', quantity_oz: 12, unit: 'oz' },
+  ],
 };
 
 /**
@@ -61,7 +106,12 @@ export function resolveIngredients(log) {
   const normalized = normalizeProductName(log.juice_flavor || log.product_name);
   const builtIn = BUILT_IN_RECIPES[normalized];
   if (builtIn) {
-    const ingredients = builtIn.map(name => ({ ingredient_name: name }));
+    // Map to standard shape: use quantity_oz as quantity
+    const ingredients = builtIn.map(i => ({
+      ingredient_name: i.ingredient_name,
+      quantity: i.quantity_oz,
+      unit: i.unit,
+    }));
     return { ingredients, source: 'Recipe Lookup', lotNotes };
   }
 
