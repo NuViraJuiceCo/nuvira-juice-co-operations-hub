@@ -592,7 +592,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
 
 function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]); // Default to today
-  const [queuedOrders, setQueuedOrders] = useState(null);
+  const [deliveryScheduleItems, setDeliveryScheduleItems] = useState(null);
   const [routeData, setRouteData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
@@ -642,7 +642,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     setLoading(true);
     setRouteData(null);
     try {
-      // First, resolve all delivery obligations for the date (including futures)
+      // First, resolve all delivery obligations for the date (including futures, subscriptions, paid order fallbacks)
       const resolveRes = await base44.functions.invoke('resolveDeliveryScheduleForDate', { selectedDate });
       const allDeliveries = resolveRes.data?.deliveries || [];
       
@@ -659,16 +659,16 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
               optimize: false,
               orders: readyForRoute 
             });
-            setQueuedOrders(routeRes.data?.orders || allDeliveries);
+            setDeliveryScheduleItems(routeRes.data?.orders || allDeliveries);
           } catch (routeErr) {
             console.warn('Route optimization skipped, using resolved orders:', routeErr.message);
-            setQueuedOrders(allDeliveries);
+            setDeliveryScheduleItems(allDeliveries);
           }
         } else {
-          setQueuedOrders(allDeliveries);
+          setDeliveryScheduleItems(allDeliveries);
         }
       } else {
-        setQueuedOrders([]);
+        setDeliveryScheduleItems([]);
       }
     } catch {
       toast.error('Failed to load delivery queue');
@@ -678,11 +678,14 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   const optimizeRoute = async () => {
-    if (!queuedOrders?.length) return;
+    const readyForRoute = (deliveryScheduleItems || []).filter(d => 
+      ['packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery', 'ready_for_route', 'out_for_delivery'].includes((d.status || '').toLowerCase())
+    );
+    if (!readyForRoute?.length) return;
     setOptimizing(true);
     setManualOrder(null); // Reset manual overrides when re-optimizing
     try {
-      const res = await base44.functions.invoke('optimizeDeliveryRoute', { date: date || undefined, optimize: true });
+      const res = await base44.functions.invoke('optimizeDeliveryRoute', { date: date || undefined, optimize: true, orders: readyForRoute });
       setRouteData(res.data);
       
       const stats = res.data?.route_stats;
@@ -819,14 +822,14 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     return completedStatuses.includes((task.status || '').toLowerCase());
   };
 
-  // Separate all tasks into readiness buckets
-  const allTasksForDate = (queuedOrders || []).filter(task => resolveTaskDeliveryDate(task) === date);
+  // Separate all delivery obligations into readiness buckets
+  const allTasksForDate = (deliveryScheduleItems || []).filter(task => resolveTaskDeliveryDate(task) === date);
   const readyForRouteOrders = allTasksForDate.filter(isRouteEligible);
   const scheduledNotReadyOrders = allTasksForDate.filter(task => !isRouteEligible(task) && !isCompleted(task));
   const completedOrders = allTasksForDate.filter(isCompleted);
   
   // For display, combine all non-completed tasks, then organize by readiness section
-  const displayOrders = allTasksForDate.filter(task => !isCompleted(task));
+  let displayOrders = allTasksForDate.filter(task => !isCompleted(task));
 
   if (manualOrder) {
     displayOrders = manualOrder;
@@ -936,7 +939,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
             className="w-full py-3.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
             {optimizing
               ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Optimizing...</>
-              : <><Route className="w-4 h-4" /> Optimize Route ({readyForRouteOrders.length} ready)</>
+              : <><Route className="w-4 h-4" /> Optimize Route ({readyCount} ready)</>
             }
           </button>
         </div>
