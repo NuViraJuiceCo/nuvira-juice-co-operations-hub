@@ -153,7 +153,7 @@ export default function Production() {
   return (
     <>
       <PullToRefresh onRefresh={load}>
-        <div className="space-y-6 p-4 sm:p-6 lg:p-8 w-full overflow-x-hidden pb-24 sm:pb-20 lg:pb-6">
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8 w-full overflow-x-hidden" style={{ paddingBottom: 'calc(110px + env(safe-area-inset-bottom))' }}>
           <AdminGuide
             title="Admin Guide — Production Planning"
             steps={[
@@ -182,48 +182,27 @@ export default function Production() {
               )}
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 border-b">
-              <button
-                onClick={() => setTab("today")}
-                className={`px-3 py-2 text-sm font-medium border-b-2 ${
-                  tab === "today"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                📅 Today & Upcoming
-              </button>
-              <button
-                onClick={() => setTab("in_progress")}
-                className={`px-3 py-2 text-sm font-medium border-b-2 ${
-                  tab === "in_progress"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                ⚙️ In Progress
-              </button>
-              <button
-                onClick={() => setTab("verify")}
-                className={`px-3 py-2 text-sm font-medium border-b-2 ${
-                  tab === "verify"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                ✓ Needs Verification
-              </button>
-              <button
-                onClick={() => setTab("history")}
-                className={`px-3 py-2 text-sm font-medium border-b-2 ${
-                  tab === "history"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                📋 History
-              </button>
+            {/* Tabs — horizontally scrollable on mobile */}
+            <div className="flex gap-0 border-b overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+              {[
+                { id: "today", mobileLabel: "📅 Today", desktopLabel: "📅 Today & Upcoming" },
+                { id: "in_progress", mobileLabel: "⚙️ In Progress", desktopLabel: "⚙️ In Progress" },
+                { id: "verify", mobileLabel: "✓ Verify", desktopLabel: "✓ Needs Verification" },
+                { id: "history", mobileLabel: "📋 History", desktopLabel: "📋 History" },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`shrink-0 whitespace-nowrap px-3 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors ${
+                    tab === t.id
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className="sm:hidden">{t.mobileLabel}</span>
+                  <span className="hidden sm:inline">{t.desktopLabel}</span>
+                </button>
+              ))}
             </div>
 
             {tab !== "history" && (

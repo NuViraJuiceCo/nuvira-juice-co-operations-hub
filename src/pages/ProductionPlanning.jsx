@@ -64,11 +64,11 @@ export default function ProductionPlanning() {
   };
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-5 p-4 sm:p-6 lg:p-8 w-full overflow-x-hidden" style={{ paddingBottom: 'calc(110px + env(safe-area-inset-bottom))' }}>
       {/* Header */}
       <div>
         <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
-        <p className="text-muted-foreground mt-1">Calculate exactly how much produce to purchase based on incoming orders and your current inventory.</p>
+        <p className="text-sm text-muted-foreground mt-1">Calculate exactly how much produce to purchase based on incoming orders and your current inventory.</p>
       </div>
 
       <AdminGuide
@@ -87,21 +87,21 @@ export default function ProductionPlanning() {
         ]}
       />
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-muted p-1 rounded-lg w-fit">
+      {/* Tabs — scrollable on mobile */}
+      <div className="flex gap-1 bg-muted p-1 rounded-lg overflow-x-auto scrollbar-none">
         {TABS.map(tab => {
           const Icon = tab.icon;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
                 activeTab === tab.id
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               {tab.label}
             </button>
           );
@@ -117,19 +117,20 @@ export default function ProductionPlanning() {
       {activeTab === "planner" && (
         <div className="space-y-6">
           {/* Date Filter */}
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+          <div className="bg-card border border-border rounded-xl p-4 sm:p-5">
+            <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
               <Calendar className="h-4 w-4 text-primary" />
               Select Production Date Range
             </h2>
-            <div className="flex flex-wrap items-end gap-4">
+            {/* Date inputs — stack on mobile, row on desktop */}
+            <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end sm:gap-4">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">From</label>
                 <Input
                   type="date"
                   value={dateFrom}
                   onChange={e => setDateFrom(e.target.value)}
-                  className="w-44 bg-green-50 border-green-200 text-black"
+                  className="w-full sm:w-44 bg-green-50 border-green-200 text-black"
                 />
               </div>
               <div className="space-y-1">
@@ -138,40 +139,22 @@ export default function ProductionPlanning() {
                   type="date"
                   value={dateTo}
                   onChange={e => setDateTo(e.target.value)}
-                  className="w-44 bg-green-50 border-green-200 text-black"
+                  className="w-full sm:w-44 bg-green-50 border-green-200 text-black"
                 />
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={setToday}
-                  className="text-xs px-3 py-2 rounded-md border border-border hover:bg-muted transition-colors text-muted-foreground"
-                >
-                  Today
-                </button>
-                <button
-                  onClick={setThisWeek}
-                  className="text-xs px-3 py-2 rounded-md border border-border hover:bg-muted transition-colors text-muted-foreground"
-                >
-                  This Week
-                </button>
-                <button
-                  onClick={() => { setDateFrom(""); setDateTo(""); }}
-                  className="text-xs px-3 py-2 rounded-md border border-border hover:bg-muted transition-colors text-muted-foreground"
-                >
-                  All Active
-                </button>
-              </div>
-              <Button onClick={handleCalculate} disabled={loading} className="gap-2">
-                {loading ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Calculator className="h-4 w-4" />
-                )}
+            </div>
+            {/* Quick filters + calculate */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button onClick={setToday} className="text-xs px-3 py-2 rounded-md border border-border hover:bg-muted transition-colors text-muted-foreground">Today</button>
+              <button onClick={setThisWeek} className="text-xs px-3 py-2 rounded-md border border-border hover:bg-muted transition-colors text-muted-foreground">This Week</button>
+              <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-xs px-3 py-2 rounded-md border border-border hover:bg-muted transition-colors text-muted-foreground">All Active</button>
+              <Button onClick={handleCalculate} disabled={loading} className="gap-2 ml-auto sm:ml-0">
+                {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
                 {loading ? "Calculating..." : "Calculate Needs"}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-3">
-              Filter by <strong>production date</strong>. Leave blank to see all upcoming production days. Select a range (e.g. May 1–May 1) to see only that production run's needs.
+              Filter by <strong>production date</strong>. Leave blank for all upcoming. Select a range to see a specific run's needs.
             </p>
           </div>
 
@@ -203,6 +186,6 @@ export default function ProductionPlanning() {
 
       {/* Ingredient Yields Tab */}
       {activeTab === "yields" && <YieldManager />}
-      </div>
-      );
-      }
+    </div>
+  );
+}
