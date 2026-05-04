@@ -1,5 +1,6 @@
 import React from 'react';
 import moment from 'moment';
+import { resolveIngredients } from '@/lib/batchIngredientResolver';
 
 const LOG_TITLES = {
   temperature: 'Temperature Log',
@@ -125,30 +126,52 @@ export default function PrintableLogSheet({ log, onClose }) {
               <Field label="Staff on Duty" value={log.staff_on_duty?.length ? log.staff_on_duty.join(', ') : null} />
             </Section>
 
-            {log.ingredients?.length > 0 && (
-              <Section title="Ingredients Used">
-                <table className="w-full text-sm border border-gray-200 rounded">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="text-left px-2 py-1.5 text-xs text-gray-500 font-semibold">Ingredient</th>
-                      <th className="text-left px-2 py-1.5 text-xs text-gray-500 font-semibold">Qty</th>
-                      <th className="text-left px-2 py-1.5 text-xs text-gray-500 font-semibold">Unit</th>
-                      <th className="text-left px-2 py-1.5 text-xs text-gray-500 font-semibold">Lot #</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {log.ingredients.map((ing, i) => (
-                      <tr key={i} className="border-t border-gray-100">
-                        <td className="px-2 py-1">{ing.ingredient_name}</td>
-                        <td className="px-2 py-1">{ing.quantity ?? '—'}</td>
-                        <td className="px-2 py-1">{ing.unit ?? '—'}</td>
-                        <td className="px-2 py-1">{ing.lot_number ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </Section>
-            )}
+            {(() => {
+              const { ingredients, source, lotNotes } = resolveIngredients(log);
+              const hasQty = ingredients?.some(i => i.quantity || i.quantity_oz);
+              return (
+                <>
+                  <Section title="Ingredients Used">
+                    {ingredients?.length > 0 ? (
+                      <>
+                        <table className="w-full text-sm border border-gray-200 rounded">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left px-2 py-1.5 text-xs text-gray-500 font-semibold">Ingredient</th>
+                              {hasQty && <th className="text-left px-2 py-1.5 text-xs text-gray-500 font-semibold">Qty</th>}
+                              {hasQty && <th className="text-left px-2 py-1.5 text-xs text-gray-500 font-semibold">Unit</th>}
+                              <th className="text-left px-2 py-1.5 text-xs text-gray-500 font-semibold">Lot #</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ingredients.map((ing, i) => (
+                              <tr key={i} className="border-t border-gray-100">
+                                <td className="px-2 py-1">{ing.ingredient_name || '—'}</td>
+                                {hasQty && <td className="px-2 py-1">{ing.quantity ?? ing.quantity_oz ?? '—'}</td>}
+                                {hasQty && <td className="px-2 py-1">{ing.unit ?? '—'}</td>}
+                                <td className="px-2 py-1">{ing.lot_number ?? '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {source && (
+                          <p className="text-xs text-gray-400 mt-1.5 italic">Formula source: {source}</p>
+                        )}
+                      </>
+                    ) : (
+                      <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                        ⚠️ Formula not found — manual review required
+                      </div>
+                    )}
+                  </Section>
+                  {lotNotes && (
+                    <Section title="Ingredient Lot / Source Notes">
+                      <p className="text-sm text-gray-700 whitespace-pre-line">{lotNotes}</p>
+                    </Section>
+                  )}
+                </>
+              );
+            })()}
 
             <Section title="Verification">
               <Field label="Verified By" value={log.verified_by} />
