@@ -30,6 +30,7 @@ export const PAGES = [
   { title: 'Order Review Queue', route: '/order-review-queue', keywords: ['review queue', 'quarantine', 'rejected orders', 'repair queue'] },
   { title: 'Stripe Repair', route: '/stripe-repair', keywords: ['stripe repair', 'stripe recovery', 'stripe orders', 'stripe sync'] },
   { title: 'User Management', route: '/users', keywords: ['users', 'admin', 'staff', 'invite user'] },
+  { title: 'Alerts & Notifications', route: '/alerts', keywords: ['alerts', 'notifications', 'bell', 'alert', 'notification', 'error', 'warning', 'sync issue', 'order issue', 'compliance issue', 'production issue', 'critical', 'unread'] },
   { title: 'Audit Logs', route: '/audit-logs', keywords: ['audit', 'logs', 'repair audit', 'history', 'changes'] },
   { title: 'Settings', route: '/settings', keywords: ['settings', 'preferences', 'configuration'] },
   { title: 'Report Scheduler', route: '/report-scheduler', keywords: ['report', 'scheduled report', 'weekly report'] },
@@ -269,6 +270,30 @@ async function searchHACCP(query) {
   } catch { return []; }
 }
 
+async function searchAlerts(query) {
+  try {
+    const all = await base44.entities.HubAlert.list('-created_date', 200);
+    return all
+      .filter(a => matchesQuery(query,
+        a.title, a.message, a.category, a.severity, a.status,
+        a.source, a.related_display_id, a.related_record_type, a.recommended_action,
+      ))
+      .slice(0, LIMIT)
+      .map(a => ({
+        id: a.id,
+        type: 'Alert',
+        category: 'Alerts',
+        title: a.title,
+        subtitle: a.message?.slice(0, 80) || '',
+        status: a.severity,
+        meta: a.category,
+        route: '/alerts',
+        record_id: a.id,
+        action: 'view_only',
+      }));
+  } catch { return []; }
+}
+
 async function searchSystemAudit(query, isAdmin) {
   if (!isAdmin) return [];
   try {
@@ -320,7 +345,7 @@ async function searchSystemAudit(query, isAdmin) {
 export async function globalSearch(query, { isAdmin = false, includeArchived = false } = {}) {
   if (!query || query.trim().length < 2) return {};
 
-  const [pages, orders, batches, compliance, fulfillment, events, loyalty, labels, haccp, system] = await Promise.all([
+  const [pages, orders, batches, compliance, fulfillment, events, loyalty, labels, haccp, alertRecs, system] = await Promise.all([
     searchPages(query),
     searchOrders(query, isAdmin),
     searchBatches(query),
@@ -330,6 +355,7 @@ export async function globalSearch(query, { isAdmin = false, includeArchived = f
     searchLoyalty(query),
     searchLabelsAllergens(query),
     searchHACCP(query),
+    searchAlerts(query),
     searchSystemAudit(query, isAdmin),
   ]);
 
@@ -340,6 +366,7 @@ export async function globalSearch(query, { isAdmin = false, includeArchived = f
   if (compliance.length) results['Compliance Logs'] = compliance;
   if (labels.length) results['Labels & Allergens'] = labels;
   if (haccp.length) results['HACCP Plan'] = haccp;
+  if (alertRecs.length) results['Alerts'] = alertRecs;
   if (fulfillment.length) results['Delivery / Fulfillment'] = fulfillment;
   if (events.length) results['Events'] = events;
   if (loyalty.length) results['Loyalty'] = loyalty;

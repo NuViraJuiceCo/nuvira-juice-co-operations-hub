@@ -1,0 +1,112 @@
+{
+  "name": "HubAlert",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Short alert title"
+    },
+    "message": {
+      "type": "string",
+      "description": "Full alert message/description"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Orders",
+        "Payments",
+        "Subscriptions",
+        "Production",
+        "Compliance",
+        "Delivery",
+        "Loyalty",
+        "Events",
+        "Inventory",
+        "Sync",
+        "System",
+        "Security"
+      ],
+      "description": "Alert category"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "critical"
+      ],
+      "default": "info",
+      "description": "Alert severity level"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "unread",
+        "read",
+        "acknowledged",
+        "resolved",
+        "dismissed"
+      ],
+      "default": "unread",
+      "description": "Alert status"
+    },
+    "source": {
+      "type": "string",
+      "description": "What generated this alert e.g. Stripe Webhook, System Health Check"
+    },
+    "related_record_type": {
+      "type": "string",
+      "description": "Type of related record e.g. Order, Batch, FulfillmentTask"
+    },
+    "related_record_id": {
+      "type": "string",
+      "description": "Internal ID of the related record"
+    },
+    "related_display_id": {
+      "type": "string",
+      "description": "Human-readable ID e.g. NV-MON367R7, BATCH-2026-05-01"
+    },
+    "route": {
+      "type": "string",
+      "description": "App route to navigate to the related record e.g. /orders?search=NV-XXX"
+    },
+    "recommended_action": {
+      "type": "string",
+      "description": "Suggested next step for the admin (read-only advisory)"
+    },
+    "acknowledged_by": {
+      "type": "string",
+      "description": "Email of admin who acknowledged"
+    },
+    "acknowledged_at": {
+      "type": "string",
+      "description": "ISO timestamp of acknowledgment"
+    },
+    "resolved_by": {
+      "type": "string",
+      "description": "Email of admin who resolved"
+    },
+    "resolved_at": {
+      "type": "string",
+      "description": "ISO timestamp of resolution"
+    },
+    "dismissed_by": {
+      "type": "string",
+      "description": "Email of admin who dismissed"
+    },
+    "dismissed_at": {
+      "type": "string",
+      "description": "ISO timestamp of dismissal"
+    },
+    "resolution_notes": {
+      "type": "string",
+      "description": "Admin notes on how the issue was resolved"
+    }
+  },
+  "required": [
+    "title",
+    "message",
+    "category",
+    "severity"
+  ]
+}

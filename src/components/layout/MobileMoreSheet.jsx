@@ -5,7 +5,7 @@ import {
   CalendarDays, CalendarCheck, Truck, FlaskConical, ClipboardList,
   ShieldCheck, Package, ShoppingBag, Gift, Handshake, BarChart3,
   Activity, Wrench, LogOut, ChevronRight, X, Users, ScrollText,
-  FileBarChart, Settings, Zap, AlertCircle,
+  FileBarChart, Settings, Zap, AlertCircle, Bell,
 } from "lucide-react";
 
 const sections = [
@@ -39,6 +39,7 @@ const sections = [
   {
     title: "System",
     items: [
+      { label: "Alerts & Notifications", route: "/alerts", icon: Bell, description: "View and manage system alerts" },
       { label: "Operations Manager", route: "/operations-manager", icon: Activity, description: "Internal operations controls" },
       { label: "Resources", route: "/resources", icon: Wrench, description: "Guides, references, and internal docs" },
       { label: "Settings", route: "/settings", icon: Settings, description: "App and account preferences" },

@@ -37,6 +37,7 @@ import DriverPortal from './pages/DriverPortal';
 import ProductionPlanning from './pages/ProductionPlanning';
 import StripeRepair from './pages/StripeRepair';
 import OrderReviewQueue from './pages/OrderReviewQueue';
+import Alerts from './pages/Alerts';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -91,6 +92,7 @@ const AuthenticatedApp = () => {
         <Route path="/operations-manager" element={<PageTransition><OperationsManager /></PageTransition>} />
         <Route path="/stripe-repair" element={<PageTransition><StripeRepair /></PageTransition>} />
         <Route path="/order-review-queue" element={<PageTransition><OrderReviewQueue /></PageTransition>} />
+        <Route path="/alerts" element={<PageTransition><Alerts /></PageTransition>} />
 
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
