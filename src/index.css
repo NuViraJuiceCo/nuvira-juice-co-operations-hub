@@ -92,7 +92,7 @@
     --secondary: 152 20% 11%;
     --secondary-foreground: 140 15% 85%;
     --muted: 152 20% 11%;
-    --muted-foreground: 215 15% 62%; /* #94A3B8 → brighter, was 55% */
+    --muted-foreground: 215 15% 68%; /* #A8B5C2 → increased from 62% for better readability */
     --accent: 152 20% 13%;
     --accent-foreground: 140 15% 85%;
 

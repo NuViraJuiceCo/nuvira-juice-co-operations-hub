@@ -43,7 +43,7 @@ export default function MobileNav() {
                 key={item.path}
                 to={item.path}
                 className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-3 px-1 min-h-[60px] transition-colors ${
-                  isActive ? "text-primary" : "text-muted-foreground"
+                  isActive ? "text-primary" : "text-foreground/55"
                 }`}
               >
                 <Icon className={`h-[22px] w-[22px] shrink-0 transition-transform ${isActive ? "scale-110" : ""}`} />
@@ -59,7 +59,7 @@ export default function MobileNav() {
           <button
             onClick={() => setMoreOpen(true)}
             className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-3 px-1 min-h-[60px] transition-colors ${
-              isMoreActive ? "text-primary" : "text-muted-foreground"
+              isMoreActive ? "text-primary" : "text-foreground/55"
             }`}
           >
             <Grid3X3 className={`h-[22px] w-[22px] shrink-0 transition-transform ${isMoreActive ? "scale-110" : ""}`} />

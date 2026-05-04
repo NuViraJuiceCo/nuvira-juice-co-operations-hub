@@ -14,9 +14,9 @@ function SourceBreakdown({ sources }) {
     <div className="mt-3 pt-3 border-t border-border space-y-2">
       {direct.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1">Direct orders ({direct.reduce((s, x) => s + x.quantity, 0)} units)</p>
+          <p className="text-xs font-semibold text-foreground/80 mb-1">Direct orders ({direct.reduce((s, x) => s + x.quantity, 0)} units)</p>
           {direct.map((s, i) => (
-            <p key={i} className="text-xs text-muted-foreground pl-2">
+            <p key={i} className="text-xs text-foreground/70 pl-2">
               · {s.order_number} — {s.customer_name || s.customer_email} × {s.quantity}
             </p>
           ))}
@@ -24,9 +24,9 @@ function SourceBreakdown({ sources }) {
       )}
       {bundles.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1">From packages ({bundles.reduce((s, x) => s + x.quantity, 0)} units)</p>
+          <p className="text-xs font-semibold text-foreground/80 mb-1">From packages ({bundles.reduce((s, x) => s + x.quantity, 0)} units)</p>
           {bundles.map((s, i) => (
-            <p key={i} className="text-xs text-muted-foreground pl-2">
+            <p key={i} className="text-xs text-foreground/70 pl-2">
               · {s.order_number} — {s.customer_name || s.customer_email} × {s.quantity} (via {s.source_item})
             </p>
           ))}
@@ -34,9 +34,9 @@ function SourceBreakdown({ sources }) {
       )}
       {subs.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1">Subscriptions ({subs.reduce((s, x) => s + x.quantity, 0)} units)</p>
+          <p className="text-xs font-semibold text-foreground/80 mb-1">Subscriptions ({subs.reduce((s, x) => s + x.quantity, 0)} units)</p>
           {subs.map((s, i) => (
-            <p key={i} className="text-xs text-muted-foreground pl-2">
+            <p key={i} className="text-xs text-foreground/70 pl-2">
               · {s.order_number} — {s.customer_name || s.customer_email} × {s.quantity}
               {s.fulfillment_index && s.fulfillment_total ? ` (fulfillment ${s.fulfillment_index} of ${s.fulfillment_total})` : ''}
             </p>
@@ -49,37 +49,39 @@ function SourceBreakdown({ sources }) {
 
 function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
   const [expanded, setExpanded] = useState(false);
-  const categoryColor = batch.product_category === 'shot'
-    ? 'border-l-amber-400'
-    : 'border-l-primary';
-
+  const isShot = batch.product_category === 'shot';
+  const categoryColor = isShot ? 'border-l-status-warning' : 'border-l-primary';
   const statusLower = (batch.status || '').toLowerCase();
   const canStart = ['planned', 'ready_for_production'].includes(statusLower);
 
   return (
-    <div className={`bg-card border border-border border-l-4 ${categoryColor} rounded-xl p-5 hover:shadow-sm transition-shadow overflow-hidden flex flex-col h-full`}>
-      {/* Header row - flex wrap to prevent title/badges collision */}
+    <div className={`bg-card border border-border border-l-4 ${categoryColor} rounded-xl p-5 hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full`}>
+      {/* Header */}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-1 justify-between">
-          <h4 className="font-semibold text-foreground break-words flex-1 min-w-0">{batch.product_name}</h4>
+          {/* Product name — high contrast, never muted */}
+          <h4 className="font-bold text-foreground text-base break-words flex-1 min-w-0 leading-snug">{batch.product_name}</h4>
           <div className="flex items-center gap-1 shrink-0 ml-2">
-            {batch.product_category === 'shot' && (
-              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">Shot</span>
+            {isShot && (
+              <span className="text-[10px] font-semibold bg-status-warning-bg text-status-warning border border-status-warning-border px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                Shot
+              </span>
             )}
             {batch.is_locked && (
-              <span className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 whitespace-nowrap">
+              <span className="text-[10px] font-semibold bg-muted text-foreground border border-border px-1.5 py-0.5 rounded-full flex items-center gap-0.5 whitespace-nowrap">
                 <Lock className="h-2.5 w-2.5" /> Locked
               </span>
             )}
           </div>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground truncate flex-1 min-w-0">{batch.batch_id}</p>
+          {/* Batch ID — readable, not invisible */}
+          <p className="text-xs font-medium text-foreground/70 truncate flex-1 min-w-0">{batch.batch_id}</p>
           <div className="flex items-center gap-1 shrink-0">
             {canStart && onStart && (
               <button
                 onClick={() => onStart(batch)}
-                className="text-green-600 hover:text-green-700 p-1 shrink-0"
+                className="text-primary hover:text-primary/80 p-1 shrink-0"
                 title="Start batch production"
               >
                 <Play className="h-3.5 w-3.5" />
@@ -91,7 +93,7 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
             <button onClick={() => onEdit(batch)} className="text-primary hover:text-primary/80 p-1 shrink-0">
               <Edit2 className="h-3.5 w-3.5" />
             </button>
-            <button onClick={() => onDelete(batch.id)} className="text-red-500 hover:text-red-600 p-1 shrink-0">
+            <button onClick={() => onDelete(batch.id)} className="text-status-danger hover:text-status-danger/80 p-1 shrink-0">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
             <StatusBadge status={batch.status} />
@@ -99,29 +101,29 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — labels readable, values bold and high contrast */}
       <div className="grid grid-cols-4 gap-3 mt-4">
         <div>
-          <p className="text-xs text-muted-foreground">Needed</p>
-          <p className="text-xl font-bold text-primary">{batch.planned_units}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Needed</p>
+          <p className="text-xl font-bold text-primary leading-tight">{batch.planned_units}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">Produced</p>
-          <p className="text-xl font-bold text-foreground">{batch.actual_units ?? "—"}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Produced</p>
+          <p className="text-xl font-bold text-foreground leading-tight">{batch.actual_units ?? "—"}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">Orders</p>
-          <p className="text-xl font-bold text-foreground">{batch.order_sources?.length ?? 0}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Orders</p>
+          <p className="text-xl font-bold text-foreground leading-tight">{batch.order_sources?.length ?? 0}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">Delivery</p>
-          <p className="text-xs font-medium text-foreground truncate">{batch.delivery_window_label || '—'}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Delivery</p>
+          <p className="text-xs font-semibold text-foreground truncate leading-tight mt-0.5">{batch.delivery_window_label || '—'}</p>
         </div>
       </div>
 
-      {/* Notes - truncated to 2 lines */}
+      {/* Notes — readable, not invisible */}
       {batch.notes && (
-        <p className="text-xs text-muted-foreground mt-3 italic line-clamp-2 break-words">{batch.notes}</p>
+        <p className="text-xs text-foreground/70 mt-3 line-clamp-2 break-words leading-relaxed border-t border-border pt-2">{batch.notes}</p>
       )}
 
       {/* Expand source breakdown */}
@@ -129,7 +131,7 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
         <>
           <button
             onClick={() => setExpanded(!expanded)}
-            className="mt-3 flex items-center gap-1 text-xs text-primary hover:text-primary/80"
+            className="mt-3 flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
           >
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             {expanded ? 'Hide' : 'Show'} order sources
@@ -162,18 +164,28 @@ export default function ProductionDayCard({ date, batches, today, onEdit, onDele
 
   return (
     <div>
-      {/* Date header */}
-      <div className={`flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl ${isToday ? 'bg-primary/5 border border-primary/20' : isPast ? 'bg-slate-50 border border-slate-200' : isSoon ? 'bg-amber-50 border border-amber-200' : 'bg-muted/30'}`}>
+      {/* Date header — uses theme-aware tokens, never raw light/dark colors */}
+      <div className={`flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl border ${
+        isToday
+          ? 'bg-primary/10 border-primary/30'
+          : isPast
+          ? 'bg-muted/40 border-border'
+          : isSoon
+          ? 'bg-status-warning-bg border-status-warning-border'
+          : 'bg-muted/30 border-border'
+      }`}>
         <div>
-          <h3 className={`text-sm font-bold ${isToday ? 'text-primary' : 'text-foreground'}`}>{dateLabel}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <h3 className={`text-sm font-bold ${
+            isToday ? 'text-primary' : isSoon ? 'text-status-warning' : 'text-foreground'
+          }`}>{dateLabel}</h3>
+          <p className="text-xs text-foreground/70 mt-0.5 font-medium">
             {batches.length} product{batches.length !== 1 ? 's' : ''} · {totalUnits} total bottles
             {totalJuices > 0 && ` · ${totalJuices} juice${totalJuices !== 1 ? 's' : ''}`}
             {totalShots > 0 && ` · ${totalShots} shot${totalShots !== 1 ? 's' : ''}`}
           </p>
         </div>
         {anyLocked && (
-          <span className="ml-auto flex items-center gap-1 text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full border border-slate-200">
+          <span className="ml-auto flex items-center gap-1 text-xs text-foreground/70 bg-muted border border-border px-2 py-1 rounded-full font-medium">
             <Lock className="h-3 w-3" /> Day partially locked
           </span>
         )}

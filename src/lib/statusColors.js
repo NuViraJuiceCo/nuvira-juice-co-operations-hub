@@ -43,7 +43,7 @@ const STATUS_MAP = {
   'In Transit': 'info',
   Scheduled: 'info',
   Packed: 'info',
-  Confirmed: 'info',
+  Confirmed: 'success',
 
   // Warning / Amber
   pending: 'warning',

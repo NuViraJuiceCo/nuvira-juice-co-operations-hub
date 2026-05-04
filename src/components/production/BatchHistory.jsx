@@ -58,14 +58,14 @@ export default function BatchHistory() {
 
   const getStatusColor = (status) => {
     const colors = {
-      planned: 'bg-gray-100 text-gray-700',
-      ready_for_production: 'bg-blue-100 text-blue-700',
-      in_production: 'bg-yellow-100 text-yellow-700',
-      completed_pending_verification: 'bg-orange-100 text-orange-700',
-      verified_logged: 'bg-green-100 text-green-700',
-      archived: 'bg-gray-200 text-gray-600',
+      planned:                        'bg-muted text-foreground/80 border border-border',
+      ready_for_production:           'bg-status-info-bg text-status-info border border-status-info-border',
+      in_production:                  'bg-status-warning-bg text-status-warning border border-status-warning-border',
+      completed_pending_verification: 'bg-status-warning-bg text-status-warning border border-status-warning-border',
+      verified_logged:                'bg-status-success-bg text-status-success border border-status-success-border',
+      archived:                       'bg-muted text-muted-foreground border border-border',
     };
-    return colors[status] || 'bg-gray-100 text-gray-700';
+    return colors[status] || 'bg-muted text-foreground/80 border border-border';
   };
 
   return (
@@ -168,29 +168,29 @@ export default function BatchHistory() {
           <p className="text-center text-muted-foreground py-8">No batches found for the selected filters.</p>
         ) : (
           batches.map(batch => (
-            <Card key={batch.id} className={batch.passed_failed === 'failed' ? 'border-red-200' : ''}>
+            <Card key={batch.id} className={batch.passed_failed === 'failed' ? 'border-status-danger-border' : ''}>
               <CardContent className="pt-6">
                 <div className="space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold">{batch.batch_id}</h3>
-                        <span className={`text-xs px-2 py-1 rounded ${getStatusColor(batch.status)}`}>
-                          {batch.status.replace(/_/g, ' ').toUpperCase()}
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <h3 className="font-bold text-foreground">{batch.batch_id}</h3>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${getStatusColor(batch.status)}`}>
+                          {batch.status.replace(/_/g, ' ')}
                         </span>
                         {batch.passed_failed === 'failed' && (
-                          <AlertCircle className="h-4 w-4 text-red-600" />
+                          <AlertCircle className="h-4 w-4 text-status-danger" />
                         )}
                         {batch.passed_failed === 'passed' && (
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="h-4 w-4 text-status-success" />
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {batch.product_name} • {batch.production_date}
+                      <p className="text-sm font-medium text-foreground/80">
+                        {batch.product_name} <span className="text-foreground/50">•</span> {batch.production_date}
                       </p>
                     </div>
                     {batch.verified_at && (
-                      <div className="text-right text-xs text-muted-foreground">
+                      <div className="text-right text-xs text-foreground/60">
                         <p>Verified {moment(batch.verified_at).fromNow()}</p>
                         <p>by {batch.verified_by?.split('@')[0]}</p>
                       </div>
@@ -199,30 +199,30 @@ export default function BatchHistory() {
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t text-sm">
                     <div>
-                      <p className="text-muted-foreground text-xs">Quantity</p>
-                      <p className="font-medium">{batch.actual_quantity_produced || '-'} units</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Quantity</p>
+                      <p className="font-semibold text-foreground">{batch.actual_quantity_produced || '-'} units</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground text-xs">pH</p>
-                      <p className="font-medium">{batch.pH_result || '-'}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">pH</p>
+                      <p className="font-semibold text-foreground">{batch.pH_result || '-'}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground text-xs">Staff</p>
-                      <p className="font-medium text-xs">{(batch.staff_on_duty || []).length} members</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Staff</p>
+                      <p className="font-semibold text-foreground">{(batch.staff_on_duty || []).length} members</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground text-xs">Compliance Log</p>
-                      <p className="font-medium text-xs">
-                        {batch.compliance_log_id ? '✓ Created' : '-'}
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Compliance Log</p>
+                      <p className="font-semibold text-foreground">
+                        {batch.compliance_log_id ? '✓ Created' : '—'}
                       </p>
                     </div>
                   </div>
 
                   {(batch.corrective_action_required || batch.issue_identified) && (
-                    <div className="pt-2 mt-2 border-t border-orange-200 bg-orange-50 p-2 rounded text-sm text-orange-700">
-                      <p className="font-medium text-xs mb-1">⚠️ Corrective Action Required</p>
+                    <div className="pt-2 mt-2 border-t border-status-warning-border bg-status-warning-bg p-2 rounded text-sm">
+                      <p className="font-semibold text-xs mb-1 text-status-warning">⚠️ Corrective Action Required</p>
                       {batch.issue_identified && (
-                        <p className="text-xs">{batch.issue_identified}</p>
+                        <p className="text-xs text-foreground/80">{batch.issue_identified}</p>
                       )}
                     </div>
                   )}
