@@ -157,16 +157,14 @@ export default function TopBar({ onMenuClick }) {
         </button>
       )}
 
-      {/* Hamburger — mobile only, root page */}
-      {isRootPage && (
-        <button
-          onClick={onMenuClick}
-          className="lg:hidden p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-          aria-label="Open menu"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-      )}
+      {/* Desktop hamburger only — mobile nav handled by bottom bar */}
+      <button
+        onClick={onMenuClick}
+        className="hidden lg:hidden p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+        aria-label="Open menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
 
       {/* Brand — mobile */}
       <span className="lg:hidden font-display font-bold text-primary text-lg">nuVira</span>
