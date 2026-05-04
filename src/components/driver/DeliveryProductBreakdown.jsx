@@ -1,11 +1,11 @@
 import { Package, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 
-export default function DeliveryProductBreakdown({ order, date }) {
+export default function DeliveryProductBreakdown({ order, deliveryItems }) {
   const [expanded, setExpanded] = useState(false);
 
   const NON_PRODUCT_KEYWORDS = ['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'];
-  const items = (order.deliveryItems || []).filter(item => !NON_PRODUCT_KEYWORDS.some(kw => (item.title||'').toLowerCase().includes(kw)));
+  const items = (deliveryItems || order.items || []).filter(item => !NON_PRODUCT_KEYWORDS.some(kw => (item.title||'').toLowerCase().includes(kw)));
   const totalBottles = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
 
   if (!items || items.length === 0) {
@@ -67,9 +67,9 @@ export default function DeliveryProductBreakdown({ order, date }) {
             <p className="text-sm font-bold text-blue-700">{totalBottles} bottle{totalBottles !== 1 ? 's' : ''}</p>
           </div>
 
-          {order.isSubscriptionDelivery && order.selectedFulfillment && (
+          {order.subscription_fulfillment_number && (
             <div className="text-[10px] text-muted-foreground bg-muted/50 rounded px-2 py-1.5 italic">
-              Week {order.selectedFulfillment.fulfillment_number} of {order.selectedFulfillment.fulfillment_total || '?'}
+              Subscription Fulfillment {order.subscription_fulfillment_number}/4
             </div>
           )}
         </div>

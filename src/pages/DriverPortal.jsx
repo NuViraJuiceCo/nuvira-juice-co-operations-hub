@@ -336,16 +336,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
             </span>
           </div>
           <p className="text-xs font-medium text-foreground mt-0.5">{order.customer_name || order.customer_email}</p>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">{(() => {
-            const a = order.address_line1 || order.selectedFulfillment?.address_line1 || order.fulfillments?.[0]?.address_line1;
-            if (a) {
-              const city = order.address_line1 ? order.address_city : (order.selectedFulfillment?.address_city || order.fulfillments?.[0]?.address_city);
-              const state = order.address_line1 ? order.address_state : (order.selectedFulfillment?.address_state || order.fulfillments?.[0]?.address_state);
-              const zip = order.address_line1 ? order.address_postal_code : (order.selectedFulfillment?.address_postal_code || order.fulfillments?.[0]?.address_postal_code);
-              return `${a}, ${city}, ${state} ${zip}`;
-            }
-            return order.delivery_address || '(address missing)';
-          })()}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">{order.delivery_address || order.address || '(address missing)'}</p>
           {pendingReturn && (
             <div className="flex items-center gap-1 mt-1">
               <Recycle className="w-3 h-3 text-amber-600" />
@@ -374,20 +365,8 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
 
               <div className="space-y-0.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Delivery Address</p>
-                <p className="text-xs">
-                  {(() => {
-                    // Priority: order-level → selected fulfillment → first fulfillment → delivery_address
-                    if (order.address_line1) {
-                      return `${order.address_line1}${order.address_line2 ? ', ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}`;
-                    }
-                    const fulfAddr = order.selectedFulfillment || order.fulfillments?.[0];
-                    if (fulfAddr?.address_line1) {
-                      return `${fulfAddr.address_line1}${fulfAddr.address_line2 ? ', ' + fulfAddr.address_line2 : ''}, ${fulfAddr.address_city}, ${fulfAddr.address_state} ${fulfAddr.address_postal_code}`;
-                    }
-                    return order.delivery_address || '(address missing)';
-                  })()}
-                </p>
-                {order.missing_address && (
+                <p className="text-xs">{order.delivery_address || order.address || '(address missing)'}</p>
+                {!order.delivery_address && !order.address && (
                   <div className="mt-1 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
                     <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
                     <p className="text-[10px] text-red-700 font-semibold">Missing delivery address — contact admin before delivery</p>
@@ -396,7 +375,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
               </div>
 
               <div>
-                <DeliveryProductBreakdown order={order} date={order.selectedFulfillment?.delivery_date} />
+                <DeliveryProductBreakdown order={order} deliveryItems={order.items} />
               </div>
 
               {pendingReturn && pendingReturn.verification_status === 'requested' && (
