@@ -142,7 +142,7 @@ export default function ComplianceLogs() {
         </div>
         <Button onClick={handleExport} className="gap-2">
           <Download className="w-4 h-4" />
-          Export CSV
+          Export All Logs
         </Button>
       </div>
 
@@ -274,9 +274,10 @@ export default function ComplianceLogs() {
                       size="sm"
                       className="gap-1.5 text-xs"
                       onClick={() => setPrintingLog(log)}
+                      title="Export only this individual log record"
                     >
                       <Printer className="w-3.5 h-3.5" />
-                      Print
+                      Export PDF
                     </Button>
                   </div>
                 </div>
