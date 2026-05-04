@@ -777,7 +777,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   // Filter orders to show only fulfillments for the selected date
-  // Primary source: FulfillmentTask.scheduled_date (do NOT require parent order assigned_production_date)
+  // Primary source: FulfillmentTask assigned_delivery_date, secondary: scheduled_date (do NOT require parent order assigned_production_date)
   let displayOrders = (routeData?.optimized_orders || queuedOrders || []).map(order => {
     // Check if this is a subscription or one-time order
     const fulfillmentMode = order.fulfillment_mode || (order.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
