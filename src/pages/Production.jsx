@@ -365,7 +365,9 @@ export default function Production() {
                         <div className="grid grid-cols-4 gap-3 text-sm mb-3">
                           <div>
                             <p className="text-muted-foreground text-xs">Quantity</p>
-                            <p className="font-medium">{batch.actual_quantity_produced || '-'}</p>
+                            <p className="font-medium">
+                              {batch.actual_quantity_produced ?? batch.actual_units ?? batch.actual_quantity ?? '-'}
+                            </p>
                           </div>
                           <div>
                             <p className="text-muted-foreground text-xs">pH</p>

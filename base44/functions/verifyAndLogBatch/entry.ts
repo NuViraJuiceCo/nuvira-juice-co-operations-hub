@@ -24,15 +24,26 @@ Deno.serve(async (req) => {
 
     const batch = batches[0];
 
+    // Resolve quantity from whichever field is populated (handles legacy batches)
+    const resolveBatchQuantity = (b) => {
+      const candidates = [b.actual_quantity_produced, b.actual_units, b.actual_quantity, b.completed_quantity, b.quantity];
+      for (const val of candidates) {
+        if (val !== null && val !== undefined && val !== '') return val;
+      }
+      return null;
+    };
+    const resolvedQuantity = resolveBatchQuantity(batch);
+
     // Validate batch is completed_pending_verification
     if (batch.status !== 'completed_pending_verification') {
       return Response.json({ error: `Cannot verify batch with status: ${batch.status}` }, { status: 400 });
     }
 
-    // Validate required fields for verification
-    const required = ['production_date', 'batch_id', 'product_name', 'actual_quantity_produced', 
+    // Validate required fields for verification (quantity checked via resolver)
+    const required = ['production_date', 'batch_id', 'product_name',
                      'actual_start_time', 'actual_end_time', 'staff_on_duty', 'pH_result', 'passed_failed'];
     const missing = required.filter(f => !batch[f]);
+    if (resolvedQuantity === null) missing.push('quantity (actual_quantity_produced / actual_units)');
     if (missing.length > 0) {
       return Response.json({ error: `Cannot verify: missing fields: ${missing.join(', ')}` }, { status: 400 });
     }
@@ -48,7 +59,7 @@ Deno.serve(async (req) => {
       notes: [batch.notes, batch.ingredient_lot_notes].filter(Boolean).join(' | ') || '',
       start_time: batch.actual_start_time,
       end_time: batch.actual_end_time,
-      quantity_produced: batch.actual_quantity_produced,
+      quantity_produced: resolvedQuantity,
       staff_on_duty: batch.staff_on_duty || [],
       pH_result: batch.pH_result,
       passed_failed: batch.passed_failed,
