@@ -53,11 +53,12 @@ export default function AdminProfileMenu({ onOpenAlerts }) {
 
   return (
     <>
-      {/* Avatar trigger */}
+      {/* Avatar trigger — 48px tap target on mobile */}
       <button
         onClick={() => setOpen(true)}
-        className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold shrink-0 active:scale-95 transition-transform shadow-sm"
-        aria-label="Admin profile"
+        className="relative z-30 h-11 w-11 sm:h-10 sm:w-10 min-h-touch min-w-touch rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold shrink-0 active:scale-95 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-transform shadow-sm cursor-pointer select-none"
+        aria-label="Admin account menu"
+        type="button"
       >
         {initials}
       </button>

@@ -58,9 +58,9 @@ export default function MobileMoreSheet({ open, onClose }) {
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
       <SheetContent
         side="bottom"
-        className="h-[92vh] p-0 rounded-t-2xl overflow-hidden flex flex-col"
+        className="h-[92vh] p-0 rounded-t-2xl overflow-hidden flex flex-col [&>button]:hidden"
       >
-        {/* Header */}
+        {/* Header — single close control (SheetContent's built-in X is hidden via [&>button]:hidden) */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border shrink-0">
           <div>
             <h2 className="text-base font-bold text-foreground">More</h2>
@@ -68,9 +68,10 @@ export default function MobileMoreSheet({ open, onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            className="h-11 w-11 min-h-touch min-w-touch rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground active:bg-muted/80 transition-colors"
+            aria-label="Close menu"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 

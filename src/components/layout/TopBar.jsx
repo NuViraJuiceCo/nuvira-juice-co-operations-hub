@@ -157,10 +157,10 @@ export default function TopBar({ onMenuClick }) {
               navigate("/");
             }
           }}
-          className="lg:hidden flex items-center justify-center h-11 w-11 rounded-xl hover:bg-muted active:bg-muted/80 transition-colors text-muted-foreground -ml-1"
+          className="lg:hidden flex items-center justify-center h-12 w-12 min-h-touch min-w-touch rounded-xl hover:bg-muted active:bg-muted/80 transition-colors text-muted-foreground -ml-1"
           aria-label="Go back"
         >
-          <ArrowLeft className="h-6 w-6" />
+          <ArrowLeft className="h-7 w-7" />
         </button>
       ) : (
         /* Desktop hamburger — hidden on mobile since bottom nav handles it */
