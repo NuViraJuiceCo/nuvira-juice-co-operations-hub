@@ -4,9 +4,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Download, Filter, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
+import { Download, Filter, AlertCircle, CheckCircle2, Printer } from 'lucide-react';
 import AdminGuide from '@/components/shared/AdminGuide';
 import UnifiedComplianceForm from '@/components/compliance/UnifiedComplianceForm';
+import PrintableLogSheet from '@/components/compliance/PrintableLogSheet';
 import moment from 'moment';
 
 export default function ComplianceLogs() {
@@ -17,6 +18,7 @@ export default function ComplianceLogs() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [isExporting, setIsExporting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [printingLog, setPrintingLog] = useState(null);
 
   const { data: logs = [], isLoading, refetch } = useQuery({
     queryKey: ['compliance_logs', startDate, endDate, logTypeFilter, statusFilter],
@@ -262,8 +264,16 @@ export default function ComplianceLogs() {
 
                     {log.notes && <p className="text-sm mt-2 text-muted-foreground">📝 {log.notes}</p>}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {/* Delete disabled — records are immutable per audit requirements */}
+                  <div className="flex items-center gap-2 ml-4 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs"
+                      onClick={() => setPrintingLog(log)}
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      Print
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -271,6 +281,9 @@ export default function ComplianceLogs() {
           ))
         )}
       </div>
+      {printingLog && (
+        <PrintableLogSheet log={printingLog} onClose={() => setPrintingLog(null)} />
+      )}
     </div>
   );
 }
