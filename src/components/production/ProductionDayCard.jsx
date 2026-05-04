@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Edit2, Trash2, Lock, Unlock, ChevronDown, ChevronUp, Play } from "lucide-react";
 import StatusBadge from "../shared/StatusBadge";
 import moment from "moment";
+import { resolveBatchDeliveryStatus } from "../../lib/deliveryStatusHelper";
 
 function SourceBreakdown({ sources }) {
   if (!sources || sources.length === 0) return null;
@@ -47,12 +48,13 @@ function SourceBreakdown({ sources }) {
   );
 }
 
-function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
+function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart, fulfillmentTasksByOrderId = {} }) {
   const [expanded, setExpanded] = useState(false);
   const isShot = batch.product_category === 'shot';
   const categoryColor = isShot ? 'border-l-status-warning' : 'border-l-primary';
   const statusLower = (batch.status || '').toLowerCase();
   const canStart = ['planned', 'ready_for_production'].includes(statusLower);
+  const deliveryDisplay = resolveBatchDeliveryStatus(batch, fulfillmentTasksByOrderId);
 
   return (
     <div className={`bg-card border border-border border-l-4 ${categoryColor} rounded-xl p-5 hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full`}>
@@ -117,7 +119,7 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Delivery</p>
-          <p className="text-xs font-semibold text-foreground truncate leading-tight mt-0.5">{batch.delivery_window_label || '—'}</p>
+          <p className="text-xs font-semibold text-foreground truncate leading-tight mt-0.5" title={deliveryDisplay}>{deliveryDisplay}</p>
         </div>
       </div>
 
@@ -143,7 +145,7 @@ function BatchCard({ batch, onEdit, onDelete, onToggleLock, onStart }) {
   );
 }
 
-export default function ProductionDayCard({ date, batches, today, onEdit, onDelete, onToggleLock, onStart }) {
+export default function ProductionDayCard({ date, batches, today, fulfillmentTasksByOrderId = {}, onEdit, onDelete, onToggleLock, onStart }) {
   const isToday = date === today;
   const isPast = date < today;
   const isSoon = !isToday && !isPast && moment(date).diff(moment(), 'days') <= 3;
@@ -197,6 +199,7 @@ export default function ProductionDayCard({ date, batches, today, onEdit, onDele
           <BatchCard
             key={batch.id}
             batch={batch}
+            fulfillmentTasksByOrderId={fulfillmentTasksByOrderId}
             onEdit={onEdit}
             onDelete={onDelete}
             onToggleLock={onToggleLock}

@@ -21,6 +21,7 @@ import moment from "moment";
 export default function Production() {
   const [batches, setBatches] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [fulfillmentTasks, setFulfillmentTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -49,12 +50,14 @@ export default function Production() {
   }, []);
 
   const load = useCallback(async () => {
-    const [batchData, planData] = await Promise.all([
+    const [batchData, planData, ftData] = await Promise.all([
       base44.entities.ProductionBatch.list("production_date", 200),
       base44.functions.invoke('getProductionPlanningData', {}),
+      base44.entities.FulfillmentTask.list('-scheduled_date', 500),
     ]);
     setBatches(batchData);
     setOrders(planData.data?.production_rows || []);
+    setFulfillmentTasks(ftData);
     setLoading(false);
   }, []);
 
@@ -141,6 +144,17 @@ export default function Production() {
   const sortedDates = Object.keys(grouped).sort();
   const activeBatches = filtered.filter(b => b.status !== "completed" && b.production_date >= today);
   const totalUnits = activeBatches.reduce((s, b) => s + (b.planned_units || 0), 0);
+
+  // Build fulfillment tasks lookup map by order_id for efficient rendering
+  const fulfillmentTasksByOrderId = {};
+  fulfillmentTasks.forEach(task => {
+    if (task.order_id) {
+      if (!fulfillmentTasksByOrderId[task.order_id]) {
+        fulfillmentTasksByOrderId[task.order_id] = [];
+      }
+      fulfillmentTasksByOrderId[task.order_id].push(task);
+    }
+  });
 
   if (loading) {
     return (
@@ -262,16 +276,17 @@ export default function Production() {
                     <div className="space-y-10">
                       {sortedDates.map(date => (
                         <div key={date}>
-                          <ProductionDayCard
-                             date={date}
-                             batches={grouped[date]}
-                             orders={orders}
-                             today={today}
-                             onEdit={handleEditBatch}
-                             onDelete={handleDelete}
-                             onToggleLock={handleToggleLock}
-                             onStart={setStartingBatch}
-                           />
+                             <ProductionDayCard
+                                date={date}
+                                batches={grouped[date]}
+                                orders={orders}
+                                today={today}
+                                fulfillmentTasksByOrderId={fulfillmentTasksByOrderId}
+                                onEdit={handleEditBatch}
+                                onDelete={handleDelete}
+                                onToggleLock={handleToggleLock}
+                                onStart={setStartingBatch}
+                              />
                           <IngredientPlanningPanel
                             dateData={ingredientData[date]}
                             loading={ingredientLoading}
