@@ -9,75 +9,168 @@
     --font-sans: 'Inter', sans-serif;
     --font-display: 'Playfair Display', serif;
 
-    --background: 40 20% 98%;
-    --foreground: 150 10% 10%;
-    --card: 0 0% 100%;
-    --card-foreground: 150 10% 10%;
+    /* ── Core surfaces ── */
+    --background: 140 20% 98%;       /* #F8FAF9 — off-white with green tint */
+    --foreground: 220 25% 8%;        /* #0F172A — near-black, high contrast */
+    --card: 0 0% 100%;               /* pure white cards */
+    --card-foreground: 220 25% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 150 10% 10%;
-    --primary: 153 50% 28%;
+    --popover-foreground: 220 25% 8%;
+
+    /* ── Brand primary ── */
+    --primary: 153 65% 28%;          /* #168A55 — strong NuVira green */
     --primary-foreground: 0 0% 100%;
-    --secondary: 140 15% 94%;
-    --secondary-foreground: 150 10% 15%;
-    --muted: 140 10% 95%;
-    --muted-foreground: 150 5% 45%;
-    --accent: 140 15% 94%;
-    --accent-foreground: 150 10% 15%;
-    --destructive: 0 72% 51%;
+
+    /* ── Secondary / muted surfaces ── */
+    --secondary: 140 20% 93%;        /* light green-tinted surface */
+    --secondary-foreground: 152 30% 18%;
+    --muted: 140 15% 94%;
+    --muted-foreground: 215 16% 40%; /* #5C6B80 — readable secondary text */
+    --accent: 140 20% 91%;
+    --accent-foreground: 152 30% 18%;
+
+    /* ── Destructive / danger ── */
+    --destructive: 0 84% 45%;        /* #DC2626 — strong readable red */
     --destructive-foreground: 0 0% 100%;
-    --border: 140 10% 90%;
-    --input: 140 10% 90%;
-    --ring: 153 50% 28%;
-    --chart-1: 153 50% 28%;
-    --chart-2: 43 74% 66%;
-    --chart-3: 210 60% 55%;
-    --chart-4: 280 50% 60%;
-    --chart-5: 350 65% 55%;
+
+    /* ── Borders / inputs ── */
+    --border: 140 18% 84%;           /* #D1E0D6 — visible on white */
+    --input: 140 18% 84%;
+    --ring: 153 65% 28%;
+
+    /* ── Semantic status tokens (light mode) ── */
+    --status-success: 142 71% 30%;   /* #15803D */
+    --status-success-bg: 138 72% 95%; /* #F0FDF4 */
+    --status-success-border: 141 63% 80%;
+    --status-info: 217 91% 45%;      /* #2563EB */
+    --status-info-bg: 214 100% 97%;  /* #EFF6FF */
+    --status-info-border: 213 97% 80%;
+    --status-warning: 32 95% 42%;    /* #B45309 — dark amber, readable */
+    --status-warning-bg: 48 100% 96%; /* #FFFBEB */
+    --status-warning-border: 45 96% 76%;
+    --status-danger: 0 84% 45%;      /* #DC2626 */
+    --status-danger-bg: 0 86% 97%;   /* #FEF2F2 */
+    --status-danger-border: 0 94% 82%;
+    --status-admin: 263 70% 45%;     /* #7C3AED */
+    --status-admin-bg: 270 100% 98%; /* #FAF5FF */
+    --status-admin-border: 268 100% 84%;
+
+    /* ── Charts ── */
+    --chart-1: 153 65% 28%;
+    --chart-2: 43 74% 50%;
+    --chart-3: 217 91% 45%;
+    --chart-4: 263 70% 45%;
+    --chart-5: 350 84% 45%;
+
     --radius: 0.625rem;
-    --sidebar-background: 152 32% 18%;
-    --sidebar-foreground: 140 15% 90%;
-    --sidebar-primary: 153 50% 45%;
+
+    /* ── Sidebar (stays dark green always) ── */
+    --sidebar-background: 152 40% 13%;
+    --sidebar-foreground: 140 20% 88%;
+    --sidebar-primary: 153 60% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 152 25% 24%;
-    --sidebar-accent-foreground: 140 15% 90%;
-    --sidebar-border: 152 20% 25%;
-    --sidebar-ring: 153 50% 45%;
+    --sidebar-accent: 152 30% 19%;
+    --sidebar-accent-foreground: 140 20% 88%;
+    --sidebar-border: 152 25% 20%;
+    --sidebar-ring: 153 60% 50%;
   }
 
   .dark {
-    --background: 150 10% 5%;
-    --foreground: 140 15% 90%;
-    --card: 150 10% 8%;
-    --card-foreground: 140 15% 90%;
-    --popover: 150 10% 8%;
-    --popover-foreground: 140 15% 90%;
-    --primary: 153 50% 45%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 150 10% 12%;
-    --secondary-foreground: 140 15% 90%;
-    --muted: 150 10% 12%;
-    --muted-foreground: 140 10% 55%;
-    --accent: 150 10% 12%;
-    --accent-foreground: 140 15% 90%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 150 10% 15%;
-    --input: 150 10% 15%;
-    --ring: 153 50% 45%;
-    --chart-1: 153 50% 45%;
-    --chart-2: 43 74% 66%;
-    --chart-3: 210 60% 55%;
-    --chart-4: 280 50% 60%;
-    --chart-5: 350 65% 55%;
-    --sidebar-background: 152 32% 10%;
-    --sidebar-foreground: 140 15% 90%;
-    --sidebar-primary: 153 50% 45%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 152 25% 15%;
-    --sidebar-accent-foreground: 140 15% 90%;
-    --sidebar-border: 152 20% 15%;
-    --sidebar-ring: 153 50% 45%;
+    /* ── Core surfaces ── */
+    --background: 152 30% 4%;        /* #050A08 — deep dark green-black */
+    --foreground: 140 15% 92%;       /* #E8F0EC — near-white, high contrast */
+    --card: 152 28% 7%;              /* #0D1512 — card surface */
+    --card-foreground: 140 15% 92%;
+    --popover: 152 25% 9%;           /* #111C17 — elevated surfaces */
+    --popover-foreground: 140 15% 92%;
+
+    /* ── Brand primary ── */
+    --primary: 153 55% 52%;          /* #2FBF7A — bright NuVira green */
+    --primary-foreground: 152 30% 4%;
+
+    /* ── Secondary / muted surfaces ── */
+    --secondary: 152 20% 11%;
+    --secondary-foreground: 140 15% 85%;
+    --muted: 152 20% 11%;
+    --muted-foreground: 215 15% 62%; /* #94A3B8 → brighter, was 55% */
+    --accent: 152 20% 13%;
+    --accent-foreground: 140 15% 85%;
+
+    /* ── Destructive / danger ── */
+    --destructive: 0 72% 58%;        /* #F87171 — bright red, readable on dark */
+    --destructive-foreground: 0 0% 100%;
+
+    /* ── Borders / inputs ── */
+    --border: 152 22% 18%;           /* #20352B — visible, not invisible */
+    --input: 152 22% 18%;
+    --ring: 153 55% 52%;
+
+    /* ── Semantic status tokens (dark mode) ── */
+    --status-success: 158 64% 52%;   /* #34D399 */
+    --status-success-bg: 158 50% 10%;
+    --status-success-border: 158 50% 22%;
+    --status-info: 213 93% 68%;      /* #60A5FA */
+    --status-info-bg: 214 60% 10%;
+    --status-info-border: 213 60% 22%;
+    --status-warning: 43 96% 56%;    /* #FBBF24 */
+    --status-warning-bg: 43 70% 9%;
+    --status-warning-border: 43 70% 22%;
+    --status-danger: 0 90% 70%;      /* #F87171 */
+    --status-danger-bg: 0 50% 10%;
+    --status-danger-border: 0 50% 22%;
+    --status-admin: 258 90% 74%;     /* #A78BFA */
+    --status-admin-bg: 263 40% 12%;
+    --status-admin-border: 263 40% 24%;
+
+    /* ── Charts ── */
+    --chart-1: 153 55% 52%;
+    --chart-2: 43 96% 56%;
+    --chart-3: 213 93% 68%;
+    --chart-4: 258 90% 74%;
+    --chart-5: 350 80% 65%;
+
+    /* ── Sidebar ── */
+    --sidebar-background: 152 40% 6%;
+    --sidebar-foreground: 140 18% 85%;
+    --sidebar-primary: 153 55% 52%;
+    --sidebar-primary-foreground: 152 30% 4%;
+    --sidebar-accent: 152 28% 12%;
+    --sidebar-accent-foreground: 140 18% 85%;
+    --sidebar-border: 152 25% 14%;
+    --sidebar-ring: 153 55% 52%;
   }
+}
+
+/* ── NuVira Semantic Status Utility Classes ───────────────────────────────
+   These mirror the CSS variable tokens for use in dynamic class generation.
+   Applied as: text-status-success, bg-status-success-bg, etc.
+   ────────────────────────────────────────────────────────────────────── */
+@layer utilities {
+  /* Success */
+  .text-status-success   { color: hsl(var(--status-success)); }
+  .bg-status-success     { background-color: hsl(var(--status-success)); }
+  .bg-status-success-bg  { background-color: hsl(var(--status-success-bg)); }
+  .border-status-success-border { border-color: hsl(var(--status-success-border)); }
+  /* Info */
+  .text-status-info      { color: hsl(var(--status-info)); }
+  .bg-status-info        { background-color: hsl(var(--status-info)); }
+  .bg-status-info-bg     { background-color: hsl(var(--status-info-bg)); }
+  .border-status-info-border { border-color: hsl(var(--status-info-border)); }
+  /* Warning */
+  .text-status-warning   { color: hsl(var(--status-warning)); }
+  .bg-status-warning     { background-color: hsl(var(--status-warning)); }
+  .bg-status-warning-bg  { background-color: hsl(var(--status-warning-bg)); }
+  .border-status-warning-border { border-color: hsl(var(--status-warning-border)); }
+  /* Danger */
+  .text-status-danger    { color: hsl(var(--status-danger)); }
+  .bg-status-danger      { background-color: hsl(var(--status-danger)); }
+  .bg-status-danger-bg   { background-color: hsl(var(--status-danger-bg)); }
+  .border-status-danger-border { border-color: hsl(var(--status-danger-border)); }
+  /* Admin */
+  .text-status-admin     { color: hsl(var(--status-admin)); }
+  .bg-status-admin       { background-color: hsl(var(--status-admin)); }
+  .bg-status-admin-bg    { background-color: hsl(var(--status-admin-bg)); }
+  .border-status-admin-border { border-color: hsl(var(--status-admin-border)); }
 }
 
 @layer base {

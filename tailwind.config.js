@@ -3,6 +3,7 @@ module.exports = {
   darkMode: ["class"],
   content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
   safelist: [
+    // Legacy color classes used by scattered components (runtime-dynamic)
     'bg-emerald-50', 'text-emerald-700', 'border-emerald-200',
     'bg-amber-50', 'text-amber-700', 'border-amber-200',
     'bg-blue-50', 'text-blue-700', 'border-blue-200',
@@ -12,6 +13,12 @@ module.exports = {
     'bg-orange-50', 'text-orange-700', 'border-orange-200',
     'bg-yellow-50', 'text-yellow-700', 'border-yellow-200',
     'bg-cyan-50', 'text-cyan-700', 'border-cyan-200',
+    // Semantic status token classes (used dynamically)
+    'bg-status-success', 'bg-status-success-bg', 'border-status-success-border', 'text-status-success',
+    'bg-status-info', 'bg-status-info-bg', 'border-status-info-border', 'text-status-info',
+    'bg-status-warning', 'bg-status-warning-bg', 'border-status-warning-border', 'text-status-warning',
+    'bg-status-danger', 'bg-status-danger-bg', 'border-status-danger-border', 'text-status-danger',
+    'bg-status-admin', 'bg-status-admin-bg', 'border-status-admin-border', 'text-status-admin',
   ],
   theme: {
     extend: {
@@ -81,6 +88,25 @@ module.exports = {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
+        // ── Semantic status tokens ──
+        // Use these in components: text-status-success, bg-status-success-bg, border-status-success-border, etc.
+        status: {
+          success: 'hsl(var(--status-success))',
+          'success-bg': 'hsl(var(--status-success-bg))',
+          'success-border': 'hsl(var(--status-success-border))',
+          info: 'hsl(var(--status-info))',
+          'info-bg': 'hsl(var(--status-info-bg))',
+          'info-border': 'hsl(var(--status-info-border))',
+          warning: 'hsl(var(--status-warning))',
+          'warning-bg': 'hsl(var(--status-warning-bg))',
+          'warning-border': 'hsl(var(--status-warning-border))',
+          danger: 'hsl(var(--status-danger))',
+          'danger-bg': 'hsl(var(--status-danger-bg))',
+          'danger-border': 'hsl(var(--status-danger-border))',
+          admin: 'hsl(var(--status-admin))',
+          'admin-bg': 'hsl(var(--status-admin-bg))',
+          'admin-border': 'hsl(var(--status-admin-border))',
+        },
       },
       keyframes: {
         'accordion-down': {
@@ -96,7 +122,6 @@ module.exports = {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
       },
-      safelist: ['min-h-touch', 'min-w-touch'],
     },
   },
   plugins: [require("tailwindcss-animate")],
