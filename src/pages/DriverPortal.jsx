@@ -642,8 +642,34 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     setLoading(true);
     setRouteData(null);
     try {
-      const res = await base44.functions.invoke('optimizeDeliveryRoute', { date: selectedDate || undefined, optimize: false });
-      setQueuedOrders(res.data?.orders || []);
+      // First, resolve all delivery obligations for the date (including futures)
+      const resolveRes = await base44.functions.invoke('resolveDeliveryScheduleForDate', { selectedDate });
+      const allDeliveries = resolveRes.data?.deliveries || [];
+      
+      // Then optimize route if requested (only on Ready tasks)
+      if (allDeliveries.length > 0) {
+        const readyForRoute = allDeliveries.filter(d => 
+          ['packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery', 'ready_for_route', 'out_for_delivery'].includes((d.status || '').toLowerCase())
+        );
+        
+        if (readyForRoute.length > 0) {
+          try {
+            const routeRes = await base44.functions.invoke('optimizeDeliveryRoute', { 
+              date: selectedDate || undefined, 
+              optimize: false,
+              orders: readyForRoute 
+            });
+            setQueuedOrders(routeRes.data?.orders || allDeliveries);
+          } catch (routeErr) {
+            console.warn('Route optimization skipped, using resolved orders:', routeErr.message);
+            setQueuedOrders(allDeliveries);
+          }
+        } else {
+          setQueuedOrders(allDeliveries);
+        }
+      } else {
+        setQueuedOrders([]);
+      }
     } catch {
       toast.error('Failed to load delivery queue');
     } finally {
