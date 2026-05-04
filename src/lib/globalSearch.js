@@ -13,8 +13,10 @@ export const PAGES = [
   { title: 'Production Scheduler', route: '/prod-scheduler', keywords: ['scheduler', 'weekly batches', 'batch planner'] },
   { title: 'Fulfillment', route: '/fulfillment', keywords: ['fulfillment', 'delivery tasks', 'driver', 'pickup'] },
   { title: 'Driver Portal', route: '/driver-portal', keywords: ['driver', 'route', 'deliveries', 'amar', 'driver portal'] },
-  { title: 'Compliance Logs', route: '/compliance', keywords: ['compliance', 'logs', 'ph', 'sanitation', 'ccp', 'haccp', 'batch logs'] },
+  { title: 'Compliance Logs', route: '/compliance', keywords: ['compliance', 'logs', 'ph', 'sanitation', 'ccp', 'batch logs'] },
   { title: 'Compliance Center', route: '/compliance-center', keywords: ['compliance center', 'daily checklist', 'corrective action', 'temperature'] },
+  { title: 'Labels & Allergens', route: '/compliance-center', keywords: ['label', 'labels', 'allergen', 'allergens', 'product labels', 'nutrition label', 'ingredient statement', 'allergen review', 'label review', 'net volume', 'barcode'] },
+  { title: 'HACCP Plan Review', route: '/compliance-center', keywords: ['haccp', 'hazard analysis', 'food safety plan', 'ccp review', 'critical control point', 'haccp plan', 'corrective action review', 'verification procedure'] },
   { title: 'Operations Calendar', route: '/calendar', keywords: ['calendar', 'schedule', 'events calendar', 'operations'] },
   { title: 'Inventory', route: '/inventory', keywords: ['inventory', 'ingredients', 'stock', 'produce', 'reorder'] },
   { title: 'Suppliers', route: '/suppliers', keywords: ['suppliers', 'vendor', 'produce supplier'] },
@@ -217,6 +219,56 @@ async function searchLoyalty(query) {
   } catch { return []; }
 }
 
+async function searchLabelsAllergens(query) {
+  try {
+    const all = await base44.entities.LabelAllergenReview.list('-updated_date', 100);
+    return all
+      .filter(r => matchesQuery(query,
+        r.product_name, r.label_version, r.ingredient_statement,
+        r.allergen_statement, r.review_status, r.approval_status,
+        r.reviewed_by, r.approved_by, r.notes,
+      ))
+      .slice(0, LIMIT)
+      .map(r => ({
+        id: r.id,
+        type: 'ComplianceLog',
+        category: 'Labels & Allergens',
+        title: r.product_name,
+        subtitle: `Label ${r.label_version || ''} — ${r.allergen_statement || 'No allergen statement'}`,
+        status: r.approval_status,
+        meta: r.review_date ? `Reviewed ${r.review_date}` : null,
+        route: '/compliance-center',
+        record_id: r.id,
+        action: 'view_only',
+      }));
+  } catch { return []; }
+}
+
+async function searchHACCP(query) {
+  try {
+    const all = await base44.entities.HACCPPlanReview.list('-review_date', 100);
+    return all
+      .filter(r => matchesQuery(query,
+        r.plan_version, r.review_period, r.review_date,
+        r.reviewed_by, r.approval_status, r.approved_by,
+        r.change_summary, r.notes,
+      ))
+      .slice(0, LIMIT)
+      .map(r => ({
+        id: r.id,
+        type: 'ComplianceLog',
+        category: 'HACCP Plan',
+        title: `HACCP Plan ${r.plan_version}`,
+        subtitle: r.review_period || r.review_date || '',
+        status: r.approval_status,
+        meta: r.review_date ? `Reviewed ${r.review_date}` : null,
+        route: '/compliance-center',
+        record_id: r.id,
+        action: 'view_only',
+      }));
+  } catch { return []; }
+}
+
 async function searchSystemAudit(query, isAdmin) {
   if (!isAdmin) return [];
   try {
@@ -268,7 +320,7 @@ async function searchSystemAudit(query, isAdmin) {
 export async function globalSearch(query, { isAdmin = false, includeArchived = false } = {}) {
   if (!query || query.trim().length < 2) return {};
 
-  const [pages, orders, batches, compliance, fulfillment, events, loyalty, system] = await Promise.all([
+  const [pages, orders, batches, compliance, fulfillment, events, loyalty, labels, haccp, system] = await Promise.all([
     searchPages(query),
     searchOrders(query, isAdmin),
     searchBatches(query),
@@ -276,6 +328,8 @@ export async function globalSearch(query, { isAdmin = false, includeArchived = f
     searchFulfillment(query),
     searchEvents(query),
     searchLoyalty(query),
+    searchLabelsAllergens(query),
+    searchHACCP(query),
     searchSystemAudit(query, isAdmin),
   ]);
 
@@ -284,6 +338,8 @@ export async function globalSearch(query, { isAdmin = false, includeArchived = f
   if (orders.length) results['Orders'] = orders;
   if (batches.length) results['Production Batches'] = batches;
   if (compliance.length) results['Compliance Logs'] = compliance;
+  if (labels.length) results['Labels & Allergens'] = labels;
+  if (haccp.length) results['HACCP Plan'] = haccp;
   if (fulfillment.length) results['Delivery / Fulfillment'] = fulfillment;
   if (events.length) results['Events'] = events;
   if (loyalty.length) results['Loyalty'] = loyalty;

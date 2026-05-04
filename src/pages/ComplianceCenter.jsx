@@ -13,6 +13,8 @@ import SanitationLogForm from '@/components/compliance/SanitationLogForm';
 import CorrectiveActionForm from '@/components/compliance/CorrectiveActionForm';
 import DailyChecklistForm from '@/components/compliance/DailyChecklistForm';
 import ComplianceMonitor from '@/components/compliance/ComplianceMonitor';
+import LabelAllergenTab from '@/components/compliance/LabelAllergenTab';
+import HACCPPlanTab from '@/components/compliance/HACCPPlanTab';
 
 export default function ComplianceCenter() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -81,16 +83,20 @@ export default function ComplianceCenter() {
 
       <div className="max-w-7xl mx-auto p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-8 mb-6">
-            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            <TabsTrigger value="temperature">🌡️ Temperature</TabsTrigger>
-            <TabsTrigger value="pH">🧪 pH</TabsTrigger>
-            <TabsTrigger value="CCP">⚠️ CCP</TabsTrigger>
-            <TabsTrigger value="sanitation">🧹 Sanitation</TabsTrigger>
-            <TabsTrigger value="corrective">🔧 Corrective</TabsTrigger>
-            <TabsTrigger value="checklist">📋 Checklist</TabsTrigger>
-            <TabsTrigger value="export">📊 Export</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto pb-1 mb-6">
+            <TabsList className="inline-flex w-max min-w-full">
+              <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+              <TabsTrigger value="temperature">🌡️ Temperature</TabsTrigger>
+              <TabsTrigger value="pH">🧪 pH</TabsTrigger>
+              <TabsTrigger value="CCP">⚠️ CCP</TabsTrigger>
+              <TabsTrigger value="sanitation">🧹 Sanitation</TabsTrigger>
+              <TabsTrigger value="corrective">🔧 Corrective</TabsTrigger>
+              <TabsTrigger value="checklist">📋 Checklist</TabsTrigger>
+              <TabsTrigger value="labels">🏷️ Labels & Allergens</TabsTrigger>
+              <TabsTrigger value="haccp">🛡️ HACCP Plan</TabsTrigger>
+              <TabsTrigger value="export">📊 Export</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="dashboard">
             <ComplianceDashboard />
@@ -169,6 +175,14 @@ export default function ComplianceCenter() {
               <DailyChecklistForm />
               <DailyChecklistsList />
             </div>
+          </TabsContent>
+
+          <TabsContent value="labels">
+            <LabelAllergenTab />
+          </TabsContent>
+
+          <TabsContent value="haccp">
+            <HACCPPlanTab />
           </TabsContent>
 
           <TabsContent value="export">
