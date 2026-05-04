@@ -776,62 +776,40 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     }
   };
 
-  // Filter orders to show only fulfillments for the selected date
-  // Primary source: FulfillmentTask assigned_delivery_date, secondary: scheduled_date (do NOT require parent order assigned_production_date)
-  let displayOrders = (routeData?.optimized_orders || queuedOrders || []).map(order => {
-    // Check if this is a subscription or one-time order
-    const fulfillmentMode = order.fulfillment_mode || (order.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
-    
-    if (fulfillmentMode === 'multi_delivery') {
-      // Multi-delivery: find the fulfillment matching the selected delivery date
-      const fulfillmentForDate = order.fulfillments?.find(f => f.delivery_date === date);
-      if (fulfillmentForDate) {
-        return {
-          ...order,
-          deliveryItems: fulfillmentForDate.items || [],
-          selectedFulfillment: fulfillmentForDate,
-          isMultiDelivery: true,
-        };
-      } else {
-        return null;
-      }
-    } else {
-      // Single-delivery: use FulfillmentTask delivery date field hierarchy (not parent order production date)
-      const taskAssignedDeliveryDate = order.assigned_delivery_date; // Primary: assigned_delivery_date from FulfillmentTask
-      const taskScheduledDate = order.scheduled_date; // Secondary: scheduled_date from FulfillmentTask
-      const fallbackDeliveryDate = order.requested_delivery_date; // Fallback: requested_delivery_date from order
-      const isAssignedToThisDate = taskAssignedDeliveryDate === date || taskScheduledDate === date || fallbackDeliveryDate === date;
-      
-      if (isAssignedToThisDate) {
-        const fulfillmentForDate = order.fulfillments?.length > 0 ? order.fulfillments[0] : null;
-        return {
-          ...order,
-          deliveryItems: fulfillmentForDate?.items || order.items || [],
-          selectedFulfillment: fulfillmentForDate || null,
-          isMultiDelivery: false,
-        };
-      } else {
-        return null;
-      }
-    }
-  }).filter(o => o !== null);
+  // Resolve task delivery date using hierarchy (NOT parent order assigned_production_date)
+  const resolveTaskDeliveryDate = (task) => {
+    return task.assigned_delivery_date || task.delivery_date || task.scheduled_delivery_date || task.scheduled_date;
+  };
+
+  // Determine if task is route-eligible
+  const isRouteEligible = (task) => {
+    const routeEligibleStatuses = ['packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery', 'ready_for_route', 'out_for_delivery'];
+    return routeEligibleStatuses.includes((task.status || '').toLowerCase());
+  };
+
+  // Determine if task is completed
+  const isCompleted = (task) => {
+    const completedStatuses = ['completed', 'delivered', 'fulfilled'];
+    return completedStatuses.includes((task.status || '').toLowerCase());
+  };
+
+  // Separate all tasks into readiness buckets
+  const allTasksForDate = (queuedOrders || []).filter(task => resolveTaskDeliveryDate(task) === date);
+  const readyForRouteOrders = allTasksForDate.filter(isRouteEligible);
+  const scheduledNotReadyOrders = allTasksForDate.filter(task => !isRouteEligible(task) && !isCompleted(task));
+  const completedOrders = allTasksForDate.filter(isCompleted);
+  
+  // For display, combine all non-completed tasks, then organize by readiness section
+  const displayOrders = allTasksForDate.filter(task => !isCompleted(task));
 
   if (manualOrder) {
     displayOrders = manualOrder;
   }
-  const isOptimized = !!routeData?.optimized_orders && !manualOrder;
-  const delivered = displayOrders.filter(o => o.status === 'delivered').length;
+  const readyCount = readyForRouteOrders.length;
+  const scheduledCount = scheduledNotReadyOrders.length;
+  const completedCount = completedOrders.length;
 
-  // Manual reordering handler
-  const handleReorderStop = (fromIdx, toIdx) => {
-    if (!displayOrders) return;
-    const newOrder = [...displayOrders];
-    const [movedItem] = newOrder.splice(fromIdx, 1);
-    newOrder.splice(toIdx, 0, movedItem);
-    setManualOrder(newOrder);
-  };
-
-  const todaysOrderIds = new Set(displayOrders.map(o => o.id));
+  const todaysOrderIds = new Set(allTasksForDate.map(o => o.id));
   const todaysBagReturns = bagReturns.filter(r => todaysOrderIds.has(r.order_id));
   const pendingBagReturns = bagReturns.filter(r => !todaysOrderIds.has(r.order_id) && r.verification_status === 'requested');
 
@@ -843,27 +821,6 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   });
 
   const routeReturnCount = todaysBagReturns.filter(r => r.verification_status === 'requested').length;
-
-  // Add return-to-origin stop at the end of the route (display only)
-  const routeDisplayOrders = routeData?.optimized_orders
-    ? [
-        ...routeData.optimized_orders,
-        ...(routeData.return_to_origin ? [{
-          id: '__return_to_origin__',
-          order_number: 'Return',
-          customer_name: 'Return to NuVira Base',
-          customer_email: null,
-          delivery_address: DEPOT,
-          address_line1: '619 N Main St',
-          address_line2: 'Unit 3',
-          address_city: "O'Fallon",
-          address_state: 'MO',
-          address_postal_code: '63366',
-          status: 'return_to_origin',
-          is_return_stop: true,
-        }] : []),
-      ]
-    : routeData?.optimized_orders || queuedOrders || [];
 
   const quickDates = getQuickDates();
 
@@ -928,10 +885,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
       <div className="grid grid-cols-4 divide-x divide-border border-y border-border bg-card mt-4">
         {[
-          { label: 'Queued', value: queuedOrders?.length ?? '—', color: 'text-foreground' },
-          { label: 'Done', value: delivered, color: 'text-green-600' },
-          { label: 'Left', value: (queuedOrders?.length ?? 0) - delivered, color: 'text-primary' },
-          { label: "Today's Returns", value: routeReturnCount, color: 'text-amber-600' },
+          { label: 'Ready', value: readyCount, color: 'text-green-600' },
+          { label: 'Scheduled', value: scheduledCount, color: 'text-primary' },
+          { label: 'Completed', value: completedCount, color: 'text-muted-foreground' },
+          { label: "Bag Returns", value: routeReturnCount, color: 'text-amber-600' },
         ].map(s => (
           <div key={s.label} className="py-3 text-center">
             <p className={`text-xl font-bold font-heading ${s.color}`}>{s.value}</p>
@@ -940,26 +897,33 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         ))}
       </div>
 
-      {isOptimized && routeData?.return_to_origin && (
+      {routeData?.route_stats && (
         <div className="px-4 mt-4 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2">
           <Navigation className="w-4 h-4 text-blue-600 shrink-0" />
           <p className="text-xs text-blue-700"><span className="font-semibold">Round-trip route:</span> After final delivery, return to NuVira Base</p>
         </div>
       )}
 
-      {queuedOrders?.length > 0 && !isOptimized && (
+      {readyForRouteOrders.length > 0 && !routeData?.route_stats && (
         <div className="px-4 mt-4">
           <button onClick={optimizeRoute} disabled={optimizing}
             className="w-full py-3.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
             {optimizing
               ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Optimizing...</>
-              : <><Route className="w-4 h-4" /> Optimize Route ({queuedOrders.length} stops)</>
+              : <><Route className="w-4 h-4" /> Optimize Route ({readyForRouteOrders.length} ready)</>
             }
           </button>
         </div>
       )}
 
-      {isOptimized && (
+      {readyCount === 0 && allTasksForDate.length > 0 && !routeData?.route_stats && (
+        <div className="px-4 mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-blue-600 shrink-0" />
+          <p className="text-xs text-blue-700"><span className="font-semibold">No route-ready deliveries yet.</span> Scheduled deliveries are visible below but not ready for routing.</p>
+        </div>
+      )}
+
+      {routeData?.route_stats && (
         <div className="px-4 mt-4 space-y-2">
           {routeData?.route_stats && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
@@ -998,7 +962,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
             </div>
           )}
           {(() => {
-            const url = buildFullRouteUrl(routeDisplayOrders);
+            const url = buildFullRouteUrl(readyForRouteOrders);
             return url ? (
               <a href={url} target="_blank" rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full py-3.5 bg-blue-600 text-white rounded-xl text-sm font-bold active:scale-[0.98] transition-transform">
@@ -1016,7 +980,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
             <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             <p className="text-sm text-muted-foreground">Loading delivery queue...</p>
           </div>
-        ) : routeDisplayOrders.length === 0 ? (
+        ) : allTasksForDate.length === 0 ? (
           <div className="text-center py-16">
             <CheckCircle2 className="w-10 h-10 text-primary mx-auto mb-3" />
             <p className="text-sm font-semibold">No delivery tasks scheduled for {getDateLabel(date).toLowerCase()}</p>
@@ -1024,67 +988,77 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           </div>
         ) : (
           <>
-            <p className="text-xs text-muted-foreground font-medium px-1">
-              {isOptimized
-                ? `${(routeDisplayOrders || []).filter(o => !o.is_return_stop).length} deliveries + return to base`
-                : `${routeDisplayOrders.length} stop${routeDisplayOrders.length > 1 ? 's' : ''} · tap to review bag returns`}
-            </p>
-            {(routeDisplayOrders || []).map((order, idx) => (
-              <div key={order.id} className="flex gap-2">
-                {isOptimized && order.is_return_stop && (
-                  <div className="flex gap-2 w-full pt-2">
-                    <div className="flex flex-col items-center pt-2 shrink-0">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold bg-green-100 text-green-600">✓</div>
-                    </div>
-                    <div className="flex-1 flex items-center px-4 py-3.5 bg-blue-50 border border-blue-200 rounded-xl">
-                      <Navigation className="w-4 h-4 text-blue-600 mr-2 shrink-0" />
-                      <div>
-                        <p className="text-sm font-semibold text-blue-900">Return to NuVira Base</p>
-                        <p className="text-xs text-blue-600 mt-0.5">619 N Main St Unit 3, O'Fallon, MO 63366</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {isOptimized && !order.is_return_stop && (
-                  <div className="flex flex-col items-center pt-4 shrink-0">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${order.status === 'delivered' ? 'bg-green-100 text-green-600' : 'bg-primary text-primary-foreground'}`}>
-                      {order.status === 'delivered' ? '✓' : idx + 1}
-                    </div>
-                    {idx < (routeDisplayOrders || []).filter(o => !o.is_return_stop).length && <div className="w-0.5 flex-1 bg-border mt-1" />}
-                  </div>
-                )}
-                <div className="flex-1 pb-2">
-                  {!order.is_return_stop && (isOptimized || manualOrder) ? (
-                    <StopCard
-                       order={order}
-                       pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
-                       onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
-                       onMarkUnableToDeliver={handleMarkUnableToDeliver}
-                       onMarkStage={handleMarkStage}
-                       onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
-                       allCredits={allCredits}
-                       user={user}
-                       isUpdating={updatingId === order.id || deletingId === order.id}
-                       onDelete={handleDeleteOrder}
-                       isDragging={isDragging === idx}
-                       onDragStart={() => setIsDragging(idx)}
-                       onDragEnd={() => setIsDragging(null)}
-                       onReorder={(toIdx) => handleReorderStop(idx, toIdx)}
-                       isManuallyReordered={!!manualOrder}
-                     />
-                  ) : (
-                    <PreOptimizeOrderCard
-                      order={order}
-                      pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
-                      onVerifyReturn={(ret, data) => onBagReturnVerified(ret, data)}
-                      user={user}
-                      isUpdating={updatingId === order.id || deletingId === order.id}
-                      onDelete={handleDeleteOrder}
-                    />
-                  )}
-                </div>
+            {/* Ready For Route Section */}
+            {readyForRouteOrders.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-green-600 px-1 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Ready For Route ({readyCount})
+                </p>
+                {readyForRouteOrders.map((order, idx) => (
+                  <StopCard
+                    key={order.id}
+                    order={order}
+                    pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
+                    onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
+                    onMarkUnableToDeliver={handleMarkUnableToDeliver}
+                    onMarkStage={handleMarkStage}
+                    onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
+                    allCredits={allCredits}
+                    user={user}
+                    isUpdating={updatingId === order.id || deletingId === order.id}
+                    onDelete={handleDeleteOrder}
+                  />
+                ))}
               </div>
-            ))}
+            )}
+
+            {/* Scheduled / Not Ready Section */}
+            {scheduledNotReadyOrders.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-primary px-1 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" /> Scheduled / Not Ready ({scheduledCount})
+                </p>
+                {scheduledNotReadyOrders.map((order) => (
+                  <StopCard
+                    key={order.id}
+                    order={order}
+                    pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
+                    onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
+                    onMarkUnableToDeliver={handleMarkUnableToDeliver}
+                    onMarkStage={handleMarkStage}
+                    onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
+                    allCredits={allCredits}
+                    user={user}
+                    isUpdating={updatingId === order.id || deletingId === order.id}
+                    onDelete={handleDeleteOrder}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Completed Section */}
+            {completedOrders.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Completed ({completedCount})
+                </p>
+                {completedOrders.map((order) => (
+                  <StopCard
+                    key={order.id}
+                    order={order}
+                    pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
+                    onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
+                    onMarkUnableToDeliver={handleMarkUnableToDeliver}
+                    onMarkStage={handleMarkStage}
+                    onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
+                    allCredits={allCredits}
+                    user={user}
+                    isUpdating={updatingId === order.id || deletingId === order.id}
+                    onDelete={handleDeleteOrder}
+                  />
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
