@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, X, Loader2, SlidersHorizontal } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Search, X, Loader2 } from 'lucide-react';
 import { globalSearch } from '@/lib/globalSearch';
 import { useAuth } from '@/lib/AuthContext';
 import SearchResultItem from './SearchResultItem';
@@ -11,6 +11,7 @@ export default function GlobalSearch({ mobile = false }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -22,6 +23,11 @@ export default function GlobalSearch({ mobile = false }) {
   const inputRef = useRef(null);
   const containerRef = useRef(null);
   const debounceRef = useRef(null);
+
+  // Auto-close on route change (handles nav, result clicks, back/forward)
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
 
   // Keyboard shortcut Cmd+K / Ctrl+K
   useEffect(() => {
@@ -39,18 +45,18 @@ export default function GlobalSearch({ mobile = false }) {
   // Focus input when opened
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
-    else { setQuery(''); setResults({}); }
+    else { setQuery(''); setResults({}); setActiveCategory('All'); }
   }, [open]);
 
-  // Click outside to close
+  // Click outside to close (desktop only)
   useEffect(() => {
-    if (!open) return;
+    if (!open || mobile) return;
     const handler = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  }, [open, mobile]);
 
   const runSearch = useCallback(async (q) => {
     if (!q || q.trim().length < 2) { setResults({}); setLoading(false); return; }
@@ -79,7 +85,7 @@ export default function GlobalSearch({ mobile = false }) {
 
   const totalCount = Object.values(results).reduce((s, arr) => s + arr.length, 0);
 
-  // ── Mobile: icon button that opens modal ────────────────────────────────
+  // ── Mobile: icon button that opens full-screen overlay ──────────────────
   if (mobile) {
     return (
       <>
@@ -92,38 +98,62 @@ export default function GlobalSearch({ mobile = false }) {
         </button>
 
         {open && (
-          <div className="fixed inset-0 z-50 bg-background flex flex-col">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-              <Search className="h-5 w-5 text-muted-foreground shrink-0" />
+          <div
+            className="fixed inset-0 z-[60] bg-background flex flex-col"
+            style={{ paddingTop: 'env(safe-area-inset-top)' }}
+          >
+            {/* Search bar row */}
+            <div className="flex items-center gap-3 px-4 border-b border-border" style={{ minHeight: '56px' }}>
+              {loading
+                ? <Loader2 className="h-5 w-5 text-muted-foreground animate-spin shrink-0" />
+                : <Search className="h-5 w-5 text-muted-foreground shrink-0" />
+              }
               <input
                 ref={inputRef}
                 value={query}
                 onChange={handleChange}
-                placeholder="Search orders, customers, batches, pages, logs..."
-                className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                placeholder="Search orders, customers, batches..."
+                className="flex-1 bg-transparent text-base text-foreground placeholder:text-muted-foreground outline-none py-4"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
               />
-              {query && (
-                <button onClick={clearQuery} className="text-muted-foreground hover:text-foreground">
+              {query ? (
+                <button
+                  onClick={clearQuery}
+                  className="flex items-center justify-center h-8 w-8 rounded-full bg-muted text-muted-foreground shrink-0"
+                  aria-label="Clear"
+                >
                   <X className="h-4 w-4" />
                 </button>
-              )}
-              <button onClick={close} className="text-sm text-primary font-medium ml-1">Cancel</button>
+              ) : null}
+              <button
+                onClick={close}
+                className="shrink-0 text-base font-semibold text-primary px-2 py-3 min-w-[60px] text-right"
+                aria-label="Cancel search"
+              >
+                Cancel
+              </button>
             </div>
 
-            <SearchBody
-              query={query}
-              results={displayResults}
-              allResults={results}
-              allCategories={allCategories}
-              activeCategory={activeCategory}
-              setActiveCategory={setActiveCategory}
-              loading={loading}
-              totalCount={totalCount}
-              isAdmin={isAdmin}
-              includeArchived={includeArchived}
-              setIncludeArchived={setIncludeArchived}
-              onClose={close}
-            />
+            {/* Results */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <SearchBody
+                query={query}
+                results={displayResults}
+                allResults={results}
+                allCategories={allCategories}
+                activeCategory={activeCategory}
+                setActiveCategory={setActiveCategory}
+                loading={loading}
+                totalCount={totalCount}
+                isAdmin={isAdmin}
+                includeArchived={includeArchived}
+                setIncludeArchived={setIncludeArchived}
+                onClose={close}
+              />
+            </div>
           </div>
         )}
       </>
