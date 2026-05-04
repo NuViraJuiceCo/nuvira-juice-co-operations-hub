@@ -4,10 +4,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Download, Filter, AlertCircle, CheckCircle2, Printer } from 'lucide-react';
+import { Download, Filter, AlertCircle, CheckCircle2, Printer, BookOpen } from 'lucide-react';
 import AdminGuide from '@/components/shared/AdminGuide';
 import UnifiedComplianceForm from '@/components/compliance/UnifiedComplianceForm';
 import PrintableLogSheet from '@/components/compliance/PrintableLogSheet';
+import MonthlyBinderExport from '@/components/compliance/MonthlyBinderExport';
+import { useAuth } from '@/lib/AuthContext';
 import moment from 'moment';
 
 export default function ComplianceLogs() {
@@ -18,6 +20,8 @@ export default function ComplianceLogs() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [deletingId, setDeletingId] = useState(null);
   const [printingLog, setPrintingLog] = useState(null);
+  const [showMonthlyExport, setShowMonthlyExport] = useState(false);
+  const { user } = useAuth();
 
   const { data: logs = [], isLoading, refetch } = useQuery({
     queryKey: ['compliance_logs', startDate, endDate, logTypeFilter, statusFilter],
@@ -140,10 +144,16 @@ export default function ComplianceLogs() {
           <h1 className="text-3xl font-bold">Compliance Logs</h1>
           <p className="text-muted-foreground mt-1">Temperature, pH, CCP, Sanitation & Corrective Actions</p>
         </div>
-        <Button onClick={handleExport} className="gap-2">
-          <Download className="w-4 h-4" />
-          Export All Logs
-        </Button>
+        <div className="flex gap-2 flex-wrap justify-end">
+          <Button variant="outline" onClick={() => setShowMonthlyExport(true)} className="gap-2">
+            <BookOpen className="w-4 h-4" />
+            Export Monthly Binder
+          </Button>
+          <Button onClick={handleExport} className="gap-2">
+            <Download className="w-4 h-4" />
+            Export All Logs
+          </Button>
+        </div>
       </div>
 
       {/* New Log Form */}
@@ -288,6 +298,9 @@ export default function ComplianceLogs() {
       </div>
       {printingLog && (
         <PrintableLogSheet log={printingLog} onClose={() => setPrintingLog(null)} />
+      )}
+      {showMonthlyExport && (
+        <MonthlyBinderExport user={user} onClose={() => setShowMonthlyExport(false)} />
       )}
     </div>
   );
