@@ -672,7 +672,11 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     }
   };
 
-  useEffect(() => { loadQueue(date); }, [date]);
+  useEffect(() => { 
+    loadQueue(date);
+    setRouteData(null); // Reset route when date changes
+    setManualOrder(null); // Reset manual ordering
+  }, [date]);
 
   const handleMarkDelivered = async (order, proofPhotoUrl, dropLocation) => {
     setUpdatingId(order.id);
@@ -773,13 +777,13 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   // Filter orders to show only fulfillments for the selected date
-  // and extract per-fulfillment products
+  // Compare against scheduled_date on the order (from FulfillmentTask)
   let displayOrders = (routeData?.optimized_orders || queuedOrders || []).map(order => {
     // Check if this is a subscription or one-time order
     const fulfillmentMode = order.fulfillment_mode || (order.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
     
     if (fulfillmentMode === 'multi_delivery') {
-      // Multi-delivery: find the fulfillment for this delivery date
+      // Multi-delivery: find the fulfillment matching the selected delivery date
       const fulfillmentForDate = order.fulfillments?.find(f => f.delivery_date === date);
       if (fulfillmentForDate) {
         return {
@@ -789,16 +793,14 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           isMultiDelivery: true,
         };
       } else {
-        // No fulfillment for this date - skip this order
         return null;
       }
     } else {
-      // Single-delivery: check if it's assigned to this date
-      const isAssignedToThisDate = order.assigned_delivery_date === date || 
-                                    order.requested_delivery_date === date;
+      // Single-delivery: check if scheduled_date (from FulfillmentTask) matches selected date
+      const taskScheduledDate = order.scheduled_date || order.assigned_delivery_date || order.requested_delivery_date;
+      const isAssignedToThisDate = taskScheduledDate === date;
       
-      if (isAssignedToThisDate || !date) {
-        // Use first fulfillment if available, otherwise order items
+      if (isAssignedToThisDate) {
         const fulfillmentForDate = order.fulfillments?.length > 0 ? order.fulfillments[0] : null;
         return {
           ...order,
@@ -909,9 +911,12 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
         {/* Refresh Button & Current Date Label */}
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-foreground">
-            {getDateLabel(date)} Deliveries
-          </p>
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {getDateLabel(date)} Deliveries
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Showing tasks for {date}</p>
+          </div>
           <button onClick={() => loadQueue(date)} disabled={loading}
             className="w-9 h-9 bg-secondary rounded-xl flex items-center justify-center hover:bg-secondary/80 transition-colors disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
@@ -1012,8 +1017,8 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         ) : routeDisplayOrders.length === 0 ? (
           <div className="text-center py-16">
             <CheckCircle2 className="w-10 h-10 text-primary mx-auto mb-3" />
-            <p className="text-sm font-semibold">No queued deliveries</p>
-            <p className="text-xs text-muted-foreground mt-1">All done or try clearing the date filter.</p>
+            <p className="text-sm font-semibold">No delivery tasks scheduled for {getDateLabel(date).toLowerCase()}</p>
+            <p className="text-xs text-muted-foreground mt-1">Try selecting a different date.</p>
           </div>
         ) : (
           <>
