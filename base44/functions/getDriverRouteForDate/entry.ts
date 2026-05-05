@@ -67,10 +67,11 @@ Deno.serve(async (req) => {
 
     // ── INPUT ────────────────────────────────────────────────────────────────
     const body = await req.json();
-    const date = body.date;
+    // Accept date, selected_date, scheduled_date, or delivery_date as aliases
+    const date = body.date || body.selected_date || body.scheduled_date || body.delivery_date;
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return Response.json({ error: 'date required (YYYY-MM-DD)' }, { status: 400 });
+      return Response.json({ error: 'date required (YYYY-MM-DD)', received: body }, { status: 400 });
     }
 
     // ── RESOLVE VIA HUB RESOLVER ─────────────────────────────────────────────
@@ -80,13 +81,14 @@ Deno.serve(async (req) => {
       selectedDate: date,
     });
 
-    if (!resolved || resolved.error) {
-      return Response.json({ error: 'Resolver failed', detail: resolved?.error }, { status: 500 });
+    const resolvedData = resolved?.data || resolved;
+    if (!resolvedData || resolvedData.error) {
+      return Response.json({ error: 'Resolver failed', detail: resolvedData?.error }, { status: 500 });
     }
 
-    const readyTasks     = (resolved.ready_deliveries     || []).map(sanitizeTask);
-    const scheduledTasks = (resolved.scheduled_deliveries || []).map(sanitizeTask);
-    const completedTasks = (resolved.completed_deliveries || []).map(sanitizeTask);
+    const readyTasks     = (resolvedData.ready_deliveries     || []).map(sanitizeTask);
+    const scheduledTasks = (resolvedData.scheduled_deliveries || []).map(sanitizeTask);
+    const completedTasks = (resolvedData.completed_deliveries || []).map(sanitizeTask);
 
     const total = readyTasks.length + scheduledTasks.length + completedTasks.length;
     const left  = readyTasks.length + scheduledTasks.length; // completed excluded from left
