@@ -63,7 +63,54 @@ Deno.serve(async (req) => {
       delivery_notes,
       customer_notes,
       requested_delivery_date,
+      selected_delivery_date,        // Customer-chosen delivery date (takes priority over requested_delivery_date)
+      delivery_window_label,         // Optional: "5 PM – 8 PM"
     } = body;
+
+    // ── DELIVERY DATE RESOLUTION ──────────────────────────────────────────────
+    // Validate customer-selected delivery date against supported schedule.
+    // Supported: Wednesday (Wed delivery → Tue production),
+    //            Saturday (Sat delivery → Fri production),
+    //            Sunday (Sun delivery → Sat production — conditional)
+    // Production is always the day immediately before the delivery date on a valid production day.
+    const PRODUCTION_DAYS_DOW = { 2: true, 5: true, 6: true }; // Tue=2, Fri=5, Sat=6
+    const DELIVERY_DAYS_DOW   = { 3: true, 6: true, 0: true }; // Wed=3, Sat=6, Sun=0
+
+    function resolveProductionDateForDelivery(deliveryDateStr) {
+      if (!deliveryDateStr) return null;
+      const d = new Date(deliveryDateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) return null;
+      // Walk backwards up to 7 days to find nearest valid production day
+      for (let i = 1; i <= 7; i++) {
+        const check = new Date(d);
+        check.setDate(d.getDate() - i);
+        if (PRODUCTION_DAYS_DOW[check.getDay()]) {
+          return check.toISOString().split('T')[0];
+        }
+      }
+      // Fallback: 1 day prior
+      const fallback = new Date(d);
+      fallback.setDate(d.getDate() - 1);
+      return fallback.toISOString().split('T')[0];
+    }
+
+    // Pick the best delivery date: customer selection > requested > null
+    const candidateDeliveryDate = selected_delivery_date || requested_delivery_date || null;
+    let resolvedDeliveryDate = null;
+    let resolvedProductionDate = null;
+    let deliveryDateRejectionReason = null;
+
+    if (candidateDeliveryDate) {
+      const d = new Date(candidateDeliveryDate + 'T00:00:00');
+      if (!isNaN(d.getTime()) && DELIVERY_DAYS_DOW[d.getDay()] !== undefined) {
+        resolvedDeliveryDate = candidateDeliveryDate;
+        resolvedProductionDate = resolveProductionDateForDelivery(candidateDeliveryDate);
+      } else if (!isNaN(d.getTime())) {
+        // Invalid delivery day — log it but don't hard-reject; let Hub recalculate
+        deliveryDateRejectionReason = `Delivery date ${candidateDeliveryDate} (day ${d.getDay()}) is not a supported delivery day (Wed/Sat/Sun). Hub will recalculate.`;
+        console.warn('[INGEST] ' + deliveryDateRejectionReason);
+      }
+    }
 
     // ── VALIDATION ────────────────────────────────────────────────────────
     const errors = [];
@@ -111,6 +158,13 @@ Deno.serve(async (req) => {
       delivery_notes: delivery_notes || '',
       customer_notes: customer_notes || '',
       requested_delivery_date: requested_delivery_date || '',
+      selected_delivery_date: selected_delivery_date || null,
+      // If a valid delivery date was resolved, set assigned_delivery_date and production_date
+      ...(resolvedDeliveryDate ? {
+        assigned_delivery_date: resolvedDeliveryDate,
+        production_date: resolvedProductionDate,
+        delivery_window_label: delivery_window_label || '5 PM – 8 PM',
+      } : {}),
       stripe_checkout_session_id: stripe_checkout_session_id || null,
       stripe_payment_intent_id: stripe_payment_intent_id || null,
       stripe_customer_id: stripe_customer_id || null,
@@ -174,6 +228,10 @@ Deno.serve(async (req) => {
         action: action || 'created', // created or updated
         order_id: order_id,
         order_number: order_number,
+        assigned_delivery_date: resolvedDeliveryDate || null,
+        production_date: resolvedProductionDate || null,
+        delivery_window_label: resolvedDeliveryDate ? (delivery_window_label || '5 PM – 8 PM') : null,
+        delivery_date_note: deliveryDateRejectionReason || null,
       }, { status: 200 });
     } else if (safeStatus === 'skipped' && action === 'duplicate_event') {
       // Idempotent re-submission of same order (same Stripe session/intent)

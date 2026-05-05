@@ -64,13 +64,16 @@ Deno.serve(async (req) => {
             .map(item => `${item.quantity}x ${item.title}`)
             .join(', ');
 
+          const deliveryDate = fulfillment.delivery_date || new Date().toISOString().split('T')[0];
+
           // Create FulfillmentTask
           const task = await base44.asServiceRole.entities.FulfillmentTask.create({
             customer_name: order.customer_name || 'Unknown',
             fulfillment_type: 'Delivery',
-            time_window: '09:00 - 17:00', // Default delivery window
+            time_window: '17:00 - 20:00', // NuVira delivery window: 5 PM – 8 PM
             status: 'Unassigned',
-            scheduled_date: fulfillment.delivery_date || new Date().toISOString().split('T')[0],
+            scheduled_date: deliveryDate,
+            assigned_delivery_date: deliveryDate, // Explicit field for Driver Portal routing
             address: `${fulfillment.address_line1 || ''}, ${fulfillment.address_city || ''}, ${fulfillment.address_state || ''}`.replace(/^,\s*/, '').replace(/,\s*$/, ''),
             assigned_driver: null,
             items_summary: itemsSummary,
