@@ -223,6 +223,7 @@ Deno.serve(async (req) => {
         return Response.json({
           status: 'success',
           action: 'updated',
+          hub_order_id: existingMatchedOrder.id,
           order_id: existingMatchedOrder.id,
           order_number: existingMatchedOrder.shopify_order_number,
           payment_status_upgraded: true,
@@ -238,6 +239,7 @@ Deno.serve(async (req) => {
       return Response.json({
         status: 'success',
         action: 'dedupe_exact_match',
+        hub_order_id: existingMatchedOrder.id,
         order_id: existingMatchedOrder.id,
         order_number: existingMatchedOrder.shopify_order_number,
         matched_by: matchedBy,
@@ -290,6 +292,7 @@ Deno.serve(async (req) => {
       return Response.json({
         status: 'success',
         action: action || 'created',
+        hub_order_id: order_id,
         order_id: order_id,
         order_number: order_number,
         assigned_delivery_date: resolvedDeliveryDate || null,
