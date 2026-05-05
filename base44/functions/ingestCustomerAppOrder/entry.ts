@@ -179,22 +179,86 @@ Deno.serve(async (req) => {
       data_quality_status: 'complete',
     };
 
-    // ── IDEMPOTENCY LOOKUP ───────────────────────────────────────────────────
-    // Build matchBy object in priority order for safeSyncOrderUpdate
-    const matchBy = {};
-    
+    // ── PRE-FLIGHT IDEMPOTENCY CHECK ────────────────────────────────────────
+    // Check for exact duplicate BEFORE calling safeSyncOrderUpdate.
+    // Exact duplicate = same stripe_checkout_session_id OR same stripe_payment_intent_id OR same order_number.
+    // NOT a duplicate if only customer_email / address / total / items match.
+    // If a match is found, return dedupe_exact_match with full context so CA can log it properly.
+    let existingMatchedOrder = null;
+    let matchedBy = null;
+
+    // Run lookups in parallel where possible — check session first, then PI and order_number in parallel
     if (stripe_checkout_session_id) {
-      matchBy.stripe_checkout_session_id = stripe_checkout_session_id;
+      const found = await base44.asServiceRole.entities.ShopifyOrder.filter({ stripe_checkout_session_id });
+      if (found?.length > 0) { existingMatchedOrder = found[0]; matchedBy = 'stripe_checkout_session_id'; }
     }
-    if (stripe_payment_intent_id) {
-      matchBy.stripe_payment_intent_id = stripe_payment_intent_id;
+    if (!existingMatchedOrder) {
+      const [byPI, byNum] = await Promise.all([
+        stripe_payment_intent_id
+          ? base44.asServiceRole.entities.ShopifyOrder.filter({ stripe_payment_intent_id })
+          : Promise.resolve([]),
+        order_number
+          ? base44.asServiceRole.entities.ShopifyOrder.filter({ shopify_order_number: order_number })
+          : Promise.resolve([]),
+      ]);
+      if (byPI?.length > 0) { existingMatchedOrder = byPI[0]; matchedBy = 'stripe_payment_intent_id'; }
+      else if (byNum?.length > 0) { existingMatchedOrder = byNum[0]; matchedBy = 'order_number'; }
     }
-    if (order_intent_id) {
-      matchBy.order_intent_id = order_intent_id;
+
+    if (existingMatchedOrder) {
+      // Exact idempotency match found.
+      // If the existing order has payment_status=pending and incoming is paid, upgrade it.
+      // Otherwise return dedupe_exact_match with full context.
+      const existingPayment = existingMatchedOrder.payment_status;
+      const shouldUpgradePayment = existingPayment !== 'paid' && incomingData.payment_status === 'paid';
+
+      if (shouldUpgradePayment) {
+        // Upgrade payment_status to paid — this is a legitimate state transition, not a duplicate
+        console.log(`[INGEST] Upgrading payment_status from ${existingPayment} → paid for ${existingMatchedOrder.shopify_order_number} (matched by ${matchedBy})`);
+        await base44.asServiceRole.entities.ShopifyOrder.update(existingMatchedOrder.id, {
+          payment_status: 'paid',
+          sync_status: 'synced',
+          last_sync_at: new Date().toISOString(),
+        });
+        return Response.json({
+          status: 'success',
+          action: 'updated',
+          order_id: existingMatchedOrder.id,
+          order_number: existingMatchedOrder.shopify_order_number,
+          payment_status_upgraded: true,
+          matched_by: matchedBy,
+          assigned_delivery_date: existingMatchedOrder.assigned_delivery_date || resolvedDeliveryDate || null,
+          production_date: existingMatchedOrder.production_date || resolvedProductionDate || null,
+          delivery_window_label: existingMatchedOrder.delivery_window_label || '5 PM – 8 PM',
+        }, { status: 200 });
+      }
+
+      // True duplicate — no new writes needed
+      console.log(`[INGEST] Exact duplicate detected for ${order_number} (matched ${existingMatchedOrder.shopify_order_number} by ${matchedBy}) — returning dedupe_exact_match`);
+      return Response.json({
+        status: 'success',
+        action: 'dedupe_exact_match',
+        order_id: existingMatchedOrder.id,
+        order_number: existingMatchedOrder.shopify_order_number,
+        matched_by: matchedBy,
+        matched_hub_order_id: existingMatchedOrder.id,
+        matched_order_number: existingMatchedOrder.shopify_order_number,
+        matched_stripe_checkout_session_id: existingMatchedOrder.stripe_checkout_session_id || null,
+        matched_stripe_payment_intent_id: existingMatchedOrder.stripe_payment_intent_id || null,
+        reason: `Idempotent duplicate — order already exists in Hub (matched by ${matchedBy})`,
+      }, { status: 200 });
     }
-    matchBy.shopify_order_id = order_number; // Fallback for order_number lookup
-    
-    console.log('[INGEST] Ingesting order:', {
+
+    // ── NO MATCH FOUND — BUILD matchBy and proceed to safeSyncOrderUpdate ───
+    // At this point we know no exact idempotency match exists. Create new order.
+    const matchBy = {};
+    if (stripe_checkout_session_id) matchBy.stripe_checkout_session_id = stripe_checkout_session_id;
+    if (stripe_payment_intent_id) matchBy.stripe_payment_intent_id = stripe_payment_intent_id;
+    if (order_intent_id) matchBy.order_intent_id = order_intent_id;
+    // NOTE: Do NOT add shopify_order_id = order_number here — that caused wrong-order matching
+    // since order_number != shopify_order_id in most cases. Order number dedup is handled above.
+
+    console.log('[INGEST] No existing match — creating new order:', {
       order_number,
       stripe_checkout_session_id,
       stripe_payment_intent_id,
@@ -204,11 +268,12 @@ Deno.serve(async (req) => {
     });
 
     // ── CALL SAFESYNCORDERUPDATE ────────────────────────────────────────────
-    // Route through the safe gateway to enforce all validation, locks, and idempotency
     const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
       incomingData,
       source: 'customer_app',
-      stripeEventId: stripe_checkout_session_id || stripe_payment_intent_id || order_intent_id || null,
+      // Do NOT pass stripeEventId here — we don't want stripe_event_id_applied to block
+      // future legitimate payment_status updates from the same session on retry.
+      // Idempotency is fully handled by our pre-flight check above.
       matchBy,
     });
 
@@ -221,11 +286,10 @@ Deno.serve(async (req) => {
     });
 
     // ── RESPONSE MAPPING ────────────────────────────────────────────────────
-    // Map safeSyncOrderUpdate responses to customer app responses
     if (safeStatus === 'success') {
       return Response.json({
         status: 'success',
-        action: action || 'created', // created or updated
+        action: action || 'created',
         order_id: order_id,
         order_number: order_number,
         assigned_delivery_date: resolvedDeliveryDate || null,
@@ -233,29 +297,20 @@ Deno.serve(async (req) => {
         delivery_window_label: resolvedDeliveryDate ? (delivery_window_label || '5 PM – 8 PM') : null,
         delivery_date_note: deliveryDateRejectionReason || null,
       }, { status: 200 });
-    } else if (safeStatus === 'skipped' && action === 'duplicate_event') {
-      // Idempotent re-submission of same order (same Stripe session/intent)
-      return Response.json({
-        status: 'success',
-        action: 'duplicate_skipped',
-        order_id: order_id,
-        order_number: order_number,
-        reason: 'Idempotent duplicate — order already synced',
-      }, { status: 200 });
     } else if (safeStatus === 'rejected') {
-      // safeSyncOrderUpdate rejected the order (quality issues, lock violations, etc.)
       return Response.json({
         status: 'rejected',
         reason: safeResult?.data?.reason || 'unknown_rejection',
         order_number: order_number,
+        gateway_detail: safeResult?.data,
       }, { status: 422 });
     } else {
-      // Unexpected response from safeSyncOrderUpdate
       console.error('[INGEST] Unexpected safeSyncOrderUpdate response:', safeResult?.data);
       return Response.json({
         status: 'error',
         reason: 'gateway_error',
         message: 'safeSyncOrderUpdate returned unexpected response',
+        gateway_detail: safeResult?.data,
       }, { status: 500 });
     }
 

@@ -439,32 +439,36 @@ Deno.serve(async (req) => {
       incomingData.source_channel = 'subscription';
     }
 
-    // ── STEP 4.5: PAYMENT STATUS DOWNGRADE GUARDRAIL ────────────────────────
-    // Block any sync from downgrading payment_status from paid → pending/null/unpaid
-    // on orders that are fulfilled, delivered, or locked. Allow legitimate refunds/cancellations only.
-    if (existingOrder && existingOrder.payment_status === 'paid' && source !== 'admin') {
+    // ── STEP 4.5: PAYMENT STATUS GUARDRAILS ─────────────────────────────────
+    if (existingOrder && source !== 'admin') {
       const incomingPayment = incomingData.payment_status;
-      const DOWNGRADE_VALUES = ['pending', 'unpaid', null, undefined, ''];
-      const isDowngrade = incomingPayment !== undefined && DOWNGRADE_VALUES.includes(incomingPayment);
+      const existingPayment = existingOrder.payment_status;
 
-      if (isDowngrade) {
-        const isDelivered = existingOrder.delivered_at || existingOrder.delivery_drop_location;
-        const isFulfilled = existingOrder.production_status === 'fulfilled' || existingOrder.fulfillment_status === 'fulfilled' || existingOrder.fulfillment_status === 'delivered';
-        const isLocked = ['fulfilled', 'out_for_delivery', 'in_production', 'production_scheduled'].includes(existingOrder.order_lock_status);
-
-        if (isDelivered || isFulfilled || isLocked) {
-          console.warn(`[SAFE-SYNC] GUARDRAIL: Blocked payment_status downgrade from paid to "${incomingPayment}" on fulfilled/delivered/locked order ${existingOrder.shopify_order_number} (source: ${source}). Preserving paid status.`);
-          delete incomingData.payment_status;
-          // Track rejection for audit log
-          if (!Array.isArray(incomingData._blockedPaymentDowngrade)) {
-            incomingData._blockedPaymentDowngrade = true;
+      // RULE A: Never downgrade paid → pending/null/unpaid on fulfilled/locked orders
+      if (existingPayment === 'paid') {
+        const DOWNGRADE_VALUES = ['pending', 'unpaid', null, undefined, ''];
+        const isDowngrade = incomingPayment !== undefined && DOWNGRADE_VALUES.includes(incomingPayment);
+        if (isDowngrade) {
+          const isDelivered = existingOrder.delivered_at || existingOrder.delivery_drop_location;
+          const isFulfilled = existingOrder.production_status === 'fulfilled' || existingOrder.fulfillment_status === 'fulfilled' || existingOrder.fulfillment_status === 'delivered';
+          const isLocked = ['fulfilled', 'out_for_delivery', 'in_production', 'production_scheduled'].includes(existingOrder.order_lock_status);
+          if (isDelivered || isFulfilled || isLocked) {
+            console.warn(`[SAFE-SYNC] GUARDRAIL: Blocked payment_status downgrade paid→"${incomingPayment}" on ${existingOrder.shopify_order_number}. Preserving paid.`);
+            delete incomingData.payment_status;
           }
         }
       }
+
+      // RULE B: Always allow upgrading pending/null → paid regardless of lock level.
+      // Payment confirmation can legitimately arrive after production has started.
+      if (incomingPayment === 'paid' && existingPayment !== 'paid') {
+        // Force payment_status=paid through — will be preserved even if lock would otherwise freeze it
+        incomingData._forcePaymentPaid = true;
+        console.log(`[SAFE-SYNC] Allowing payment_status upgrade ${existingPayment || 'null'} → paid for ${existingOrder.shopify_order_number} (lock: ${existingOrder.order_lock_status})`);
+      }
     }
-    // Clean up internal tracking flag before write
-    const _paymentDowngradeBlocked = incomingData._blockedPaymentDowngrade || false;
-    delete incomingData._blockedPaymentDowngrade;
+    const _forcePaymentPaid = incomingData._forcePaymentPaid || false;
+    delete incomingData._forcePaymentPaid;
 
     // ── STEP 5: ORDER LOCK ENFORCEMENT ──────────────────────────────────────
     const lockStatus = existingOrder?.order_lock_status || 'unlocked';
@@ -473,6 +477,9 @@ Deno.serve(async (req) => {
 
     if (frozenFields.length > 0 && source !== 'admin') {
       for (const field of frozenFields) {
+        // CARVE-OUT: Never freeze payment_status when upgrading pending → paid (RULE B from Step 4.5)
+        if (field === 'payment_status' && _forcePaymentPaid) continue;
+
         if (field in incomingData && existingOrder[field] !== undefined && existingOrder[field] !== null && existingOrder[field] !== '') {
           // Field is frozen and existing has a value — reject the incoming value
           delete incomingData[field];
