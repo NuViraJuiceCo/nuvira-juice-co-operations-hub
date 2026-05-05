@@ -120,27 +120,34 @@ async function findOrReconcileOrder(base44, event, rawData) {
     return { quarantine: true, reason: 'missing_customer_name', eventId, email, amount };
   }
 
-  // PHASE 1: Try to find existing order by all known Stripe IDs
-  const existingOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
-    customer_email: email,
-  });
-
+  // PHASE 1: Try to find existing order by Stripe IDs — strict matching only.
+  // NEVER fall back to "most recent order for this email" — that causes wrong-order updates
+  // when a customer places a second order (the new session gets merged into the old record).
   let order = null;
-  if (existingOrders && existingOrders.length > 0) {
-    // Try exact match by Stripe IDs (priority order)
-    order = existingOrders.find(o => 
-      o.stripe_checkout_session_id === stripeId ||
-      o.stripe_payment_intent_id === stripeId ||
-      o.stripe_invoice_id === stripeId ||
-      o.stripe_customer_id === customerId ||
-      o.stripe_subscription_id === rawData.subscription
-    );
 
-    // If no exact match, use most recent (likely the one being updated)
-    if (!order && !stripeId.startsWith('base44_')) {
-      existingOrders.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-      order = existingOrders[0];
-    }
+  // Priority 1: checkout session ID (most specific for checkout events)
+  if (stripeId && stripeId.startsWith('cs_')) {
+    const bySession = await base44.asServiceRole.entities.ShopifyOrder.filter({ stripe_checkout_session_id: stripeId });
+    if (bySession?.length > 0) order = bySession[0];
+  }
+
+  // Priority 2: payment intent ID
+  if (!order && rawData.payment_intent) {
+    const byPI = await base44.asServiceRole.entities.ShopifyOrder.filter({ stripe_payment_intent_id: rawData.payment_intent });
+    if (byPI?.length > 0) order = byPI[0];
+  }
+
+  // Priority 3: subscription ID (for subscription events only)
+  if (!order && rawData.subscription) {
+    const bySub = await base44.asServiceRole.entities.ShopifyOrder.filter({ stripe_subscription_id: rawData.subscription });
+    if (bySub?.length > 0) order = bySub[0];
+  }
+
+  // Priority 4: order_number from Stripe metadata (CA stores NV-XXXXXXXX in metadata)
+  const metaOrderNumber = meta.order_number || meta.shopify_order_number || meta.nuvira_order_number;
+  if (!order && metaOrderNumber) {
+    const byNumber = await base44.asServiceRole.entities.ShopifyOrder.filter({ shopify_order_number: metaOrderNumber });
+    if (byNumber?.length > 0) order = byNumber[0];
   }
 
   // PHASE 2: Extract line items if available
@@ -167,7 +174,9 @@ async function findOrReconcileOrder(base44, event, rawData) {
   // PHASE 4: Build order payload with full Stripe linkage
   const orderPayload = {
     shopify_order_id: stripeId,
-    shopify_order_number: order?.shopify_order_number || `#STR${Math.floor(Date.now() / 1000)}`,
+    // Use order_number from Stripe metadata if available (CA stores the real NV-XXXXXXXX there)
+    // Fall back to existing Hub order number, then generate a Stripe-prefixed placeholder
+    shopify_order_number: order?.shopify_order_number || metaOrderNumber || `STR-${stripeId?.slice(-8) || Date.now()}`,
     customer_email: email,
     customer_name: shippingName,
     customer_phone: rawData.customer_phone || meta.customer_phone || rawData.billing_details?.phone || order?.customer_phone || '',
