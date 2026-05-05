@@ -48,10 +48,10 @@ Deno.serve(async (req) => {
       (o.address_line1 || o.fulfillment_method === 'pickup')
     );
 
-    // Helper: resolve delivery date
+    // Helper: resolve delivery date — scheduled_date is canonical
     const resolveDeliveryDate = (task) => {
-      return task.assigned_delivery_date || task.delivery_date || 
-             task.scheduled_delivery_date || task.scheduled_date;
+      return task.scheduled_date || task.scheduled_delivery_date || 
+             task.delivery_date || task.assigned_delivery_date;
     };
 
     // Helper: hydrate item with linked order data

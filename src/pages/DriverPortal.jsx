@@ -786,9 +786,9 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     }
   };
 
-  // Resolve task delivery date using hierarchy (NOT parent order assigned_production_date)
+  // Resolve task delivery date — scheduled_date is canonical
   const resolveTaskDeliveryDate = (task) => {
-    return task.assigned_delivery_date || task.delivery_date || task.scheduled_delivery_date || task.scheduled_date;
+    return task.scheduled_date || task.scheduled_delivery_date || task.delivery_date || task.assigned_delivery_date;
   };
 
   // Determine if task is route-eligible
