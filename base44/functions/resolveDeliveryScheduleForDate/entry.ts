@@ -176,6 +176,16 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Build a FulfillmentTask lookup map by order_id+date for fallback resolution
+    // This lets subscription_fulfillment and order fallback candidates resolve real task IDs
+    const taskByOrderDate = {};
+    tasks.forEach(t => {
+      const date = t.scheduled_date || t.scheduled_delivery_date || t.delivery_date || t.assigned_delivery_date;
+      if (t.order_id && date) {
+        taskByOrderDate[`${t.order_id}-${date}`] = t.id;
+      }
+    });
+
     // 4. Deduplicate: FulfillmentTask wins over subscription fulfillment for same subscription/fulfillment/date
     const dedupeMap = {};
     
@@ -185,22 +195,34 @@ Deno.serve(async (req) => {
       dedupeMap[key] = task;
     }
 
-    // Add order candidates if no existing entry
+    // Add order candidates if no existing entry; resolve real task ID if available
     for (const order of orderCandidates) {
       const key = `${order.order_id}-${order.scheduled_date}`;
       if (!dedupeMap[key]) {
-        dedupeMap[key] = order;
+        const realTaskId = taskByOrderDate[`${order.order_id}-${order.scheduled_date}`] || null;
+        dedupeMap[key] = {
+          ...order,
+          fulfillment_task_id: realTaskId,
+          action_allowed: !!realTaskId,
+          missing_fulfillment_task_id: !realTaskId,
+        };
       }
     }
 
-    // Add subscription candidates only if no task for that subscription/fulfillment/date
+    // Add subscription candidates only if no task for that subscription/fulfillment/date; resolve real task ID if available
     for (const sub of subscriptionCandidates) {
       const subKey = `${sub.subscription_id}-fulfillment-${sub.subscription_fulfillment_number}-${sub.scheduled_date}`;
       const taskKey = `${sub.subscription_id}-${sub.scheduled_date}`;
       
       // Only add if no existing task/order for this subscription fulfillment
       if (!dedupeMap[subKey] && !dedupeMap[taskKey]) {
-        dedupeMap[subKey] = sub;
+        const realTaskId = taskByOrderDate[`${sub.order_id}-${sub.scheduled_date}`] || null;
+        dedupeMap[subKey] = {
+          ...sub,
+          fulfillment_task_id: realTaskId,
+          action_allowed: !!realTaskId,
+          missing_fulfillment_task_id: !realTaskId,
+        };
       }
     }
 

@@ -15,29 +15,41 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 
 // Fields allowed in the sanitized task output
+// task_id MUST be a real FulfillmentTask.id or null — never a ShopifyOrder.id or synthetic string.
 function sanitizeTask(task) {
+  // fulfillment_task_id is set by resolveDeliveryScheduleForDate:
+  //   - FulfillmentTask-sourced cards: always a real FulfillmentTask.id (t.id)
+  //   - Fallback cards: real FulfillmentTask.id if found by order_id+date lookup, else null
+  // We never fall back to task.id for non-FulfillmentTask sources to avoid leaking order IDs or synthetic strings.
+  const isFulfillmentTaskSource = task.source === 'fulfillment_task';
+  const realTaskId = task.fulfillment_task_id || (isFulfillmentTaskSource ? (task.id || null) : null);
+  const actionAllowed = task.action_allowed !== undefined ? task.action_allowed : isFulfillmentTaskSource;
+
   return {
-    task_id:               task.fulfillment_task_id || task.id || null,
-    order_id:              task.order_id || null,
-    order_number:          task.order_number || null,
-    customer_name:         task.customer_name || null,
-    delivery_address:      task.delivery_address || null,
-    address_line1:         task.address_line1 || null,
-    address_line2:         task.address_line2 || null,
-    city:                  task.address_city || null,
-    state:                 task.address_state || null,
-    postal_code:           task.address_postal_code || null,
-    items:                 (task.items || []).map(i => ({
-                             title: i.title,
-                             quantity: i.quantity,
-                           })),
-    items_summary:         task.items_summary || null,
-    status:                task.status || null,
-    fulfillment_type:      task.fulfillment_type || 'Delivery',
-    scheduled_date:        task.scheduled_date || null,
-    delivery_window_label: '5 PM – 8 PM',
-    time_window:           task.time_window || '17:00 - 20:00',
-    source:                task.source || null,
+    task_id:                      realTaskId,
+    fulfillment_task_id:          realTaskId,
+    order_id:                     task.order_id || null,
+    order_number:                 task.order_number || null,
+    customer_name:                task.customer_name || null,
+    delivery_address:             task.delivery_address || null,
+    address_line1:                task.address_line1 || null,
+    address_line2:                task.address_line2 || null,
+    city:                         task.address_city || null,
+    state:                        task.address_state || null,
+    postal_code:                  task.address_postal_code || null,
+    items:                        (task.items || []).map(i => ({
+                                    title: i.title,
+                                    quantity: i.quantity,
+                                  })),
+    items_summary:                task.items_summary || null,
+    status:                       task.status || null,
+    fulfillment_type:             task.fulfillment_type || 'Delivery',
+    scheduled_date:               task.scheduled_date || null,
+    delivery_window_label:        '5 PM – 8 PM',
+    time_window:                  task.time_window || '17:00 - 20:00',
+    source:                       task.source || null,
+    action_allowed:               actionAllowed,
+    missing_fulfillment_task_id:  task.missing_fulfillment_task_id || false,
   };
 }
 
