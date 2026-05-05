@@ -582,7 +582,9 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const [isDragging, setIsDragging] = useState(null);
 
   const getDateLabel = (dateStr) => {
+    if (!dateStr) return '';
     const target = new Date(dateStr + 'T00:00:00');
+    if (isNaN(target.getTime())) return dateStr;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -1115,7 +1117,7 @@ function ReturnCard({ ret, user, onVerify }) {
             </span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            {ret.created_date ? format(new Date(ret.created_date), 'MMM d · h:mm a') : ''}
+            {ret.created_date && !isNaN(new Date(ret.created_date).getTime()) ? format(new Date(ret.created_date), 'MMM d · h:mm a') : ''}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
