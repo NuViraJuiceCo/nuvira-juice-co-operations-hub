@@ -1,16 +1,26 @@
 import { Factory } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { format, parseISO, startOfDay } from "date-fns";
 
 export default function ProductionThroughputWidget({ batches }) {
-  const weekData = [
-    { day: "Mon", units: 240 },
-    { day: "Tue", units: 380 },
-    { day: "Wed", units: 200 },
-    { day: "Thu", units: 490 },
-    { day: "Fri", units: 300 },
-    { day: "Sat", units: 200 },
-    { day: "Sun", units: 150 },
-  ];
+  // Group batches by production_date, summing planned and actual units
+  const dateMap = {};
+  (batches || []).forEach((b) => {
+    const date = b.production_date;
+    if (!date) return;
+    if (!dateMap[date]) dateMap[date] = { date, planned: 0, actual: 0 };
+    dateMap[date].planned += b.planned_units || 0;
+    dateMap[date].actual += b.actual_units || 0;
+  });
+
+  const weekData = Object.values(dateMap)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-7)
+    .map((d) => ({
+      day: format(parseISO(d.date), "MMM d"),
+      planned: d.planned,
+      actual: d.actual,
+    }));
 
   const totalPlanned = batches.reduce((sum, b) => sum + (b.planned_units || 0), 0);
   const totalActual = batches.reduce((sum, b) => sum + (b.actual_units || 0), 0);
@@ -37,15 +47,23 @@ export default function ProductionThroughputWidget({ batches }) {
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={weekData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} width={40} />
-          <Tooltip />
-          <Bar dataKey="units" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
+      {weekData.length === 0 ? (
+        <div className="flex items-center justify-center h-[220px] text-sm text-muted-foreground">
+          No production batch data available.
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={weekData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 12 }} width={35} />
+            <Tooltip />
+            <Legend iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="planned" name="Planned" fill="hsl(var(--muted-foreground))" radius={[3, 3, 0, 0]} opacity={0.5} />
+            <Bar dataKey="actual" name="Actual" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      )}
     </div>
   );
 }
