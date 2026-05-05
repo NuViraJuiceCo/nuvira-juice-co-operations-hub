@@ -31,6 +31,7 @@ const LOCK_FROZEN_FIELDS = {
     'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code', 'address_country'],
   fulfilled: ['customer_name', 'customer_email', 'customer_phone', 'source_channel',
     'stripe_subscription_id', 'line_items', 'fulfillments', 'total_price', 'subtotal',
+    'payment_status',
     'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code', 'address_country'],
 };
 
@@ -437,6 +438,33 @@ Deno.serve(async (req) => {
       // Always force subscription channel
       incomingData.source_channel = 'subscription';
     }
+
+    // ── STEP 4.5: PAYMENT STATUS DOWNGRADE GUARDRAIL ────────────────────────
+    // Block any sync from downgrading payment_status from paid → pending/null/unpaid
+    // on orders that are fulfilled, delivered, or locked. Allow legitimate refunds/cancellations only.
+    if (existingOrder && existingOrder.payment_status === 'paid' && source !== 'admin') {
+      const incomingPayment = incomingData.payment_status;
+      const DOWNGRADE_VALUES = ['pending', 'unpaid', null, undefined, ''];
+      const isDowngrade = incomingPayment !== undefined && DOWNGRADE_VALUES.includes(incomingPayment);
+
+      if (isDowngrade) {
+        const isDelivered = existingOrder.delivered_at || existingOrder.delivery_drop_location;
+        const isFulfilled = existingOrder.production_status === 'fulfilled' || existingOrder.fulfillment_status === 'fulfilled' || existingOrder.fulfillment_status === 'delivered';
+        const isLocked = ['fulfilled', 'out_for_delivery', 'in_production', 'production_scheduled'].includes(existingOrder.order_lock_status);
+
+        if (isDelivered || isFulfilled || isLocked) {
+          console.warn(`[SAFE-SYNC] GUARDRAIL: Blocked payment_status downgrade from paid to "${incomingPayment}" on fulfilled/delivered/locked order ${existingOrder.shopify_order_number} (source: ${source}). Preserving paid status.`);
+          delete incomingData.payment_status;
+          // Track rejection for audit log
+          if (!Array.isArray(incomingData._blockedPaymentDowngrade)) {
+            incomingData._blockedPaymentDowngrade = true;
+          }
+        }
+      }
+    }
+    // Clean up internal tracking flag before write
+    const _paymentDowngradeBlocked = incomingData._blockedPaymentDowngrade || false;
+    delete incomingData._blockedPaymentDowngrade;
 
     // ── STEP 5: ORDER LOCK ENFORCEMENT ──────────────────────────────────────
     const lockStatus = existingOrder?.order_lock_status || 'unlocked';
