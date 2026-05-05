@@ -5,33 +5,102 @@ const CUSTOMER_APP_API = Deno.env.get('CUSTOMER_APP_API_URL');
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 const stripe = new Stripe(Deno.env.get('STRIPE_API_KEY'), { apiVersion: '2023-10-16' });
 
-async function fetchNameFromStripe(ord) {
+// ── STRIPE HYDRATION FALLBACK ────────────────────────────────────────────────
+// When a CA order arrives with missing address/items/delivery fields but has a
+// stripe_checkout_session_id, fetch from Stripe and hydrate the missing fields.
+// This prevents the race condition where Hub pulls the CA record before address
+// hydration completes on the CA side (root cause of NV-MOT59U9C manual recovery).
+async function hydrateFromStripe(ord) {
+  const result = {};
   try {
-    if (ord.stripe_checkout_session_id) {
-      const session = await stripe.checkout.sessions.retrieve(ord.stripe_checkout_session_id, { expand: ['customer'] });
-      const name = session.customer_details?.name || session.customer?.name;
-      if (name) return name;
+    if (!ord.stripe_checkout_session_id) return result;
+
+    const session = await stripe.checkout.sessions.retrieve(ord.stripe_checkout_session_id, {
+      expand: ['line_items', 'customer', 'payment_intent'],
+    });
+
+    // Name
+    const name = session.customer_details?.name || session.customer?.name;
+    if (name && !ord.customer_name) result.customer_name = name;
+
+    // Email
+    const email = session.customer_details?.email || session.customer?.email;
+    if (email && !ord.customer_email) result.customer_email = email;
+
+    // Phone
+    const phone = session.customer_details?.phone || session.customer?.phone;
+    if (phone && !ord.customer_phone) result.customer_phone = phone;
+
+    // Address — hydrate if CA fields are blank
+    const addr = session.customer_details?.address || session.shipping?.address;
+    if (addr && !ord.address_line1) {
+      result.address_line1    = addr.line1 || '';
+      result.address_line2    = addr.line2 || '';
+      result.address_city     = addr.city  || '';
+      result.address_state    = addr.state || '';
+      result.address_postal_code = addr.postal_code || '';
+      result.address_country  = addr.country || 'US';
+      result.address_last_synced_from = 'stripe_metadata';
+      result.address_last_synced_at   = new Date().toISOString();
+      console.log(`[PULL-ORDERS] Hydrated address from Stripe for ${ord.shopify_order_number || ord.shopify_order_id}: ${addr.line1}, ${addr.city}`);
     }
-    if (ord.stripe_payment_intent_id) {
-      const pi = await stripe.paymentIntents.retrieve(ord.stripe_payment_intent_id, { expand: ['customer'] });
-      const name = pi.customer?.name || pi.shipping?.name;
-      if (name) return name;
+
+    // Line items — hydrate if CA sent empty items
+    if (session.line_items?.data?.length > 0 && (!ord.line_items || ord.line_items.length === 0)) {
+      result.line_items = session.line_items.data.map(li => ({
+        title: li.description || li.price?.product?.name || li.price?.nickname || 'Item',
+        quantity: li.quantity || 1,
+        price: (li.amount_total || 0) / 100 / (li.quantity || 1),
+      }));
+      console.log(`[PULL-ORDERS] Hydrated ${result.line_items.length} line_items from Stripe for ${ord.shopify_order_number}`);
     }
-    if (ord.stripe_subscription_id) {
-      const sub = await stripe.subscriptions.retrieve(ord.stripe_subscription_id, { expand: ['customer'] });
-      const name = sub.customer?.name;
-      if (name) return name;
+
+    // Payment status
+    if (session.payment_status === 'paid' && (!ord.payment_status || ord.payment_status !== 'paid')) {
+      result.payment_status = 'paid';
     }
-    // Last resort: look up by email in Stripe (catches subscription orders with no IDs)
-    if (ord.customer_email) {
-      const customers = await stripe.customers.list({ email: ord.customer_email, limit: 1 });
-      const name = customers.data[0]?.name;
-      if (name) return name;
+
+    // Total price
+    if (session.amount_total && !ord.total_price) {
+      result.total_price = session.amount_total / 100;
     }
+
+    // Payment intent ID
+    if (session.payment_intent?.id && !ord.stripe_payment_intent_id) {
+      result.stripe_payment_intent_id = session.payment_intent.id;
+    }
+
+    // Delivery date — read from session metadata (CA stores it there)
+    const meta = session.metadata || {};
+    const deliveryDate = meta.selected_delivery_date || meta.requested_delivery_date || meta.delivery_date;
+    if (deliveryDate && !ord.requested_delivery_date) {
+      result.requested_delivery_date = deliveryDate;
+      result.selected_delivery_date  = deliveryDate;
+      result.assigned_delivery_date  = deliveryDate;
+      result.delivery_window_label   = meta.delivery_window_label || '5 PM – 8 PM';
+      // Resolve production date (day before on a valid production day)
+      const PRODUCTION_DAYS_DOW = { 2: true, 5: true, 6: true };
+      const d = new Date(deliveryDate + 'T00:00:00');
+      for (let i = 1; i <= 7; i++) {
+        const check = new Date(d);
+        check.setDate(d.getDate() - i);
+        if (PRODUCTION_DAYS_DOW[check.getDay()]) {
+          result.production_date = check.toISOString().split('T')[0];
+          break;
+        }
+      }
+      if (!result.production_date) {
+        const fallback = new Date(d);
+        fallback.setDate(d.getDate() - 1);
+        result.production_date = fallback.toISOString().split('T')[0];
+      }
+      console.log(`[PULL-ORDERS] Hydrated delivery_date=${deliveryDate} production_date=${result.production_date} from Stripe metadata`);
+    }
+
   } catch (err) {
-    console.log(`[PULL-ORDERS] Stripe name lookup failed for ${ord.customer_email}: ${err.message}`);
+    console.log(`[PULL-ORDERS] Stripe hydration failed for ${ord.customer_email}: ${err.message}`);
   }
-  return null;
+  return result;
 }
 
 Deno.serve(async (req) => {
@@ -197,6 +266,21 @@ Deno.serve(async (req) => {
           }
         }
 
+        // ── STRIPE HYDRATION: fill missing CA fields before quality checks ──────
+        // Only trigger for one-time orders with a Stripe session ID where address is blank.
+        // Subscription orders use a different hydration path (rebuildAllSubscriptionOrders).
+        const needsHydration = ord.stripe_checkout_session_id &&
+          !ord.stripe_subscription_id &&
+          (!ord.address_line1 || !ord.line_items || ord.line_items.length === 0 || !ord.requested_delivery_date);
+
+        if (needsHydration && !hubOrder) {
+          const hydrated = await hydrateFromStripe(ord);
+          if (Object.keys(hydrated).length > 0) {
+            ord = { ...ord, ...hydrated };
+            console.log(`[PULL-ORDERS] Stripe hydration applied for ${orderId}: ${Object.keys(hydrated).join(', ')}`);
+          }
+        }
+
         // Build customer name — try payload first, then existing hub record, then Stripe (last resort only if truly missing)
         let customerName = ord.customer_name ||
           (ord.first_name || ord.last_name ? `${ord.first_name || ''} ${ord.last_name || ''}`.trim() : null) ||
@@ -205,12 +289,6 @@ Deno.serve(async (req) => {
         // Use existing hub name if we already have one — avoid Stripe API call
         if (!customerName && hubOrder?.customer_name) {
           customerName = hubOrder.customer_name;
-        }
-
-        // Only hit Stripe if name is truly unknown and order has no hub record yet
-        if (!customerName && !hubOrder && (ord.stripe_checkout_session_id || ord.stripe_payment_intent_id || ord.stripe_subscription_id || ord.customer_email)) {
-          customerName = await fetchNameFromStripe(ord);
-          if (customerName) console.log(`[PULL-ORDERS] Got name from Stripe for ${orderId}: ${customerName}`);
         }
 
         // Skip write if order already exists in hub and nothing meaningful has changed
@@ -258,13 +336,17 @@ Deno.serve(async (req) => {
           incomingData: {
             shopify_order_id: orderId,
             shopify_order_number: ord.shopify_order_number || ord.order_number || `#APP-${orderId?.slice(-6) || Date.now()}`,
-            customer_email: ord.customer_email || ord.contact_email || '',  // fallback to contact_email for Apple Sign In users
+            customer_email: ord.customer_email || ord.contact_email || '',
             customer_name: customerName || '',
             customer_phone: ord.customer_phone || '',
             customer_app_user_id: ord.customer_app_user_id || ord.user_id || '',
             line_items: ord.line_items && ord.line_items.length > 0 ? ord.line_items : (ord.items || []),
             fulfillment_method: ord.fulfillment_method || ord.fulfillment_type || 'delivery',
             requested_delivery_date: ord.requested_delivery_date || ord.delivery_date || '',
+            selected_delivery_date: ord.selected_delivery_date || null,
+            assigned_delivery_date: ord.assigned_delivery_date || null,
+            production_date: ord.production_date || null,
+            delivery_window_label: ord.delivery_window_label || null,
             payment_status: ord.payment_status || 'pending',
             subtotal: ord.subtotal || 0,
             total_price: ord.total_price || ord.total || 0,
@@ -272,12 +354,19 @@ Deno.serve(async (req) => {
             tags: ord.tags || [],
             customer_order_date: ord.created_date || ord.order_date || new Date().toISOString(),
             source_channel: 'online',
+            source_type: ord.stripe_checkout_session_id ? 'stripe_checkout' : (ord.stripe_payment_intent_id ? 'stripe_payment' : 'customer_app'),
+            stripe_checkout_session_id: ord.stripe_checkout_session_id || null,
+            stripe_payment_intent_id: ord.stripe_payment_intent_id || null,
             address_line1: ord.address_line1 || '',
             address_line2: ord.address_line2 || '',
             address_city: ord.address_city || '',
             address_state: ord.address_state || '',
             address_postal_code: ord.address_postal_code || '',
             address_country: ord.address_country || 'US',
+            ...(ord.address_last_synced_from ? {
+              address_last_synced_from: ord.address_last_synced_from,
+              address_last_synced_at: ord.address_last_synced_at,
+            } : {}),
           },
           source: writeSource,
           matchBy,
