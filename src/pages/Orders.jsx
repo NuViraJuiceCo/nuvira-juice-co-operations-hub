@@ -18,7 +18,7 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("active");
   const [channelFilter, setChannelFilter] = useState("all");
   const [sortBy, setSortBy] = useState("created_date");
   const [sortDir, setSortDir] = useState("desc");
@@ -75,13 +75,38 @@ export default function Orders() {
     setEditingOrder(null);
   };
 
+  const CANCELED_STATUSES = ["canceled", "cancelled", "refunded"];
+  const INACTIVE_PAYMENT_STATUSES = ["refunded", "canceled", "cancelled"];
+
+  const isActiveOrder = (o) => {
+    if (CANCELED_STATUSES.includes(o.production_status)) return false;
+    if (INACTIVE_PAYMENT_STATUSES.includes(o.payment_status)) return false;
+    if (o.do_not_recover === true) return false;
+    if (o.data_quality_status === "quarantined") return false;
+    return true;
+  };
+
   const filtered = orders.filter((o) => {
     if (!o) return false;
     const matchSearch =
       !search ||
       (o.shopify_order_number && o.shopify_order_number.toLowerCase().includes(search.toLowerCase())) ||
       (o.customer_email && o.customer_email.toLowerCase().includes(search.toLowerCase()));
-    const matchStatus = statusFilter === "all" || o.production_status === statusFilter;
+
+    // "active" tab hides canceled/quarantined/do_not_recover orders
+    // "canceled" tab shows only canceled/refunded/quarantined
+    // "all" tab shows everything
+    let matchStatus;
+    if (statusFilter === "active") {
+      matchStatus = isActiveOrder(o);
+    } else if (statusFilter === "canceled") {
+      matchStatus = !isActiveOrder(o);
+    } else if (statusFilter === "all") {
+      matchStatus = true;
+    } else {
+      matchStatus = o.production_status === statusFilter;
+    }
+
     const matchChannel = channelFilter === "all" || o.source_channel === channelFilter;
     return matchSearch && matchStatus && matchChannel;
   });
@@ -255,9 +280,11 @@ export default function Orders() {
           />
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
-          <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="All Statuses" triggerClassName="w-full">
+          <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="Active Orders" triggerClassName="w-full">
             <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="active">Active Orders</SelectItem>
+              <SelectItem value="all">All Orders</SelectItem>
+              <SelectItem value="canceled">Canceled / Refunded</SelectItem>
               <SelectItem value="new">New</SelectItem>
               <SelectItem value="awaiting_production">Awaiting Production</SelectItem>
               <SelectItem value="in_production">In Production</SelectItem>
@@ -265,7 +292,6 @@ export default function Orders() {
               <SelectItem value="labeled">Labeled</SelectItem>
               <SelectItem value="packed">Packed</SelectItem>
               <SelectItem value="fulfilled">Fulfilled</SelectItem>
-              <SelectItem value="canceled">Canceled</SelectItem>
             </SelectContent>
           </SelectMobile>
           <SelectMobile value={channelFilter} onValueChange={setChannelFilter} placeholder="All Channels" triggerClassName="w-full">
