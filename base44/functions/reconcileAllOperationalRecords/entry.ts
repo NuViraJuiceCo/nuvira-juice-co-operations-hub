@@ -70,7 +70,15 @@ Deno.serve(async (req) => {
       order_details: [],
     };
 
-    for (const order of allOrders) {
+    // Deduplicate orders by ID before processing — prevents double-counting
+    const seenOrderIds = new Set();
+    const uniqueOrders = allOrders.filter(o => {
+      if (seenOrderIds.has(o.id)) return false;
+      seenOrderIds.add(o.id);
+      return true;
+    });
+
+    for (const order of uniqueOrders) {
       report.scanned_orders++;
 
       const d = order; // entity fields are directly on the object

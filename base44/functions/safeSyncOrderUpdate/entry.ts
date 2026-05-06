@@ -440,6 +440,22 @@ Deno.serve(async (req) => {
       incomingData.source_channel = 'subscription';
     }
 
+    // ── STEP 3.9: MANUAL OVERRIDE GUARD ────────────────────────────────────
+    // If an existing order has manual_override=true, block customer_app and
+    // rebuild_subscriptions from overwriting production_status, fulfillment_status,
+    // payment_status, tags, and address fields.
+    // Only stripe_webhook (for refund/cancel events) and admin can override manual_override.
+    if (existingOrder?.manual_override === true && ['customer_app', 'rebuild_subscriptions'].includes(source)) {
+      const manualProtectedFields = ['production_status', 'fulfillment_status', 'payment_status', 'tags',
+        'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code'];
+      for (const f of manualProtectedFields) {
+        if (f in incomingData) {
+          console.log(`[SAFE-SYNC] manual_override: blocking ${source} from overwriting ${f} on ${existingOrder.shopify_order_number}`);
+          delete incomingData[f];
+        }
+      }
+    }
+
     // ── STEP 4.5: PAYMENT STATUS GUARDRAILS ─────────────────────────────────
     if (existingOrder && source !== 'admin') {
       const incomingPayment = incomingData.payment_status;

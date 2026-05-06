@@ -34,15 +34,25 @@ export default function OrderEditForm({ order, onClose, onSave }) {
     setError(null);
 
     try {
-      // Use safeSyncOrderUpdate to preserve address and other protected fields
+      // Use source: 'admin' so all manually-edited fields (production_status, payment_status,
+      // notes, address, etc.) are written without field-ownership filtering.
+      // This is the correct source for human admin edits from the UI.
       await base44.functions.invoke('safeSyncOrderUpdate', {
-        incomingData: formData,
-        source: 'operations',
+        incomingData: {
+          ...formData,
+          manual_override: true,
+          internal_notes: formData.internal_notes
+            ? formData.internal_notes
+            : order.internal_notes,
+        },
+        source: 'admin',
         matchBy: { internal_id: order.id },
       });
       await onSave();
     } catch (err) {
-      setError(err.message);
+      // Surface the real backend error message
+      const msg = err?.response?.data?.error || err?.response?.data?.message || err.message;
+      setError(msg);
     } finally {
       setLoading(false);
     }
