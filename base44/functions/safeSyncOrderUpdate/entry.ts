@@ -59,6 +59,7 @@ const FIELD_OWNERSHIP = {
     'shopify_order_number', 'payment_status', 'stripe_checkout_session_id', 'stripe_payment_intent_id',
     'stripe_customer_id', 'source_channel', 'source_type', 'order_type', 'fulfillment_mode',
     'customer_order_date', 'production_status', 'data_quality_status',
+    'order_lock_status',
   ],
   rebuild_subscriptions: [
     'shopify_order_id', 'shopify_order_number',
