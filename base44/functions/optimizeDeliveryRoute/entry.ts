@@ -12,32 +12,34 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { date, optimize } = await req.json();
+    const { date, optimize, orders: incomingOrders } = await req.json();
 
-    // Load ALL orders from local ShopifyOrder database (not from customer app)
-    const allOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500);
-    
-    // Filter to orders for the selected date if provided
-    let orders = allOrders;
-    if (date) {
-      orders = allOrders.filter(o => {
-        const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
-        
-        // For multi-delivery orders: check if any fulfillment matches the date
-        if (fulfillmentMode === 'multi_delivery' && o.fulfillments && o.fulfillments.length > 0) {
-          return o.fulfillments.some(f => f.delivery_date && f.delivery_date === date);
-        }
+    // Accept pre-filtered orders from Driver Portal (from resolveDeliveryScheduleForDate)
+    // OR load/filter from ShopifyOrder if not provided
+    let orders = incomingOrders || [];
 
-        // For single-delivery orders: only show if explicitly assigned to this date
-        if (o.assigned_delivery_date && o.assigned_delivery_date === date) {
-          return true;
-        }
-        if (o.requested_delivery_date && o.requested_delivery_date === date) {
-          return true;
-        }
+    if (!incomingOrders || incomingOrders.length === 0) {
+      // Fallback: load all orders from database (legacy path)
+      const allOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500);
+      orders = allOrders;
+      if (date) {
+        orders = allOrders.filter(o => {
+          const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
+          
+          if (fulfillmentMode === 'multi_delivery' && o.fulfillments && o.fulfillments.length > 0) {
+            return o.fulfillments.some(f => f.delivery_date && f.delivery_date === date);
+          }
 
-        return false;
-      });
+          if (o.assigned_delivery_date && o.assigned_delivery_date === date) {
+            return true;
+          }
+          if (o.requested_delivery_date && o.requested_delivery_date === date) {
+            return true;
+          }
+
+          return false;
+        });
+      }
     }
 
     // Optionally sync bag returns from customer app if configured
@@ -91,15 +93,22 @@ Deno.serve(async (req) => {
     };
 
     // Map ShopifyOrder to driver portal format — INCLUDE ALL orders, flag missing addresses
-    // HARD GATE: Strict delivery eligibility — all conditions must be met.
-    // payment_status = paid + delivery-ready production_status only.
-    // "bottled", "labeled", "qc_checked" are NOT delivery-ready — product exists but not dispatch-approved.
-    // Only packed/in_cold_storage/assigned_for_delivery are considered dispatch-ready.
+    // When orders come from Driver Portal (pre-filtered by resolveDeliveryScheduleForDate),
+    // they're already validated and ready. When loaded from ShopifyOrder, apply strict filters.
     const DELIVERY_READY_STATUSES = ['packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery'];
+    
     const queuedOrders = orders
-      .filter(o => o.payment_status === 'paid')
-      .filter(o => DELIVERY_READY_STATUSES.includes(o.production_status) || o.production_status === 'fulfilled')
-      .filter(o => o.production_status !== 'fulfilled')
+      .filter(o => {
+        // Pre-filtered from Driver Portal: accept as-is if it has necessary fields
+        if (o.fulfillment_task_id || o.source === 'fulfillment_task' || o.source === 'order_assigned_delivery_date' || o.source === 'subscription_fulfillment') {
+          return true;
+        }
+        // Otherwise apply strict ShopifyOrder filters
+        if (!o.payment_status || o.payment_status !== 'paid') return false;
+        if (!DELIVERY_READY_STATUSES.includes(o.production_status) && o.production_status !== 'fulfilled') return false;
+        if (o.production_status === 'fulfilled') return false;
+        return true;
+      })
       .map(o => {
         const fulfillmentMode = o.fulfillment_mode || (o.fulfillments?.length > 0 ? 'multi_delivery' : 'single_delivery');
         let fulfillmentsForDate = o.fulfillments || [];
@@ -119,29 +128,39 @@ Deno.serve(async (req) => {
           console.warn(`[OPTIMIZE-ROUTE] Order ${o.shopify_order_number} (${o.customer_name}) is missing a delivery address — included with flag`);
         }
 
+        // Preserve all fields from pre-filtered Driver Portal orders, then augment/override with ShopifyOrder fields
         return {
+          // Preserve original IDs — FulfillmentTask ID is the real action target for driver actions
           id: o.id,
-          order_number: o.shopify_order_number,
-          customer_email: o.customer_email,
-          customer_name: o.customer_name,
-          contact_phone: o.customer_phone,
-          delivery_address: o.delivery_address,
-          address_line1: o.address_line1,
-          address_line2: o.address_line2,
-          address_city: o.address_city,
-          address_state: o.address_state,
-          address_postal_code: o.address_postal_code,
-          address_country: o.address_country,
-          items: o.line_items || [],
+          order_id: o.order_id || o.id,
+          fulfillment_task_id: o.fulfillment_task_id || null,
+          order_number: o.order_number || o.shopify_order_number || '',
+          // Customer info
+          customer_email: o.customer_email || '',
+          customer_name: o.customer_name || '',
+          contact_phone: o.contact_phone || o.customer_phone || '',
+          // Address
+          delivery_address: o.delivery_address || o.address || '',
+          address_line1: o.address_line1 || '',
+          address_line2: o.address_line2 || '',
+          address_city: o.address_city || '',
+          address_state: o.address_state || '',
+          address_postal_code: o.address_postal_code || '',
+          address_country: o.address_country || 'US',
+          // Items — preserve from pre-filtered source, fallback to line_items
+          items: o.items?.length > 0 ? o.items : (o.line_items || []),
           fulfillments: fulfillmentsForDate,
-          status: o.production_status === 'fulfilled' ? 'delivered' : o.production_status,
-          delivery_photo_url: o.delivery_photo_url,
-          delivery_drop_location: o.delivery_drop_location,
-          delivered_by: o.delivered_by,
-          delivered_at: o.delivered_at,
+          // Status
+          status: o.status || (o.production_status === 'fulfilled' ? 'delivered' : (o.production_status || 'Scheduled')),
+          // Delivery confirmation
+          delivery_photo_url: o.delivery_photo_url || null,
+          delivery_drop_location: o.delivery_drop_location || null,
+          delivered_by: o.delivered_by || null,
+          delivered_at: o.delivered_at || null,
           leg_duration_seconds: null,
           missing_address,
-          payment_status: o.payment_status,
+          payment_status: o.payment_status || null,
+          source: o.source || null,
         };
       });
 

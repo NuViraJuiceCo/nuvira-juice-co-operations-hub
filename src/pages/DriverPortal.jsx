@@ -69,27 +69,35 @@ function mapsUrl(address) {
 }
 
 const DEPOT = "619 N Main St Unit 3, O'Fallon, MO 63366";
+const DEPOT_LAT = 38.6849;
+const DEPOT_LNG = -90.6639;
 
 function buildFullRouteUrl(orders) {
-  const remaining = orders.filter(o => o.status !== 'delivered');
+  const remaining = orders.filter(o => !['delivered', 'Delivered', 'fulfilled'].includes((o.status || '').toLowerCase()));
   if (remaining.length === 0) return null;
   const origin = encodeURIComponent(DEPOT);
   
   const formatAddress = (order) => {
-    // Try fulfillment address first (for subscriptions)
-    if (order.selectedFulfillment?.address_line1) {
-      return `${order.selectedFulfillment.address_line1}${order.selectedFulfillment.address_line2 ? ' ' + order.selectedFulfillment.address_line2 : ''}, ${order.selectedFulfillment.address_city}, ${order.selectedFulfillment.address_state} ${order.selectedFulfillment.address_postal_code}`;
-    }
-    // Fall back to order-level address
+    // Try order-level address first
     if (order.address_line1) {
       return `${order.address_line1}${order.address_line2 ? ' ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}`;
+    }
+    // Try fulfillment address (for subscriptions)
+    if (order.fulfillments?.[0]?.address_line1) {
+      return `${order.fulfillments[0].address_line1}${order.fulfillments[0].address_line2 ? ' ' + order.fulfillments[0].address_line2 : ''}, ${order.fulfillments[0].address_city}, ${order.fulfillments[0].address_state} ${order.fulfillments[0].address_postal_code}`;
     }
     // Last resort
     return order.delivery_address || '';
   };
   
-  const destination = encodeURIComponent(formatAddress(remaining[remaining.length - 1]));
-  const waypoints = remaining.slice(0, -1).map(o => encodeURIComponent(formatAddress(o))).join('|');
+  // Google Maps API limit: max 25 waypoints (origin + 25 stops + destination = 27)
+  // For >25 stops, use first N and return to origin
+  const maxWaypoints = 23; // 25 - 2 (origin + destination)
+  const routeStops = remaining.slice(0, maxWaypoints + 1); // origin + destination + up to 23 waypoints
+  
+  const destination = encodeURIComponent(formatAddress(routeStops[routeStops.length - 1]));
+  const waypoints = routeStops.slice(0, -1).map((o, idx) => idx === 0 ? encodeURIComponent(DEPOT) : encodeURIComponent(formatAddress(o))).slice(1).join('|');
+  
   return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ''}&travelmode=driving`;
 }
 
@@ -659,14 +667,22 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   const optimizeRoute = async () => {
-    const readyForRoute = (deliveryScheduleItems || []).filter(d => 
-      ['packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery', 'ready_for_route', 'out_for_delivery'].includes((d.status || '').toLowerCase())
-    );
-    if (!readyForRoute?.length) return;
+    // Include ALL non-completed stops for optimization — not just "ready" status stops.
+    // Today's deliveries may have status "Scheduled" from FulfillmentTasks and should still be routed.
+    const allTasksToOptimize = (deliveryScheduleItems || []).filter(d => {
+      const s = (d.status || '').toLowerCase();
+      return !['delivered', 'completed', 'fulfilled', 'cancelled', 'canceled'].includes(s);
+    });
+    // Only optimize stops with a valid address
+    const optimizableStops = allTasksToOptimize.filter(d => d.address_line1 || d.delivery_address);
+    if (!optimizableStops.length) {
+      toast.error('No stops with valid addresses to optimize');
+      return;
+    }
     setOptimizing(true);
-    setManualOrder(null); // Reset manual overrides when re-optimizing
+    setManualOrder(null);
     try {
-      const res = await base44.functions.invoke('optimizeDeliveryRoute', { date: date || undefined, optimize: true, orders: readyForRoute });
+      const res = await base44.functions.invoke('optimizeDeliveryRoute', { date: date || undefined, optimize: true, orders: optimizableStops });
       setRouteData(res.data);
       
       const stats = res.data?.route_stats;
@@ -895,10 +911,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
       <div className="grid grid-cols-4 divide-x divide-border border-y border-border bg-card mt-4">
         {[
-          { label: 'Ready', value: readyCount, color: 'text-green-600' },
-          { label: 'Scheduled', value: scheduledCount, color: 'text-primary' },
-          { label: 'Completed', value: completedCount, color: 'text-muted-foreground' },
-          { label: "Bag Returns", value: routeReturnCount, color: 'text-amber-600' },
+          { label: 'Total Stops', value: allTasksForDate.length, color: 'text-primary' },
+          { label: 'Active', value: readyCount + scheduledCount, color: 'text-blue-600' },
+          { label: 'Completed', value: completedCount, color: 'text-green-600' },
+          { label: 'Bag Returns', value: routeReturnCount, color: 'text-amber-600' },
         ].map(s => (
           <div key={s.label} className="py-3 text-center">
             <p className={`text-xl font-bold font-heading ${s.color}`}>{s.value}</p>
@@ -914,22 +930,36 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         </div>
       )}
 
-      {readyForRouteOrders.length > 0 && !routeData?.route_stats && (
-        <div className="px-4 mt-4">
+      {allTasksForDate.filter(d => !['delivered','completed','fulfilled','cancelled','canceled'].includes((d.status||'').toLowerCase())).length > 0 && !routeData?.route_stats && (
+        <div className="px-4 mt-4 space-y-2">
           <button onClick={optimizeRoute} disabled={optimizing}
             className="w-full py-3.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
             {optimizing
               ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Optimizing...</>
-              : <><Route className="w-4 h-4" /> Optimize Route ({readyCount} ready)</>
+              : <><Route className="w-4 h-4" /> Optimize Route ({allTasksForDate.filter(d => !['delivered','completed','fulfilled','cancelled','canceled'].includes((d.status||'').toLowerCase())).length} stops)</>
             }
           </button>
-        </div>
-      )}
-
-      {readyCount === 0 && allTasksForDate.length > 0 && !routeData?.route_stats && (
-        <div className="px-4 mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-blue-600 shrink-0" />
-          <p className="text-xs text-blue-700"><span className="font-semibold">No route-ready deliveries yet.</span> Scheduled deliveries are visible below but not ready for routing.</p>
+          {(() => {
+            const nonCompleted = allTasksForDate.filter(d => !['delivered','completed','fulfilled','cancelled','canceled'].includes((d.status||'').toLowerCase()));
+            const url = buildFullRouteUrl(nonCompleted);
+            const copyAddresses = () => {
+              const addrs = nonCompleted.map((o, i) => `Stop ${i+1}: ${o.customer_name} — ${o.address_line1 || o.delivery_address}`).join('\n');
+              navigator.clipboard.writeText(addrs);
+              toast.success('Addresses copied');
+            };
+            return url ? (
+              <div className="flex gap-2">
+                <a href={url} target="_blank" rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-semibold active:scale-95 transition-transform">
+                  <Navigation className="w-3.5 h-3.5" /> Open in Maps
+                </a>
+                <button onClick={copyAddresses}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-secondary text-secondary-foreground border border-border rounded-xl text-xs font-semibold active:scale-95 transition-transform">
+                  Copy Addresses
+                </button>
+              </div>
+            ) : null;
+          })()}
         </div>
       )}
 
@@ -972,13 +1002,29 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
             </div>
           )}
           {(() => {
-            const url = buildFullRouteUrl(readyForRouteOrders);
+            const optimizedStops = (routeData?.optimized_orders || []).filter(o =>
+              !['delivered','completed','fulfilled','cancelled','canceled'].includes((o.status||'').toLowerCase())
+            );
+            const url = buildFullRouteUrl(optimizedStops);
+            const copyAddresses = () => {
+              const addrs = optimizedStops.map((o, i) =>
+                `Stop ${i+1}: ${o.customer_name} — ${o.address_line1 || o.delivery_address}, ${o.address_city}, ${o.address_state}`
+              ).join('\n');
+              navigator.clipboard.writeText(`NuVira Delivery Route\n\n${addrs}\n\nReturn to: ${DEPOT}`);
+              toast.success('Route addresses copied');
+            };
             return url ? (
-              <a href={url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-3.5 bg-blue-600 text-white rounded-xl text-sm font-bold active:scale-[0.98] transition-transform">
-                <Navigation className="w-4 h-4" />
-                Open Full Route in Maps
-              </a>
+              <div className="flex gap-2">
+                <a href={url} target="_blank" rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-blue-600 text-white rounded-xl text-sm font-bold active:scale-[0.98] transition-transform">
+                  <Navigation className="w-4 h-4" />
+                  Open in Google Maps
+                </a>
+                <button onClick={copyAddresses}
+                  className="px-4 py-3.5 bg-secondary text-secondary-foreground border border-border rounded-xl text-sm font-semibold active:scale-95 transition-transform">
+                  Copy
+                </button>
+              </div>
             ) : null;
           })()}
         </div>
@@ -998,53 +1044,58 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           </div>
         ) : (
           <>
-            {/* Ready For Route Section */}
-            {readyForRouteOrders.length > 0 && (
+            {/* Ready For Route Section — show all non-completed active stops */}
+            {(readyForRouteOrders.length > 0 || scheduledNotReadyOrders.length > 0) && (
               <div className="space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-green-600 px-1 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Ready For Route ({readyCount})
+                <p className="text-xs font-bold uppercase tracking-wider text-primary px-1 flex items-center gap-1">
+                  <Route className="w-3.5 h-3.5" />
+                  {routeData?.optimized_orders ? `Optimized Route (${routeData.optimized_orders.filter(o => !['delivered','completed','fulfilled','cancelled','canceled'].includes((o.status||'').toLowerCase())).length} stops)` : `Delivery Stops (${readyForRouteOrders.length + scheduledNotReadyOrders.length})`}
                 </p>
-                {readyForRouteOrders.map((order, idx) => (
-                  <StopCard
-                    key={order.id}
-                    order={order}
-                    pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
-                    onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
-                    onMarkUnableToDeliver={handleMarkUnableToDeliver}
-                    onMarkStage={handleMarkStage}
-                    onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
-                    allCredits={allCredits}
-                    user={user}
-                    isUpdating={updatingId === order.id || deletingId === order.id}
-                    onDelete={handleDeleteOrder}
-                  />
-                ))}
+                {routeData?.optimized_orders ? (
+                  // Show optimized route order with stop numbers
+                  routeData.optimized_orders
+                    .filter(o => !['delivered', 'Delivered', 'fulfilled'].includes((o.status || '').toLowerCase()))
+                    .map((order, idx) => (
+                      <div key={`${order.id}-${idx}`} className="relative">
+                        <div className="absolute -left-4 top-4 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-bold text-xs">
+                          {idx + 1}
+                        </div>
+                        <StopCard
+                          order={order}
+                          pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
+                          onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
+                          onMarkUnableToDeliver={handleMarkUnableToDeliver}
+                          onMarkStage={handleMarkStage}
+                          onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
+                          allCredits={allCredits}
+                          user={user}
+                          isUpdating={updatingId === order.id || deletingId === order.id}
+                          onDelete={handleDeleteOrder}
+                        />
+                      </div>
+                    ))
+                ) : (
+                  // Show all non-completed stops before optimization
+                  [...readyForRouteOrders, ...scheduledNotReadyOrders].map((order) => (
+                    <StopCard
+                      key={order.id}
+                      order={order}
+                      pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
+                      onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
+                      onMarkUnableToDeliver={handleMarkUnableToDeliver}
+                      onMarkStage={handleMarkStage}
+                      onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
+                      allCredits={allCredits}
+                      user={user}
+                      isUpdating={updatingId === order.id || deletingId === order.id}
+                      onDelete={handleDeleteOrder}
+                    />
+                  ))
+                )}
               </div>
             )}
 
-            {/* Scheduled / Not Ready Section */}
-            {scheduledNotReadyOrders.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-primary px-1 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" /> Scheduled / Not Ready ({scheduledCount})
-                </p>
-                {scheduledNotReadyOrders.map((order) => (
-                  <StopCard
-                    key={order.id}
-                    order={order}
-                    pendingReturn={pendingReturnsByEmail[order.customer_email] || null}
-                    onMarkDelivered={(order, photo, loc) => handleMarkDelivered(order, photo, loc)}
-                    onMarkUnableToDeliver={handleMarkUnableToDeliver}
-                    onMarkStage={handleMarkStage}
-                    onReturnVerified={(ret, data) => onBagReturnVerified(ret, data)}
-                    allCredits={allCredits}
-                    user={user}
-                    isUpdating={updatingId === order.id || deletingId === order.id}
-                    onDelete={handleDeleteOrder}
-                  />
-                ))}
-              </div>
-            )}
+            {/* Scheduled stops without route optimization are shown in the unified section above */}
 
             {/* Completed Section */}
             {completedOrders.length > 0 && (
