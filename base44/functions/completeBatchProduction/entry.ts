@@ -55,11 +55,12 @@ Deno.serve(async (req) => {
 
     const batch = batches[0];
 
-    // Validate batch is not already completed/verified/archived
-    const terminalStatuses = ['completed_pending_verification', 'verified_logged', 'archived'];
-    if (terminalStatuses.includes(batch.status)) {
-      return Response.json({ error: `Cannot complete batch with status: ${batch.status}` }, { status: 400 });
+    // Hard-block truly terminal statuses — verified/archived cannot be re-completed
+    const hardTerminalStatuses = ['verified_logged', 'archived'];
+    if (hardTerminalStatuses.includes(batch.status)) {
+      return Response.json({ error: `Cannot complete batch with status: ${batch.status}. Batch is already verified/archived.` }, { status: 400 });
     }
+    // completed_pending_verification is allowed — treat as idempotent re-log (update fields, preserve status)
 
     // Validate required fields
     // Resolve canonical quantity — accept any of the three aliases
@@ -131,10 +132,11 @@ Deno.serve(async (req) => {
     }
     batch.audit_trail.push({
       timestamp: now,
-      action: 'BatchCompletedPendingVerification',
+      action: batch.status === 'completed_pending_verification' ? 'BatchCompletionUpdated' : 'BatchCompletedPendingVerification',
       performed_by: user.email,
       before: { status: batch.status },
       after: { status: 'completed_pending_verification' },
+      reason: batch.status === 'completed_pending_verification' ? 'Idempotent re-log: updated completion fields on already-completed batch' : undefined,
     });
     updateData.audit_trail = batch.audit_trail;
 

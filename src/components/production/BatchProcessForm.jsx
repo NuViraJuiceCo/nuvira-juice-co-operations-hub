@@ -133,7 +133,8 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
       await base44.entities.ProductionBatch.update(batch.id, patch);
       onSave();
     } catch (err) {
-      setError(err.message || 'Failed to save changes');
+      const backendMsg = err?.response?.data?.error || err?.response?.data?.message;
+      setError(backendMsg || err.message || 'Failed to save changes');
       setLoading(false);
     }
   };
@@ -219,7 +220,9 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
 
       onSave();
     } catch (err) {
-      setError(err.message || 'Failed to process batch');
+      // Extract backend validation message from response if available
+      const backendMsg = err?.response?.data?.error || err?.response?.data?.message;
+      setError(backendMsg || err.message || 'Failed to process batch');
       setLoading(false);
     }
   };
