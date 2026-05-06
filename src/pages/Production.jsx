@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import AdminGuide from "../components/shared/AdminGuide";
 
-import BatchStartForm from "../components/production/BatchStartForm";
-import BatchCompleteForm from "../components/production/BatchCompleteForm";
+import BatchProcessForm from "../components/production/BatchProcessForm";
 import BatchVerifyForm from "../components/production/BatchVerifyForm";
 import BatchHistory from "../components/production/BatchHistory";
 import ProductionDayCard from "../components/production/ProductionDayCard";
@@ -28,8 +27,8 @@ export default function Production() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [tab, setTab] = useState("today");
 
-  const [startingBatch, setStartingBatch] = useState(null);
-  const [completingBatch, setCompletingBatch] = useState(null);
+  const [processingBatch, setProcessingBatch] = useState(null);
+  const [processingMode, setProcessingMode] = useState('edit');
   const [verifyingBatch, setVerifyingBatch] = useState(null);
   const [lastCalc, setLastCalc] = useState(null);
   const [ingredientData, setIngredientData] = useState({}); // date -> dateData
@@ -102,8 +101,8 @@ export default function Production() {
   };
 
   const handleEditBatch = (batch) => {
-    // All batches go to the completion form, which handles all statuses
-    setCompletingBatch(batch);
+    setProcessingMode('edit');
+    setProcessingBatch(batch);
   };
 
 
@@ -119,8 +118,7 @@ export default function Production() {
   };
 
   const handleSaveAction = async () => {
-    setStartingBatch(null);
-    setCompletingBatch(null);
+    setProcessingBatch(null);
     setVerifyingBatch(null);
     await load();
   };
@@ -296,7 +294,7 @@ export default function Production() {
                                 onEdit={handleEditBatch}
                                 onDelete={handleDelete}
                                 onToggleLock={handleToggleLock}
-                                onStart={setStartingBatch}
+                                onStart={(batch) => { setProcessingMode('start'); setProcessingBatch(batch); }}
                               />
                           <IngredientPlanningPanel
                             dateData={ingredientData[date]}
@@ -339,12 +337,12 @@ export default function Production() {
                           </div>
                         </div>
                         <Button
-                          onClick={() => setCompletingBatch(batch)}
-                          size="sm"
-                          className="gap-2 w-full"
+                         onClick={() => { setProcessingMode('start'); setProcessingBatch(batch); }}
+                         size="sm"
+                         className="gap-2 w-full"
                         >
-                          <CheckSquare className="h-4 w-4" />
-                          Mark Complete
+                         <CheckSquare className="h-4 w-4" />
+                         Mark Complete
                         </Button>
                       </div>
                     ))
@@ -412,18 +410,11 @@ export default function Production() {
 
 
 
-      {startingBatch && (
-        <BatchStartForm
-          batch={startingBatch}
-          onClose={() => setStartingBatch(null)}
-          onSave={handleSaveAction}
-        />
-      )}
-
-      {completingBatch && (
-        <BatchCompleteForm
-          batch={completingBatch}
-          onClose={() => setCompletingBatch(null)}
+      {processingBatch && (
+        <BatchProcessForm
+          batch={processingBatch}
+          mode={processingMode}
+          onClose={() => setProcessingBatch(null)}
           onSave={handleSaveAction}
         />
       )}
