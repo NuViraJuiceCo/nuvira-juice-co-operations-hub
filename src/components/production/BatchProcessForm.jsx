@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
-import { X, AlertCircle, History, FlaskConical, Play, Save } from 'lucide-react';
+import { X, AlertCircle, History, FlaskConical, Play, Save, User } from 'lucide-react';
 import moment from 'moment';
 import { useProductFormula } from '@/hooks/useProductFormula';
 
@@ -75,6 +75,11 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
   const [equipmentInput, setEquipmentInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    base44.auth.me().then(u => setCurrentUser(u)).catch(() => {});
+  }, []);
 
   // Auto-fill formula ingredients once recipe loads
   useEffect(() => {
@@ -101,7 +106,7 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
     try {
       const patch = {
         status: formData.status,
-        assigned_to: formData.assigned_to || null,
+        assigned_to: formData.assigned_to?.trim() || null,
         notes: formData.notes || null,
         staff_on_duty: formData.staff_on_duty,
         equipment_used: formData.equipment_used,
@@ -323,14 +328,27 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium">Assigned To</label>
-              <input
-                type="text"
-                value={formData.assigned_to}
-                onChange={(e) => set('assigned_to', e.target.value)}
-                className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
-                placeholder="Staff member name"
-              />
+              <label className="text-sm font-medium">Assigned Staff Name <span className="text-xs text-muted-foreground font-normal">(optional)</span></label>
+              <div className="flex gap-2 mt-1">
+                <input
+                  type="text"
+                  value={formData.assigned_to}
+                  onChange={(e) => set('assigned_to', e.target.value)}
+                  className="flex-1 p-2 border border-border rounded-lg bg-background text-sm"
+                  placeholder="e.g. Maria, John — or leave blank"
+                />
+                {currentUser && !formData.assigned_to && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => set('assigned_to', currentUser.full_name || currentUser.email)}
+                    className="shrink-0 gap-1 text-xs"
+                  >
+                    <User className="h-3 w-3" /> Me
+                  </Button>
+                )}
+              </div>
             </div>
           </section>
 
