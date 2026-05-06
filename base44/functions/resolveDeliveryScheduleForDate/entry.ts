@@ -9,13 +9,16 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'selectedDate required' }, { status: 400 });
     }
 
-    // BLOCKED orders to exclude
+    // BLOCKED orders to exclude (static list — belt-and-suspenders on top of dynamic checks)
     const BLOCKED = [
       'NV-MONHJHUY', 'NV-MONGOVGM', 'NV-MONL4I2M', 'NV-MONI2Z3R', 'SUB-1TPMGCIR'
     ];
 
     // Valid payment states
     const VALID_PAYMENT = ['paid', 'captured'];
+
+    // Task statuses that are fully inactive — never show in driver portal
+    const INACTIVE_TASK_STATUSES = ['cancelled', 'canceled', 'Cancelled', 'Canceled'];
 
     // Get all data
     const [tasks, orders, subscriptions] = await Promise.all([
@@ -38,15 +41,20 @@ Deno.serve(async (req) => {
       if (s.shopify_order_number) subscriptionMap[s.shopify_order_number] = s;
     });
 
-    // Filter valid orders
-    const validOrders = orders.filter(o => 
-      !BLOCKED.includes(o.shopify_order_number) &&
-      VALID_PAYMENT.includes(o.payment_status) &&
-      !o.canceled_at &&
-      !o.refunded_at &&
-      o.line_items?.length > 0 &&
-      (o.address_line1 || o.fulfillment_method === 'pickup')
-    );
+    // Filter valid orders — must be paid, not excluded/refunded/canceled
+    const validOrders = orders.filter(o => {
+      if (BLOCKED.includes(o.shopify_order_number)) return false;
+      if (!VALID_PAYMENT.includes(o.payment_status)) return false;
+      if (o.payment_status === 'refunded') return false;
+      if (o.production_status === 'canceled' || o.production_status === 'cancelled') return false;
+      if (Array.isArray(o.tags) && o.tags.includes('excluded')) return false;
+      if (!o.line_items?.length) return false;
+      if (!o.address_line1 && o.fulfillment_method !== 'pickup') return false;
+      return true;
+    });
+
+    // Build a set of valid order IDs for fast lookup when filtering tasks
+    const validOrderIds = new Set(validOrders.map(o => o.id));
 
     // Helper: resolve delivery date — scheduled_date is canonical
     const resolveDeliveryDate = (task) => {
@@ -88,7 +96,21 @@ Deno.serve(async (req) => {
 
     // 1. Collect from FulfillmentTasks for this date
     const taskCandidates = tasks
-      .filter(t => resolveDeliveryDate(t) === selectedDate)
+      .filter(t => {
+        if (resolveDeliveryDate(t) !== selectedDate) return false;
+        // Hard-exclude cancelled tasks
+        if (INACTIVE_TASK_STATUSES.includes(t.status)) return false;
+        // Hard-exclude tasks whose linked order is refunded/excluded/canceled
+        if (t.order_id) {
+          const linkedOrder = orderMap[t.order_id];
+          if (linkedOrder) {
+            if (linkedOrder.payment_status === 'refunded') return false;
+            if (linkedOrder.production_status === 'canceled' || linkedOrder.production_status === 'cancelled') return false;
+            if (Array.isArray(linkedOrder.tags) && linkedOrder.tags.includes('excluded')) return false;
+          }
+        }
+        return true;
+      })
       .map(t => {
         // Find linked order
         const linkedOrder = orderMap[t.order_id] || orderMap[t.order_number?.replace('#', '')];
