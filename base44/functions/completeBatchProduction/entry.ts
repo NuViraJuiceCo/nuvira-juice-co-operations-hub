@@ -62,8 +62,10 @@ Deno.serve(async (req) => {
     }
 
     // Validate required fields
-    if (!actual_quantity_produced || isNaN(Number(actual_quantity_produced)) || Number(actual_quantity_produced) <= 0) {
-      return Response.json({ error: `actual_quantity_produced must be a number > 0 (received: ${actual_quantity_produced})` }, { status: 400 });
+    // Resolve canonical quantity — accept any of the three aliases
+    const resolvedQty = Number(actual_quantity_produced ?? body.actual_units ?? body.quantity_produced);
+    if (!resolvedQty || isNaN(resolvedQty) || resolvedQty <= 0) {
+      return Response.json({ error: `Quantity must be a number > 0 (received actual_quantity_produced=${actual_quantity_produced})` }, { status: 400 });
     }
     if (pH_result === null || pH_result === undefined || pH_result === '') {
       return Response.json({ error: 'Required field missing: pH_result' }, { status: 400 });
@@ -98,9 +100,7 @@ Deno.serve(async (req) => {
       ...(staff_on_duty && staff_on_duty.length > 0 ? { staff_on_duty } : {}),
       ...(final_ingredients?.length ? { ingredients_used: final_ingredients } : {}),
       ...(ingredient_lot_notes ? { ingredient_lot_notes: manual_ingredient_override ? `[MANUAL OVERRIDE] ${ingredient_lot_notes}` : ingredient_lot_notes } : {}),
-      actual_quantity_produced: actual_quantity_produced,
-      actual_units: actual_quantity_produced,   // keep both fields in sync
-      quantity_produced: actual_quantity_produced,
+      actual_units: resolvedQty,   // canonical schema field — only actual_units exists in entity schema
       bottles_produced: bottles_produced || null,
       bottles_rejected_or_wasted: bottles_rejected_or_wasted || null,
       final_usable_quantity: final_usable_quantity || null,

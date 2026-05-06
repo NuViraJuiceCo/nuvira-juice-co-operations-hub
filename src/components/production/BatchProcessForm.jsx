@@ -17,10 +17,10 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
   const { recipe, formulaSummary, loading: recipeLoading, notFound: recipeNotFound } = useProductFormula(batch.product_name);
   const [formulaOverridden, setFormulaOverridden] = useState(false);
 
-  // Normalize quantity: resolve from multiple possible field names, parse safely
-  // Fallback order: actual_quantity_produced → actual_units → quantity_produced → planned_units
+  // Normalize quantity: actual_units is the canonical schema field.
+  // Fall back to planned_units for new batches where actual_units is null.
   const resolveQty = (b) => {
-    const raw = b.actual_quantity_produced ?? b.actual_units ?? b.quantity_produced ?? b.planned_units ?? '';
+    const raw = b.actual_units ?? b.planned_units ?? '';
     const n = parseInt(raw, 10);
     return isNaN(n) ? '' : n;
   };
@@ -114,13 +114,11 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
         storage_location: formData.storage_location,
         use_by_date: formData.use_by_date,
       };
-      // Persist actual quantity — write all three fields so reopen always finds them
+      // Persist quantity — actual_units is the only schema field, write it directly
       const rawQtySave = formData.actual_quantity_produced !== '' ? formData.actual_quantity_produced : batch.planned_units;
       const qtySave = parseInt(rawQtySave, 10);
       if (!isNaN(qtySave) && qtySave > 0) {
-        patch.actual_quantity_produced = qtySave;
         patch.actual_units = qtySave;
-        patch.quantity_produced = qtySave;
       }
       await base44.entities.ProductionBatch.update(batch.id, patch);
       onSave();
@@ -176,12 +174,10 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
         });
       }
 
-      // Step 2: Complete batch — send all quantity field aliases so backend validation passes
+      // Step 2: Complete batch
       await base44.functions.invoke('completeBatchProduction', {
         batch_id: batch.batch_id,
-        actual_quantity_produced: qty,
-        actual_units: qty,
-        quantity_produced: qty,
+        actual_quantity_produced: qty,  // backend accepts this alias, resolves to actual_units
         staff_on_duty: formData.staff_on_duty,
         actual_end_time: formData.actual_end_time ? new Date(formData.actual_end_time).toISOString() : new Date().toISOString(),
         bottles_produced: formData.bottles_produced || qty,
