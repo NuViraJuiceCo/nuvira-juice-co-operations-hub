@@ -322,7 +322,10 @@ Deno.serve(async (req) => {
     }
 
     // ── STEP 3: UNKNOWN QUALITY GATE ────────────────────────────────────────
-    if (isUnknownQuality(incomingData)) {
+    // Admin writes matched by internal_id bypass this gate entirely — the order is
+    // already resolved above via base44.entities.ShopifyOrder.get(matchBy.internal_id).
+    const adminInternalIdWrite = source === 'admin' && matchBy?.internal_id && existingOrder;
+    if (!adminInternalIdWrite && isUnknownQuality(incomingData)) {
       const existingScore = existingOrder ? getCompletenessScore(existingOrder) : 0;
       if (existingOrder && existingScore >= 5) {
         await quarantine(base44, {
@@ -450,6 +453,9 @@ Deno.serve(async (req) => {
       'assigned_delivery_date',
       'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code',
       'tags',
+      // Always preserve the override flag itself so CA syncs cannot clear it
+      'manual_override', 'manual_override_at', 'manual_override_by',
+      'internal_notes', 'audit_trail',
     ];
     if (existingOrder?.manual_override === true && ['customer_app', 'rebuild_subscriptions'].includes(source)) {
       const blocked = [];
@@ -563,7 +569,7 @@ Deno.serve(async (req) => {
 
     // ── STEP 8: PRESERVE CRITICAL EXISTING FIELDS IF INCOMING IS EMPTY ──────
      if (existingOrder) {
-       const preserveIfEmpty = ['customer_name', 'customer_phone', 'fulfillments', 'internal_notes', 'assigned_delivery_date', 'production_date', 'selected_delivery_date', 'delivery_window_label', 'production_status', 'order_lock_status', 'total_price', 'subtotal'];
+       const preserveIfEmpty = ['customer_name', 'customer_phone', 'fulfillments', 'internal_notes', 'assigned_delivery_date', 'production_date', 'selected_delivery_date', 'delivery_window_label', 'production_status', 'order_lock_status', 'total_price', 'subtotal', 'manual_override', 'manual_override_at', 'manual_override_by', 'audit_trail'];
        for (const field of preserveIfEmpty) {
          const incomingVal = incomingData[field];
          const existingVal = existingOrder[field];

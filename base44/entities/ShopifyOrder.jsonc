@@ -187,7 +187,7 @@
     },
     "production_snapshot": {
       "type": "object",
-      "description": "Immutable snapshot of line_items and fulfillments captured when order enters production_scheduled. Used to detect and block unauthorized modifications.",
+      "description": "Immutable snapshot of line_items and fulfillments captured when order enters production_scheduled.",
       "properties": {
         "line_items": {
           "type": "array",
@@ -225,12 +225,12 @@
     "selected_delivery_date": {
       "type": "string",
       "format": "date",
-      "description": "Customer-selected delivery date from Customer App (Wed, Sat, or Sun)"
+      "description": "Customer-selected delivery date from Customer App"
     },
     "production_date": {
       "type": "string",
       "format": "date",
-      "description": "Assigned production date (day before delivery). Source of truth for Production Planner batch grouping."
+      "description": "Assigned production date (day before delivery)."
     },
     "delivery_window_label": {
       "type": "string",
@@ -291,7 +291,7 @@
         "fulfilled"
       ],
       "default": "unlocked",
-      "description": "Lifecycle lock controlling what future syncs are allowed to modify. Once verified or higher, destructive overwrites are blocked."
+      "description": "Lifecycle lock controlling what future syncs are allowed to modify."
     },
     "tags": {
       "type": "array",
@@ -418,6 +418,46 @@
     },
     "delivered_at": {
       "type": "string"
+    },
+    "manual_override": {
+      "type": "boolean",
+      "default": false,
+      "description": "Set to true by admin manual edits. Prevents Customer App sync from overwriting production_status, fulfillment_status, address, and tags."
+    },
+    "manual_override_at": {
+      "type": "string",
+      "description": "ISO timestamp when admin manually set the override."
+    },
+    "manual_override_by": {
+      "type": "string",
+      "description": "Email of the admin who set the manual override."
+    },
+    "audit_trail": {
+      "type": "array",
+      "description": "Log of manual admin edits with before/after field values.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "performed_by": {
+            "type": "string"
+          },
+          "before": {
+            "type": "object"
+          },
+          "after": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "required": [
