@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
       stripe_payment_intent_id: stripe_payment_intent_id || null,
       stripe_customer_id: stripe_customer_id || null,
       source_channel: 'online',
-      source_type: stripe_checkout_session_id ? 'stripe_checkout' : 'stripe_payment',
+      source_type: stripe_checkout_session_id ? 'stripe_checkout' : stripe_payment_intent_id ? 'stripe_payment_intent' : 'customer_app',
       order_type: 'one_time',
       fulfillment_mode: 'single_delivery',
       sync_status: 'synced',
@@ -241,6 +241,8 @@ Deno.serve(async (req) => {
     if (stripe_checkout_session_id) matchBy.stripe_checkout_session_id = stripe_checkout_session_id;
     if (stripe_payment_intent_id) matchBy.stripe_payment_intent_id = stripe_payment_intent_id;
     if (order_intent_id) matchBy.order_intent_id = order_intent_id;
+    // Always include order_number as a final dedup safety net in safeSyncOrderUpdate
+    if (order_number) matchBy.shopify_order_number = order_number;
 
     // ── CALL SAFESYNCORDERUPDATE ────────────────────────────────────────────
     const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
