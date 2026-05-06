@@ -442,17 +442,50 @@ Deno.serve(async (req) => {
 
     // ── STEP 3.9: MANUAL OVERRIDE GUARD ────────────────────────────────────
     // If an existing order has manual_override=true, block customer_app and
-    // rebuild_subscriptions from overwriting production_status, fulfillment_status,
-    // payment_status, tags, and address fields.
-    // Only stripe_webhook (for refund/cancel events) and admin can override manual_override.
+    // rebuild_subscriptions from overwriting status fields and delivery date.
+    // stripe_webhook CAN still overwrite payment_status (refund/cancel events take priority).
+    // admin source always bypasses this guard.
+    const MANUAL_PROTECTED_FIELDS = [
+      'production_status', 'fulfillment_status', 'order_lock_status',
+      'assigned_delivery_date',
+      'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code',
+      'tags',
+    ];
     if (existingOrder?.manual_override === true && ['customer_app', 'rebuild_subscriptions'].includes(source)) {
-      const manualProtectedFields = ['production_status', 'fulfillment_status', 'payment_status', 'tags',
-        'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code'];
-      for (const f of manualProtectedFields) {
+      const blocked = [];
+      for (const f of MANUAL_PROTECTED_FIELDS) {
         if (f in incomingData) {
-          console.log(`[SAFE-SYNC] manual_override: blocking ${source} from overwriting ${f} on ${existingOrder.shopify_order_number}`);
           delete incomingData[f];
+          blocked.push(f);
         }
+      }
+      if (blocked.length > 0) {
+        console.log(`[SAFE-SYNC] manual_override guard: blocked ${source} from overwriting [${blocked.join(', ')}] on ${existingOrder.shopify_order_number}`);
+      }
+    }
+
+    // ── STEP 3.95: ADMIN WRITE — capture audit trail entry ──────────────────
+    // Every admin manual save appends an audit_trail entry to the order record.
+    if (source === 'admin' && existingOrder && incomingData.manual_override === true) {
+      const changedFields = {};
+      for (const f of ['production_status', 'payment_status', 'fulfillment_method', 'assigned_delivery_date', 'internal_notes', 'customer_notes']) {
+        if (f in incomingData && incomingData[f] !== existingOrder[f]) {
+          changedFields[f] = { from: existingOrder[f], to: incomingData[f] };
+        }
+      }
+      if (Object.keys(changedFields).length > 0) {
+        const existingTrail = Array.isArray(existingOrder.audit_trail) ? existingOrder.audit_trail : [];
+        incomingData.audit_trail = [
+          ...existingTrail,
+          {
+            timestamp: incomingData.manual_override_at || new Date().toISOString(),
+            action: 'ManualAdminEdit',
+            performed_by: incomingData.manual_override_by || 'admin',
+            before: Object.fromEntries(Object.entries(changedFields).map(([k, v]) => [k, v.from])),
+            after: Object.fromEntries(Object.entries(changedFields).map(([k, v]) => [k, v.to])),
+            reason: 'Manual admin edit via Orders UI',
+          },
+        ];
       }
     }
 
@@ -792,8 +825,8 @@ Deno.serve(async (req) => {
     }
 
     // ── STEP 10: AUDIT LOG ───────────────────────────────────────────────────
-    // Only log creates, Stripe webhook events, or writes with rejections — skip routine customer_app updates to reduce credits
-    const shouldLog = !existingOrder || stripeEventId || fieldsRejected.length > 0 || fieldsFiltered.length > 0 || source === 'stripe_webhook';
+    // Log creates, Stripe webhooks, rejected fields, admin writes, and customer_app (skip only unchanged routine updates)
+    const shouldLog = !existingOrder || stripeEventId || fieldsRejected.length > 0 || fieldsFiltered.length > 0 || source === 'stripe_webhook' || source === 'admin';
     if (shouldLog) {
       await logSync(base44, {
         source,

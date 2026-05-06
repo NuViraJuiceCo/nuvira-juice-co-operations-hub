@@ -305,6 +305,15 @@ Deno.serve(async (req) => {
           }
         }
 
+        // GUARDRAIL: If the hub order has manual_override=true, skip the write entirely.
+        // An admin has manually set status fields that must not be overwritten by CA sync.
+        // Only Stripe refund/cancel events (via stripeCheckoutWebhook) can override this.
+        if (hubOrder?.manual_override === true) {
+          console.log(`[PULL-ORDERS] Skipping ${hubOrder.shopify_order_number} — manual_override=true set by ${hubOrder.manual_override_by || 'admin'}. Customer App sync will not overwrite.`);
+          results.push({ order_id: orderId, action: 'skipped', reason: 'manual_override_active' });
+          continue;
+        }
+
         // Skip write if order already exists in hub and nothing meaningful has changed
         // CRITICAL: Do NOT include sync_status/last_sync_at in this check — they change every run
         // and would prevent the no-change skip, causing a recalculate storm on every poll.
