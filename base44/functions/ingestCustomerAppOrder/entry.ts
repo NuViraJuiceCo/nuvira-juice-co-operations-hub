@@ -2,22 +2,24 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
  * PROTECTED ENDPOINT: Customer App Order Ingestion
- * 
+ *
  * Purpose: Accept paid order payloads from Customer App and ingest them into Hub via safeSyncOrderUpdate.
  *          After successful creation: triggers FulfillmentTask creation and production batch recalculation.
- * 
+ *
  * Security:
  * - Requires CUSTOMER_APP_SYNC_SECRET header token (shared secret)
+ * - Internal test/dry_run calls allowed via body._internalSecret = INTERNAL_FUNCTION_SECRET
  * - Routes ALL writes through safeSyncOrderUpdate gateway
  * - Enforces idempotency on order_number, stripe_checkout_session_id, stripe_payment_intent_id
  * - Does NOT dedupe by customer_email, customer_name, phone, address, or cart
- * 
+ *
  * Response contract:
- * - action=created      → new ShopifyOrder created; hub_order_id always present
- * - action=updated      → existing order payment upgraded; hub_order_id always present  
+ * - action=created           → new ShopifyOrder created; hub_order_id always present
+ * - action=updated           → existing order payment upgraded; hub_order_id always present
  * - action=dedupe_exact_match → order already exists; hub_order_id always present
  * - action=queued_for_review  → data incomplete; order queued; no hub_order_id
- * - action=rejected     → invalid payload; no hub_order_id
+ * - action=rejected           → invalid payload; no hub_order_id
+ * - status=dry_run            → no writes; branch_trace shows projected_action
  */
 
 // Production day schedule
@@ -43,22 +45,33 @@ function resolveProductionDateForDelivery(deliveryDateStr) {
 Deno.serve(async (req) => {
   try {
     // ── AUTHENTICATION ──────────────────────────────────────────────────────
+    const base44 = createClientFromRequest(req);
+
+    // Parse body first so we can read _internalSecret for test/dry_run calls
+    const body = await req.json();
+
     const authHeader = req.headers.get('Authorization');
     const providedSecret = authHeader?.replace('Bearer ', '').trim();
     const expectedSecret = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
+    const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
 
-    if (!providedSecret || !expectedSecret || providedSecret !== expectedSecret) {
-      console.warn('[INGEST] Unauthorized request: missing or invalid CUSTOMER_APP_SYNC_SECRET');
+    // Allow internal test/dry_run calls via body._internalSecret or Authorization header
+    const isInternalTest = internalSecret && (
+      (providedSecret && providedSecret === internalSecret) ||
+      (body._internalSecret && body._internalSecret === internalSecret)
+    );
+    const isCustomerApp = providedSecret && expectedSecret && providedSecret === expectedSecret;
+
+    if (!isCustomerApp && !isInternalTest) {
+      console.warn('[INGEST] Unauthorized request: missing or invalid auth secret');
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const base44 = createClientFromRequest(req);
-    
     // ── REQUEST PARSING ────────────────────────────────────────────────────
-    const body = await req.json();
     const {
       order_number,
       order_intent_id,
+      dry_run = false,
       customer_name,
       customer_email,
       customer_phone,
@@ -143,6 +156,53 @@ Deno.serve(async (req) => {
       ]);
       if (byPI?.length > 0) { existingMatchedOrder = byPI[0]; matchedBy = 'stripe_payment_intent_id'; }
       else if (byNum?.length > 0) { existingMatchedOrder = byNum[0]; matchedBy = 'order_number'; }
+    }
+
+    // ── DRY RUN BRANCH TRACE ────────────────────────────────────────────────
+    // dry_run=true traces which branch would execute without writing any data.
+    if (dry_run) {
+      const projectedAction = existingMatchedOrder
+        ? (existingMatchedOrder.payment_status !== 'paid' ? 'updated (payment_upgrade)' : 'dedupe_exact_match')
+        : 'created';
+
+      return Response.json({
+        status: 'dry_run',
+        projected_action: projectedAction,
+        hub_app_id: '69da9e8036b037ad40a9a73f',
+        endpoint_function: 'ingestCustomerAppOrder',
+        endpoint_url_pattern: 'https://<hub-domain>/functions/ingestCustomerAppOrder',
+        branch_trace: {
+          step_1_auth: isCustomerApp ? 'customer_app_secret' : 'internal_test_secret',
+          step_2_validation: 'passed',
+          step_3_idempotency: existingMatchedOrder
+            ? `MATCH FOUND — ${existingMatchedOrder.shopify_order_number} by ${matchedBy}`
+            : 'NO MATCH — would proceed to create new order',
+          step_4_delivery_date: resolvedDeliveryDate
+            ? `resolved → delivery=${resolvedDeliveryDate} production=${resolvedProductionDate}`
+            : `not resolved — ${deliveryDateRejectionReason || 'no delivery date provided'}`,
+          step_5_new_order_fields: existingMatchedOrder ? null : {
+            shopify_order_number: order_number,
+            payment_status: 'paid',
+            production_status: 'awaiting_production',
+            order_lock_status: 'verified',
+            data_quality_status: 'complete',
+            assigned_delivery_date: resolvedDeliveryDate || null,
+            production_date: resolvedProductionDate || null,
+            delivery_window_label: delivery_window_label || '5 PM – 8 PM',
+            source_type: stripe_checkout_session_id ? 'stripe_checkout' : stripe_payment_intent_id ? 'stripe_payment_intent' : 'customer_app',
+          },
+          step_6_post_create: existingMatchedOrder ? 'N/A' : (resolvedDeliveryDate
+            ? 'would create FulfillmentTask + recalculateProductionBatches'
+            : 'would recalculateProductionBatches only (no delivery date)'),
+          step_7_response: `action=${projectedAction}, hub_order_id=${existingMatchedOrder?.id || '<new_id>'}`,
+        },
+        idempotency_keys_checked: {
+          stripe_checkout_session_id: stripe_checkout_session_id || null,
+          stripe_payment_intent_id: stripe_payment_intent_id || null,
+          order_number,
+        },
+        note: 'dry_run=true — zero records written. Remove dry_run or set to false to execute.',
+      }, { status: 200 });
     }
 
     if (existingMatchedOrder) {
@@ -231,7 +291,6 @@ Deno.serve(async (req) => {
       sync_status: 'synced',
       last_sync_at: new Date().toISOString(),
       customer_order_date: new Date().toISOString(),
-      // Set correct initial production status and lock for new paid orders
       production_status: 'awaiting_production',
       order_lock_status: 'verified',
       data_quality_status: 'complete',
@@ -241,7 +300,7 @@ Deno.serve(async (req) => {
     if (stripe_checkout_session_id) matchBy.stripe_checkout_session_id = stripe_checkout_session_id;
     if (stripe_payment_intent_id) matchBy.stripe_payment_intent_id = stripe_payment_intent_id;
     if (order_intent_id) matchBy.order_intent_id = order_intent_id;
-    // Always include order_number as a final dedup safety net in safeSyncOrderUpdate
+    // Always include order_number as final dedup safety net in safeSyncOrderUpdate
     if (order_number) matchBy.shopify_order_number = order_number;
 
     // ── CALL SAFESYNCORDERUPDATE ────────────────────────────────────────────
@@ -256,14 +315,10 @@ Deno.serve(async (req) => {
     console.log('[INGEST] safeSyncOrderUpdate result:', { status: safeStatus, action, order_id });
 
     if (safeStatus === 'success' && action === 'created' && order_id) {
-      // ── POST-CREATION: Trigger FulfillmentTask and batch recalc ────────────
       const creationTasks = [];
 
       if (resolvedDeliveryDate) {
-        // Create FulfillmentTask for this delivery
-        const itemsSummary = line_items
-          .map(i => `${i.quantity}x ${i.title}`)
-          .join(', ');
+        const itemsSummary = line_items.map(i => `${i.quantity}x ${i.title}`).join(', ');
         const fullAddress = [address_line1, address_line2, address_city, address_state, address_postal_code]
           .filter(Boolean).join(', ');
 
@@ -284,12 +339,10 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Recalculate production batches to include new order
       creationTasks.push(
         base44.asServiceRole.functions.invoke('recalculateProductionBatches', {}).then(() => {
           console.log(`[INGEST] Production batches recalculated for ${order_number}`);
         }).catch(err => {
-          // Non-fatal — batches can be recalculated manually
           console.warn(`[INGEST] Batch recalc failed (non-fatal): ${err.message}`);
         })
       );
@@ -309,7 +362,6 @@ Deno.serve(async (req) => {
       }, { status: 200 });
 
     } else if (safeStatus === 'success' && action === 'updated') {
-      // Order was matched during safeSyncOrderUpdate (race condition) — return updated
       return Response.json({
         status: 'success',
         action: 'updated',
@@ -324,7 +376,6 @@ Deno.serve(async (req) => {
     } else if (safeStatus === 'rejected') {
       const reason = safeResult?.data?.reason || 'unknown_rejection';
       console.error(`[INGEST] safeSyncOrderUpdate rejected ${order_number}: ${reason}`);
-      // Map certain rejections to queued_for_review so CA doesn't silently drop them
       const queueableReasons = ['delivery_order_missing_address', 'low_quality_new_order', 'missing_customer_info'];
       const isQueued = queueableReasons.some(r => reason.startsWith(r.split('_score')[0]));
       return Response.json({
@@ -336,7 +387,6 @@ Deno.serve(async (req) => {
       }, { status: isQueued ? 202 : 422 });
 
     } else {
-      // Gateway returned unexpected response — never silently succeed
       console.error('[INGEST] Unexpected safeSyncOrderUpdate response for', order_number, ':', JSON.stringify(safeResult?.data));
       return Response.json({
         status: 'error',

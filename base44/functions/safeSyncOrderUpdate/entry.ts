@@ -445,18 +445,16 @@ Deno.serve(async (req) => {
       const incomingPayment = incomingData.payment_status;
       const existingPayment = existingOrder.payment_status;
 
-      // RULE A: Never downgrade paid → pending/null/unpaid on fulfilled/locked orders
+      // RULE A: Never downgrade paid → pending/null/unpaid once payment is confirmed.
+      // Once an order is paid, no source (including customer_app polling) can revert it.
+      // The customer app may send stale payment_status=pending on repeat syncs if their
+      // local record hasn't updated — this guard permanently protects the paid status.
       if (existingPayment === 'paid') {
         const DOWNGRADE_VALUES = ['pending', 'unpaid', null, undefined, ''];
         const isDowngrade = incomingPayment !== undefined && DOWNGRADE_VALUES.includes(incomingPayment);
         if (isDowngrade) {
-          const isDelivered = existingOrder.delivered_at || existingOrder.delivery_drop_location;
-          const isFulfilled = existingOrder.production_status === 'fulfilled' || existingOrder.fulfillment_status === 'fulfilled' || existingOrder.fulfillment_status === 'delivered';
-          const isLocked = ['fulfilled', 'out_for_delivery', 'in_production', 'production_scheduled'].includes(existingOrder.order_lock_status);
-          if (isDelivered || isFulfilled || isLocked) {
-            console.warn(`[SAFE-SYNC] GUARDRAIL: Blocked payment_status downgrade paid→"${incomingPayment}" on ${existingOrder.shopify_order_number}. Preserving paid.`);
-            delete incomingData.payment_status;
-          }
+          console.warn(`[SAFE-SYNC] GUARDRAIL: Blocked payment_status downgrade paid→"${incomingPayment}" on ${existingOrder.shopify_order_number} from source:${source}. Preserving paid.`);
+          delete incomingData.payment_status;
         }
       }
 
