@@ -18,8 +18,9 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
   const [formulaOverridden, setFormulaOverridden] = useState(false);
 
   // Normalize quantity: resolve from multiple possible field names, parse safely
+  // Fallback order: actual_quantity_produced → actual_units → quantity_produced → planned_units
   const resolveQty = (b) => {
-    const raw = b.actual_units ?? b.actual_quantity_produced ?? b.actual_quantity ?? b.planned_units ?? '';
+    const raw = b.actual_quantity_produced ?? b.actual_units ?? b.quantity_produced ?? b.planned_units ?? '';
     const n = parseInt(raw, 10);
     return isNaN(n) ? '' : n;
   };
@@ -113,11 +114,13 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
         storage_location: formData.storage_location,
         use_by_date: formData.use_by_date,
       };
-      // Persist actual quantity if entered
-      const qty = parseInt(formData.actual_quantity_produced, 10);
-      if (!isNaN(qty) && qty > 0) {
-        patch.actual_units = qty;
-        patch.actual_quantity_produced = qty;
+      // Persist actual quantity — write all three fields so reopen always finds them
+      const rawQtySave = formData.actual_quantity_produced !== '' ? formData.actual_quantity_produced : batch.planned_units;
+      const qtySave = parseInt(rawQtySave, 10);
+      if (!isNaN(qtySave) && qtySave > 0) {
+        patch.actual_quantity_produced = qtySave;
+        patch.actual_units = qtySave;
+        patch.quantity_produced = qtySave;
       }
       await base44.entities.ProductionBatch.update(batch.id, patch);
       onSave();
@@ -131,14 +134,19 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
   const handleProcess = async () => {
     setError(null);
 
-    // Normalize quantity — accept planned_units as fallback
-    const rawQty = formData.actual_quantity_produced !== '' ? formData.actual_quantity_produced : batch.planned_units;
+    // Normalize quantity — fallback chain: form field → batch saved field → planned_units
+    const rawQty = (formData.actual_quantity_produced !== '' && formData.actual_quantity_produced != null)
+      ? formData.actual_quantity_produced
+      : (batch.actual_quantity_produced ?? batch.actual_units ?? batch.quantity_produced ?? batch.planned_units);
     const qty = parseInt(rawQty, 10);
 
-    console.log('[BatchProcessForm] Validating — batch_id:', batch.batch_id, 'planned_units:', batch.planned_units, 'actual_quantity_produced:', formData.actual_quantity_produced, 'resolved qty:', qty);
+    console.log('[BatchProcessForm] Validating — batch_id:', batch.batch_id,
+      'planned_units:', batch.planned_units,
+      'form.actual_quantity_produced:', formData.actual_quantity_produced,
+      'resolved qty:', qty);
 
     if (isNaN(qty) || qty <= 0) {
-      setError(`Quantity must be greater than 0. (planned_units=${batch.planned_units}, actual_quantity_produced=${formData.actual_quantity_produced})`);
+      setError(`Quantity must be greater than 0. (resolved=${qty}, form=${formData.actual_quantity_produced}, planned=${batch.planned_units})`);
       return;
     }
     if (isRetrospective && !formData.retrospective_reason.trim()) {
@@ -168,10 +176,12 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
         });
       }
 
-      // Step 2: Complete batch
+      // Step 2: Complete batch — send all quantity field aliases so backend validation passes
       await base44.functions.invoke('completeBatchProduction', {
         batch_id: batch.batch_id,
         actual_quantity_produced: qty,
+        actual_units: qty,
+        quantity_produced: qty,
         staff_on_duty: formData.staff_on_duty,
         actual_end_time: formData.actual_end_time ? new Date(formData.actual_end_time).toISOString() : new Date().toISOString(),
         bottles_produced: formData.bottles_produced || qty,

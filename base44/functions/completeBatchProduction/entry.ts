@@ -62,11 +62,17 @@ Deno.serve(async (req) => {
     }
 
     // Validate required fields
-    const required = ['actual_quantity_produced', 'pH_result', 'pH_passed_failed', 'passed_failed'];
-    for (const field of required) {
-      if (!(field in body) || body[field] === null || body[field] === undefined) {
-        return Response.json({ error: `Required field missing: ${field}` }, { status: 400 });
-      }
+    if (!actual_quantity_produced || isNaN(Number(actual_quantity_produced)) || Number(actual_quantity_produced) <= 0) {
+      return Response.json({ error: `actual_quantity_produced must be a number > 0 (received: ${actual_quantity_produced})` }, { status: 400 });
+    }
+    if (pH_result === null || pH_result === undefined || pH_result === '') {
+      return Response.json({ error: 'Required field missing: pH_result' }, { status: 400 });
+    }
+    if (!pH_passed_failed) {
+      return Response.json({ error: 'Required field missing: pH_passed_failed' }, { status: 400 });
+    }
+    if (!passed_failed) {
+      return Response.json({ error: 'Required field missing: passed_failed' }, { status: 400 });
     }
 
     // pH failed requires corrective action
@@ -93,6 +99,8 @@ Deno.serve(async (req) => {
       ...(final_ingredients?.length ? { ingredients_used: final_ingredients } : {}),
       ...(ingredient_lot_notes ? { ingredient_lot_notes: manual_ingredient_override ? `[MANUAL OVERRIDE] ${ingredient_lot_notes}` : ingredient_lot_notes } : {}),
       actual_quantity_produced: actual_quantity_produced,
+      actual_units: actual_quantity_produced,   // keep both fields in sync
+      quantity_produced: actual_quantity_produced,
       bottles_produced: bottles_produced || null,
       bottles_rejected_or_wasted: bottles_rejected_or_wasted || null,
       final_usable_quantity: final_usable_quantity || null,
