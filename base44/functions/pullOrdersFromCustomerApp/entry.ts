@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
     const results = [];
     const processedIds = new Set();
 
-    for (const ord of orders) {
+    for (let ord of orders) {
       const orderId = ord.shopify_order_id || ord.id;
       try {
 

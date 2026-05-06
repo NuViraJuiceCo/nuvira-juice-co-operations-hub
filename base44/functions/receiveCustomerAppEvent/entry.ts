@@ -34,7 +34,9 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
-    const { event, data } = body;
+    const { event } = body;
+    // Customer App sends order data under body.order OR body.data — support both
+    const data = body.order || body.data || {};
 
     if (!event) {
       return Response.json({ error: 'Missing event type' }, { status: 400 });
@@ -102,14 +104,20 @@ Deno.serve(async (req) => {
     // Customer App pushes paid orders via syncOrderToHub using event=order.created
     // Route directly into safeSyncOrderUpdate — same logic as ingestCustomerAppOrder
     if (event === 'order.created' || event === 'order.paid') {
-      const orderData = data || {};
+      // Support both body.order and body.data as the order payload container
+      const orderData = body.order || body.data || {};
 
       // Validate minimum required fields
       const errors = [];
       if (!orderData.order_number) errors.push('order_number required');
       if (!orderData.customer_email) errors.push('customer_email required');
-      if (!orderData.line_items || !Array.isArray(orderData.line_items) || orderData.line_items.length === 0) errors.push('line_items required');
-      if (!orderData.total_price || orderData.total_price <= 0) errors.push('total_price required (> 0)');
+      // Accept line_items OR items (CA sends either field name)
+      const resolvedLineItems = (orderData.line_items && orderData.line_items.length > 0)
+        ? orderData.line_items
+        : (orderData.items && orderData.items.length > 0 ? orderData.items : []);
+      if (resolvedLineItems.length === 0) errors.push('line_items required (non-empty array)');
+      const resolvedTotal = orderData.total_price || orderData.total || 0;
+      if (!resolvedTotal || resolvedTotal <= 0) errors.push('total_price required (> 0)');
       if (orderData.payment_status !== 'paid') errors.push('payment_status must be "paid"');
       const hasStripeId = orderData.stripe_checkout_session_id || orderData.stripe_payment_intent_id || orderData.order_intent_id;
       if (!hasStripeId) errors.push('At least one of stripe_checkout_session_id, stripe_payment_intent_id, or order_intent_id required');
@@ -130,17 +138,19 @@ Deno.serve(async (req) => {
         address_state: orderData.address_state || '',
         address_postal_code: orderData.address_postal_code || '',
         address_country: orderData.address_country || 'US',
-        line_items: orderData.line_items || [],
-        total_price: orderData.total_price,
-        subtotal: orderData.subtotal || orderData.total_price,
+        line_items: resolvedLineItems,
+        total_price: resolvedTotal,
+        subtotal: orderData.subtotal || resolvedTotal,
         payment_status: 'paid',
         fulfillment_method: orderData.fulfillment_method || 'delivery',
         fulfillment_mode: 'single_delivery',
         order_type: 'one_time',
         delivery_notes: orderData.delivery_notes || '',
         customer_notes: orderData.customer_notes || '',
-        requested_delivery_date: orderData.requested_delivery_date || '',
-        selected_delivery_date: orderData.selected_delivery_date || null,
+        requested_delivery_date: orderData.requested_delivery_date || orderData.assigned_delivery_date || '',
+        selected_delivery_date: orderData.selected_delivery_date || orderData.assigned_delivery_date || null,
+        assigned_delivery_date: orderData.assigned_delivery_date || orderData.selected_delivery_date || null,
+        delivery_window_label: orderData.delivery_window_label || '5 PM – 8 PM',
         stripe_checkout_session_id: orderData.stripe_checkout_session_id || null,
         stripe_payment_intent_id: orderData.stripe_payment_intent_id || null,
         stripe_customer_id: orderData.stripe_customer_id || null,
@@ -176,11 +186,13 @@ Deno.serve(async (req) => {
         customer_email: orderData.customer_email,
       });
 
+      const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
       const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
         incomingData,
         source: 'customer_app',
         stripeEventId: orderData.stripe_checkout_session_id || orderData.stripe_payment_intent_id || null,
         matchBy,
+        _internalSecret: internalSecret,
       });
 
       const { status: safeStatus, action, order_id } = safeResult?.data || {};
