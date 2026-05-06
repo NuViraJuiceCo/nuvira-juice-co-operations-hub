@@ -291,6 +291,20 @@ Deno.serve(async (req) => {
           customerName = hubOrder.customer_name;
         }
 
+        // GUARDRAIL: If the hub order is already refunded/cancelled/excluded, never re-activate it
+        if (hubOrder) {
+          const hubIsExcluded =
+            hubOrder.payment_status === 'refunded' ||
+            hubOrder.production_status === 'canceled' ||
+            hubOrder.production_status === 'cancelled' ||
+            (Array.isArray(hubOrder.tags) && hubOrder.tags.includes('excluded'));
+          if (hubIsExcluded) {
+            console.log(`[PULL-ORDERS] Skipping ${hubOrder.shopify_order_number} — already marked refunded/cancelled/excluded in Hub. Will not reactivate.`);
+            results.push({ order_id: orderId, action: 'skipped', reason: 'already_excluded_in_hub' });
+            continue;
+          }
+        }
+
         // Skip write if order already exists in hub and nothing meaningful has changed
         // CRITICAL: Do NOT include sync_status/last_sync_at in this check — they change every run
         // and would prevent the no-change skip, causing a recalculate storm on every poll.

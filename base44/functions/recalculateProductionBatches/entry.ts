@@ -323,14 +323,19 @@ Deno.serve(async (req) => {
     const activeStatuses = ['new', 'awaiting_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage'];
 
     for (const order of allOrders) {
-      // GUARDRAIL: Exclude refunded, deleted, and test orders from production planning
-      if (order.payment_status === 'refunded' || 
-          order.production_status === 'refunded' || 
-          order.do_not_recover === true || 
-          order.do_not_sync === true ||
-          order.canceled_at || 
-          order.deleted_at) {
-        console.log(`[RECALC] Skipping excluded order ${order.shopify_order_number}: refunded/deleted/test`);
+      // GUARDRAIL: Exclude refunded, cancelled, and test orders from production planning
+      const isExcluded =
+        order.payment_status === 'refunded' ||
+        order.production_status === 'refunded' ||
+        order.production_status === 'canceled' ||
+        order.production_status === 'cancelled' ||
+        (Array.isArray(order.tags) && order.tags.includes('excluded')) ||
+        order.do_not_recover === true ||
+        order.do_not_sync === true ||
+        order.canceled_at ||
+        order.deleted_at;
+      if (isExcluded) {
+        console.log(`[RECALC] Skipping excluded order ${order.shopify_order_number}: refunded/cancelled/test`);
         continue;
       }
 
