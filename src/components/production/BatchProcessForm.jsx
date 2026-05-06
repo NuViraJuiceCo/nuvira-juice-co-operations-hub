@@ -101,25 +101,35 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
     try {
       const patch = {
         status: formData.status,
-        assigned_to: formData.assigned_to,
-        notes: formData.notes,
+        assigned_to: formData.assigned_to || null,
+        notes: formData.notes || null,
         staff_on_duty: formData.staff_on_duty,
         equipment_used: formData.equipment_used,
-        ingredient_lot_notes: formData.ingredient_lot_notes || formData.ingredients_notes,
         pre_op_sanitation_confirmed: formData.pre_op_sanitation_confirmed,
         refrigerator_temp_checked: formData.refrigerator_temp_checked,
-        pH_result: formData.pH_result !== '' ? parseFloat(formData.pH_result) : null,
-        pH_passed_failed: formData.pH_passed_failed,
-        passed_failed: formData.passed_failed,
-        storage_location: formData.storage_location,
-        use_by_date: formData.use_by_date,
       };
-      // Persist quantity — actual_units is the only schema field, write it directly
-      const rawQtySave = formData.actual_quantity_produced !== '' ? formData.actual_quantity_produced : batch.planned_units;
-      const qtySave = parseInt(rawQtySave, 10);
+
+      // Only include optional string fields if they have a value
+      if (formData.ingredient_lot_notes || formData.ingredients_notes) {
+        patch.ingredient_lot_notes = formData.ingredient_lot_notes || formData.ingredients_notes;
+      }
+      if (formData.storage_location) patch.storage_location = formData.storage_location;
+      if (formData.use_by_date) patch.use_by_date = formData.use_by_date;
+      if (formData.pH_result !== '' && formData.pH_result != null) {
+        patch.pH_result = parseFloat(formData.pH_result);
+        patch.pH_passed_failed = formData.pH_passed_failed;
+      }
+      if (formData.passed_failed) patch.passed_failed = formData.passed_failed;
+
+      // Persist quantity — actual_units is the only schema field
+      const rawQtySave = formData.actual_quantity_produced !== '' && formData.actual_quantity_produced != null
+        ? formData.actual_quantity_produced
+        : null;
+      const qtySave = rawQtySave !== null ? parseInt(rawQtySave, 10) : NaN;
       if (!isNaN(qtySave) && qtySave > 0) {
         patch.actual_units = qtySave;
       }
+
       await base44.entities.ProductionBatch.update(batch.id, patch);
       onSave();
     } catch (err) {
