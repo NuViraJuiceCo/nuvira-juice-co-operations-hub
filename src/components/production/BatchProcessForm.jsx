@@ -132,19 +132,18 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
   const handleProcess = async () => {
     setError(null);
 
-    // Normalize quantity — fallback chain: form field → batch saved field → planned_units
+    // Resolve quantity: form field → saved actual_units → planned_units
     const rawQty = (formData.actual_quantity_produced !== '' && formData.actual_quantity_produced != null)
       ? formData.actual_quantity_produced
-      : (batch.actual_quantity_produced ?? batch.actual_units ?? batch.quantity_produced ?? batch.planned_units);
+      : (batch.actual_units ?? batch.planned_units);
     const qty = parseInt(rawQty, 10);
 
-    console.log('[BatchProcessForm] Validating — batch_id:', batch.batch_id,
-      'planned_units:', batch.planned_units,
-      'form.actual_quantity_produced:', formData.actual_quantity_produced,
-      'resolved qty:', qty);
-
-    if (isNaN(qty) || qty <= 0) {
-      setError(`Quantity must be greater than 0. (resolved=${qty}, form=${formData.actual_quantity_produced}, planned=${batch.planned_units})`);
+    if (isNaN(qty) || qty === 0) {
+      setError('Enter the actual quantity produced before completing this batch.');
+      return;
+    }
+    if (qty < 0) {
+      setError('Actual quantity produced must be greater than 0.');
       return;
     }
     if (isRetrospective && !formData.retrospective_reason.trim()) {
@@ -327,15 +326,16 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
             <h3 className="font-semibold text-sm">Production Output</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">
-                  Actual Quantity Produced
-                  <span className="text-xs text-muted-foreground ml-1">(defaults to planned: {batch.planned_units})</span>
-                </label>
+                <label className="text-sm font-medium">Actual Quantity Produced</label>
+                <p className="text-xs text-muted-foreground mb-1">
+                  Planned Units: <span className="font-semibold text-primary">{batch.planned_units ?? '—'}</span>
+                </p>
                 <input
                   type="number"
+                  min="1"
                   value={formData.actual_quantity_produced}
                   onChange={(e) => set('actual_quantity_produced', e.target.value === '' ? '' : parseInt(e.target.value, 10))}
-                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                  className="w-full p-2 border border-border rounded-lg bg-background text-sm"
                   placeholder={`${batch.planned_units || 'e.g. 24'}`}
                 />
               </div>
@@ -634,7 +634,7 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
           </Button>
           <Button type="button" variant="outline" onClick={handleSave} disabled={loading} className="flex-1 gap-1.5">
             <Save className="h-4 w-4" />
-            {loading ? 'Saving…' : 'Save'}
+            {loading ? 'Saving…' : 'Save Changes'}
           </Button>
           <Button
             type="button"
@@ -643,7 +643,7 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
             className={`flex-1 gap-1.5 ${isRetrospective ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
           >
             <Play className="h-4 w-4" />
-            {loading ? 'Processing…' : isRetrospective ? 'Log Batch' : 'Process Batch'}
+            {loading ? 'Processing…' : isRetrospective ? 'Log Batch' : 'Complete Batch'}
           </Button>
         </div>
       </div>
