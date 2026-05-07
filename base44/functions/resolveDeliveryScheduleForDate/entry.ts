@@ -101,14 +101,93 @@ Deno.serve(async (req) => {
       return completedStatuses.includes((status || '').toLowerCase());
     };
 
+    // Helper: detect if task is a subscription_fulfillment source (look in notes field OR order_id pattern)
+    const isSubscriptionFulfillmentTask = (task) => {
+      // Check notes if available
+      if (task.notes) {
+        if (task.notes.includes('subscription_fulfillment') || task.notes.includes('Subscription:')) {
+          return true;
+        }
+      }
+      // Fallback: check order_id pattern for Stripe subscription IDs
+      if (task.order_id && String(task.order_id).startsWith('sub_')) {
+        return true;
+      }
+      return false;
+    };
+
+    // Helper: validate subscription_fulfillment task eligibility (does NOT require linked ShopifyOrder)
+    const isSubscriptionTaskEligible = (task) => {
+      // Required fields for any subscription task
+      if (!task.customer_name || !task.customer_name.trim()) return false;
+      if (!task.customer_email || !task.customer_email.trim()) return false;
+      
+      // Require delivery address (subscription must be deliverable)
+      // Check all possible address field names (delivery_address, address, address_line1, etc)
+      const hasAddress = (task.delivery_address && task.delivery_address.trim()) || 
+                         (task.address && task.address.trim()) || 
+                         (task.address_line1 && task.address_line1.trim());
+      if (!hasAddress) {
+        // No address field found — reject subscription task (cannot fulfill without address)
+        return false;
+      }
+      
+      // Require items (subscription must list what's being delivered)
+      const hasItems = (task.items && task.items.length > 0) || 
+                       (task.items_summary && task.items_summary.trim());
+      if (!hasItems) return false;
+      
+      // Check payment status: explicit field first, then notes, then allow by default if neither set
+      // (assumes task was verified before creation)
+      const paymentStatus = task.payment_status;
+      const notesLower = (task.notes || '').toLowerCase();
+      
+      // HARD REJECT: explicit failed/pending/refunded/cancelled payment statuses
+      if (paymentStatus && paymentStatus !== 'paid') return false;
+      if (notesLower.includes('payment status: pending')) return false;
+      if (notesLower.includes('payment status: failed')) return false;
+      if (notesLower.includes('payment status: unpaid')) return false;
+      if (notesLower.includes('payment status: refunded')) return false;
+      if (notesLower.includes('payment status: cancelled')) return false;
+      
+      // Exclude other known failure keywords regardless of payment status field
+      if (notesLower.includes('failed') && notesLower.includes('payment')) return false;
+      if (notesLower.includes('refunded')) return false;
+      if (notesLower.includes('cancelled') || notesLower.includes('canceled')) return false;
+      if (notesLower.includes('paused')) return false;
+      
+      // If we get here and payment_status is explicitly 'paid' or notes say 'paid', allow it
+      // If neither field is set (missing data), allow by default (assume pre-verified)
+      return true;
+    };
+
     // 1. Collect from FulfillmentTasks for this date
+    // Build a list of subscription tasks for visibility
+    const subTasksOnDate = tasks.filter(t => {
+      const taskDate = resolveDeliveryDate(t);
+      return taskDate === selectedDate && isSubscriptionFulfillmentTask(t);
+    });
+    console.log(`[DRIVER] Resolving ${selectedDate}: total=${tasks.length}, matching_date=${tasks.filter(t => resolveDeliveryDate(t) === selectedDate).length}, subscription_on_date=${subTasksOnDate.length}`);
+    
     const taskCandidates = tasks
       .filter(t => {
-        if (resolveDeliveryDate(t) !== selectedDate) return false;
+        const taskDate = resolveDeliveryDate(t);
+        if (taskDate !== selectedDate) return false;
         // Hard-exclude cancelled tasks
         if (INACTIVE_TASK_STATUSES.includes(t.status)) return false;
-        // HARD GATE: only include tasks whose linked order is confirmed PAID
-        // This is the primary defense against abandoned/pending checkout records leaking into driver portal
+        
+        const isSubscriptionTask = isSubscriptionFulfillmentTask(t);
+        
+        // ── BRANCH 1: Subscription_fulfillment tasks ──────────────────────────
+        // These do NOT require a linked ShopifyOrder. Validate the task itself.
+        if (isSubscriptionTask) {
+          const eligible = isSubscriptionTaskEligible(t);
+          console.log(`[DRIVER] Sub ${t.customer_name} (${t.order_id}): eligible=${eligible}`);
+          return eligible;
+        }
+        
+        // ── BRANCH 2: One-time / manual tasks ────────────────────────────────
+        // These MUST have a linked paid ShopifyOrder (existing logic)
         if (t.order_id) {
           // If we know the linked order, it MUST be in the paid set
           const linkedOrder = orderMap[t.order_id];
