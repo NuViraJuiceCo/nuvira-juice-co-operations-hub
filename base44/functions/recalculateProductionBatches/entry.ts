@@ -330,80 +330,119 @@ Deno.serve(async (req) => {
       'service fee', 'handling fee', 'tax',
     ];
 
-    // CRITICAL: First, process active FulfillmentTasks (subscription fulfillments)
-    // These are the canonical source for subscription delivery demand.
+    // Build a set of ShopifyOrder IDs that are active (not excluded) — used to guard FulfillmentTask dedup
+    const activeOrderIds = new Set();
+    for (const o of allOrders) {
+      const isExcludedCheck =
+        o.payment_status === 'refunded' ||
+        o.production_status === 'refunded' ||
+        o.production_status === 'canceled' ||
+        o.production_status === 'cancelled' ||
+        (Array.isArray(o.tags) && o.tags.includes('excluded')) ||
+        o.do_not_recover === true ||
+        o.do_not_sync === true;
+      if (!isExcludedCheck) activeOrderIds.add(o.id);
+    }
+
+    // Build a set of order IDs whose demand will be covered by ShopifyOrder loop
+    // (active, non-excluded, non-subscription orders). FulfillmentTasks linked to these
+    // orders must NOT be treated as additional production demand to avoid double-counting.
+    const ordersCoveredByOrderLoop = new Set();
+    for (const o of allOrders) {
+      const isExcludedCheck =
+        o.payment_status === 'refunded' ||
+        o.production_status === 'refunded' ||
+        o.production_status === 'canceled' ||
+        o.production_status === 'cancelled' ||
+        (Array.isArray(o.tags) && o.tags.includes('excluded')) ||
+        o.do_not_recover === true ||
+        o.do_not_sync === true;
+      // One-time (non-subscription) active orders are covered by the order loop
+      if (!isExcludedCheck && o.source_channel !== 'subscription') {
+        ordersCoveredByOrderLoop.add(o.id);
+      }
+    }
+
+    // CRITICAL: First, process active FulfillmentTasks (subscription fulfillments ONLY)
+    // Only process FulfillmentTasks whose linked order is:
+    //   (a) excluded/tagged from ShopifyOrder loop (parent SUB order is excluded but task is still active), OR
+    //   (b) a subscription order (source_channel='subscription')
+    // NEVER process FulfillmentTasks linked to active one-time orders — those are covered by ShopifyOrder loop.
     console.log(`[RECALC] FulfillmentTask loop: ${allFulfillmentTasks.length} tasks to process`);
     for (const task of allFulfillmentTasks) {
       // GUARDRAIL: Only process active/scheduled delivery tasks
       const isActiveTask = task.status && !['Cancelled', 'Completed', 'cancelled', 'completed'].includes(task.status);
-      if (!isActiveTask) {
-        console.log(`[RECALC] Skipping inactive task ${task.id}: status=${task.status}`);
+      if (!isActiveTask) continue;
+
+      // GUARDRAIL: Skip FulfillmentTasks linked to active one-time orders (covered by ShopifyOrder loop)
+      if (task.order_id && ordersCoveredByOrderLoop.has(task.order_id)) {
+        console.log(`[RECALC] Skipping FT ${task.id} (${task.customer_name}): linked to active one-time order covered by order loop`);
         continue;
       }
 
       // Map scheduled_date to production_date (1 day prior)
       const taskDeliveryDate = task.scheduled_date || task.assigned_delivery_date || task.delivery_date;
-      if (!taskDeliveryDate) {
-        console.log(`[RECALC] Skipping task ${task.id}: no scheduled_date`);
-        continue;
-      }
+      if (!taskDeliveryDate) continue;
 
       const productionDate = getProductionDateForDelivery(taskDeliveryDate);
       const prodDateObj = new Date(productionDate + 'T00:00:00');
-      if (prodDateObj < today) {
-        console.log(`[RECALC] Skipping task ${task.id}: production_date ${productionDate} is past (today=${today.toISOString().split('T')[0]})`);
-        continue; // skip past dates
-      }
-      console.log(`[RECALC] Processing FulfillmentTask ${task.id}: ${task.customer_name} → ${productionDate}`);
+      if (prodDateObj < today) continue; // skip past dates
+
+      console.log(`[RECALC] Processing subscription FulfillmentTask ${task.id}: ${task.customer_name} → ${productionDate}`);
 
       // Extract items from the task — support both items array and items_summary string
       let taskItems = task.items || [];
-      
+
       // FALLBACK: Parse items_summary if items array is missing
       // Format: "1x Oasis, 1x Aura, 1x Re-Nu"
+      // FIX: Strip parenthetical text BEFORE parsing so "1x Oasis (via The NuVira Trio)" → product="Oasis"
       if (taskItems.length === 0 && task.items_summary) {
         const itemParts = task.items_summary.split(',').map(s => s.trim());
         taskItems = itemParts.map(part => {
-          const match = part.match(/^(\d+)x\s+(.+)$/);
+          // Strip parenthetical text first: "1x Oasis (via The NuVira Trio)" → "1x Oasis"
+          const stripped = part.replace(/\s*\(.*?\)/g, '').trim();
+          const match = stripped.match(/^(\d+)x\s+(.+)$/);
           if (match) {
             return { title: match[2].trim(), quantity: parseInt(match[1], 10) };
           }
           return null;
         }).filter(Boolean);
-        if (taskItems.length > 0) {
-          console.log(`[RECALC] Parsed items_summary for task ${task.id}: ${JSON.stringify(taskItems)}`);
-        }
       }
-      
-      if (taskItems.length === 0) {
-        console.log(`[RECALC] Skipping task ${task.id}: no items in items array and failed to parse items_summary`);
-        continue;
-      }
+
+      if (taskItems.length === 0) continue;
+
+      // Resolve order_number: prefer shopify_order_number on linked order, else task.order_id (for SUB orders)
+      const linkedOrder = allOrders.find(o => o.id === task.order_id);
+      const taskOrderNumber = linkedOrder?.shopify_order_number || task.order_number || task.order_id || ('FT-' + task.id.slice(-6));
 
       for (const item of taskItems) {
         let itemTitle = (item.title || '').trim();
+        // Strip any remaining parenthetical text from product names
+        itemTitle = itemTitle.replace(/\s*\(.*?\)/g, '').trim();
         if (!itemTitle) continue;
 
         const qty = Number(item.quantity) || 0;
         if (qty <= 0) continue;
 
-        // Skip non-production items
         if (NON_PRODUCTION_KEYWORDS.some(kw => itemTitle.toLowerCase().includes(kw))) continue;
 
-        // Normalize product name
         const normalizedTitle = normalizeProductName(itemTitle);
         const key = `${productionDate}__${normalizedTitle}`;
-
         if (lockedKeys.has(key)) continue;
 
         if (!planMap[key]) {
           planMap[key] = { productionDate, productName: normalizedTitle, units: 0, sources: [] };
         }
+
+        // Dedup guard: skip if this exact task is already in sources
+        const alreadyAdded = planMap[key].sources.some(s => s.fulfillment_task_id === task.id && s.source_item === normalizedTitle);
+        if (alreadyAdded) continue;
+
         planMap[key].units += qty;
         planMap[key].sources.push({
-          order_id: task.order_id,
-          order_number: task.order_id || 'FT-' + task.id.slice(-6), // fallback to task ID if no order_id
-          customer_email: task.customer_email || '',
+          order_id: task.order_id || '',
+          order_number: taskOrderNumber,
+          customer_email: linkedOrder?.customer_email || task.customer_email || '',
           customer_name: task.customer_name || '',
           quantity: qty,
           source_type: 'subscription_fulfillment',
