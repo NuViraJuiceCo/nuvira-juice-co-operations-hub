@@ -332,22 +332,53 @@ Deno.serve(async (req) => {
 
     // CRITICAL: First, process active FulfillmentTasks (subscription fulfillments)
     // These are the canonical source for subscription delivery demand.
+    console.log(`[RECALC] FulfillmentTask loop: ${allFulfillmentTasks.length} tasks to process`);
     for (const task of allFulfillmentTasks) {
       // GUARDRAIL: Only process active/scheduled delivery tasks
       const isActiveTask = task.status && !['Cancelled', 'Completed', 'cancelled', 'completed'].includes(task.status);
-      if (!isActiveTask) continue;
+      if (!isActiveTask) {
+        console.log(`[RECALC] Skipping inactive task ${task.id}: status=${task.status}`);
+        continue;
+      }
 
       // Map scheduled_date to production_date (1 day prior)
       const taskDeliveryDate = task.scheduled_date || task.assigned_delivery_date || task.delivery_date;
-      if (!taskDeliveryDate) continue;
+      if (!taskDeliveryDate) {
+        console.log(`[RECALC] Skipping task ${task.id}: no scheduled_date`);
+        continue;
+      }
 
       const productionDate = getProductionDateForDelivery(taskDeliveryDate);
       const prodDateObj = new Date(productionDate + 'T00:00:00');
-      if (prodDateObj < today) continue; // skip past dates
+      if (prodDateObj < today) {
+        console.log(`[RECALC] Skipping task ${task.id}: production_date ${productionDate} is past (today=${today.toISOString().split('T')[0]})`);
+        continue; // skip past dates
+      }
+      console.log(`[RECALC] Processing FulfillmentTask ${task.id}: ${task.customer_name} → ${productionDate}`);
 
-      // Extract items from the task (should already be decomposed)
-      const taskItems = task.items || [];
-      if (taskItems.length === 0) continue;
+      // Extract items from the task — support both items array and items_summary string
+      let taskItems = task.items || [];
+      
+      // FALLBACK: Parse items_summary if items array is missing
+      // Format: "1x Oasis, 1x Aura, 1x Re-Nu"
+      if (taskItems.length === 0 && task.items_summary) {
+        const itemParts = task.items_summary.split(',').map(s => s.trim());
+        taskItems = itemParts.map(part => {
+          const match = part.match(/^(\d+)x\s+(.+)$/);
+          if (match) {
+            return { title: match[2].trim(), quantity: parseInt(match[1], 10) };
+          }
+          return null;
+        }).filter(Boolean);
+        if (taskItems.length > 0) {
+          console.log(`[RECALC] Parsed items_summary for task ${task.id}: ${JSON.stringify(taskItems)}`);
+        }
+      }
+      
+      if (taskItems.length === 0) {
+        console.log(`[RECALC] Skipping task ${task.id}: no items in items array and failed to parse items_summary`);
+        continue;
+      }
 
       for (const item of taskItems) {
         let itemTitle = (item.title || '').trim();
