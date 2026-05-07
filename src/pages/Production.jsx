@@ -9,6 +9,7 @@ import ProductionDayCard from "../components/production/ProductionDayCard";
 import IngredientPlanningPanel from "../components/production/IngredientPlanningPanel";
 import RecipeEditor from "../components/production/RecipeEditor";
 import IngredientYieldEditor from "../components/production/IngredientYieldEditor";
+import SubscriptionLiveVerificationPanel from "../components/production/SubscriptionLiveVerificationPanel";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import SelectMobile from "../components/SelectMobile";
@@ -212,6 +213,7 @@ export default function Production() {
                 { id: "today", mobileLabel: "📅 Today", desktopLabel: "📅 Today & Upcoming" },
                 { id: "in_progress", mobileLabel: "⚙️ In Progress", desktopLabel: "⚙️ In Progress" },
                 { id: "verify", mobileLabel: "✓ Verify", desktopLabel: "✓ Needs Verification" },
+                { id: "subscription_verify", mobileLabel: "🔐 Sub Verify", desktopLabel: "🔐 Subscription Clearance" },
                 { id: "history", mobileLabel: "📋 History", desktopLabel: "📋 History" },
               ].map(t => (
                 <button
@@ -348,6 +350,11 @@ export default function Production() {
                     ))
                   )}
                 </div>
+              )}
+
+              {/* Subscription Clearance Tab */}
+              {tab === "subscription_verify" && (
+                <SubscriptionLiveVerificationPanel />
               )}
 
               {/* Needs Verification Tab */}
