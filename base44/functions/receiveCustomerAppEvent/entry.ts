@@ -13,6 +13,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  *   customer.bag_return           — create/update BagReturn record
  *   customer.onboarding_complete  — no-op, acknowledged
  *   customer.subscription_created — trigger order pull for this customer
+ *   order.created / order.paid    — sync paid order to Hub
+ *   order.refunded                — cascade refund through Hub (cancel order, tasks, batches)
  *   order.status_updated          — acknowledged (hub owns status, not customer app)
  */
 
@@ -236,6 +238,39 @@ Deno.serve(async (req) => {
           order_number: orderData.order_number,
         }, { status: 500 });
       }
+    }
+
+    // ── order.refunded ──────────────────────────────────────────────────────────
+    // Customer App notifies Hub of full or partial refund
+    if (event === 'order.refunded') {
+      if (!data?.order_number && !data?.stripe_payment_intent_id) {
+        return Response.json({ error: 'Missing order_number or stripe_payment_intent_id' }, { status: 400 });
+      }
+
+      console.log(`[RECEIVE-CUSTOMER-EVENT] Processing order.refunded: ${data.order_number}, refund_amount=$${data.refund_amount}`);
+
+      // Route to processStripeRefund with CA-provided context
+      const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+      const refundResult = await base44.asServiceRole.functions.invoke('processStripeRefund', {
+        stripe_charge_id: data.stripe_charge_id || null,
+        stripe_payment_intent_id: data.stripe_payment_intent_id || null,
+        stripe_refund_id: data.stripe_refund_id || null,
+        stripe_event_id: data.stripe_event_id || `ca_refund_${data.order_number}_${Date.now()}`,
+        refund_amount: data.refund_amount || 0,
+        charge_amount: data.charge_amount || data.total_price || 0,
+        manual_order_number: data.order_number,
+        _internalSecret: internalSecret,
+      });
+
+      const { status: refundStatus } = refundResult?.data || {};
+      console.log(`[RECEIVE-CUSTOMER-EVENT] Refund cascade result: ${refundStatus}`);
+
+      return Response.json({
+        status: 'success',
+        event,
+        refund_status: refundStatus,
+        order_number: data.order_number,
+      }, { status: 200 });
     }
 
     // ── customer.onboarding_complete / order.status_updated / others ──────────
