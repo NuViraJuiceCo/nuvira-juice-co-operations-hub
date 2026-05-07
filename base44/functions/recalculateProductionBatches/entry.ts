@@ -254,9 +254,10 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
-    // Load all active orders and bundles
-    const [allOrders, allBundles, allBatches] = await Promise.all([
+    // Load all active orders, fulfillment tasks, bundles, and batches
+    const [allOrders, allFulfillmentTasks, allBundles, allBatches] = await Promise.all([
       base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500),
+      base44.asServiceRole.entities.FulfillmentTask.list('-created_date', 500),
       base44.asServiceRole.entities.Bundle.list('-updated_date', 100),
       base44.asServiceRole.entities.ProductionBatch.list('-production_date', 500),
     ]);
@@ -321,6 +322,60 @@ Deno.serve(async (req) => {
     const planMap = {};
 
     const activeStatuses = ['new', 'awaiting_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage'];
+
+    // CRITICAL: First, process active FulfillmentTasks (subscription fulfillments)
+    // These are the canonical source for subscription delivery demand.
+    for (const task of allFulfillmentTasks) {
+      // GUARDRAIL: Only process active/scheduled delivery tasks
+      const isActiveTask = task.status && !['Cancelled', 'Completed', 'cancelled', 'completed'].includes(task.status);
+      if (!isActiveTask) continue;
+
+      // Map scheduled_date to production_date (1 day prior)
+      const taskDeliveryDate = task.scheduled_date || task.assigned_delivery_date || task.delivery_date;
+      if (!taskDeliveryDate) continue;
+
+      const productionDate = getProductionDateForDelivery(taskDeliveryDate);
+      const prodDateObj = new Date(productionDate + 'T00:00:00');
+      if (prodDateObj < today) continue; // skip past dates
+
+      // Extract items from the task (should already be decomposed)
+      const taskItems = task.items || [];
+      if (taskItems.length === 0) continue;
+
+      for (const item of taskItems) {
+        let itemTitle = (item.title || '').trim();
+        if (!itemTitle) continue;
+
+        const qty = Number(item.quantity) || 0;
+        if (qty <= 0) continue;
+
+        // Skip non-production items
+        if (NON_PRODUCTION_KEYWORDS.some(kw => itemTitle.toLowerCase().includes(kw))) continue;
+
+        // Normalize product name
+        const normalizedTitle = normalizeProductName(itemTitle);
+        const key = `${productionDate}__${normalizedTitle}`;
+
+        if (lockedKeys.has(key)) continue;
+
+        if (!planMap[key]) {
+          planMap[key] = { productionDate, productName: normalizedTitle, units: 0, sources: [] };
+        }
+        planMap[key].units += qty;
+        planMap[key].sources.push({
+          order_id: task.order_id,
+          order_number: task.order_id || 'FT-' + task.id.slice(-6), // fallback to task ID if no order_id
+          customer_email: task.customer_email || '',
+          customer_name: task.customer_name || '',
+          quantity: qty,
+          source_type: 'subscription_fulfillment',
+          source_item: normalizedTitle,
+          fulfillment_task_id: task.id,
+          scheduled_date: taskDeliveryDate,
+          production_date: productionDate,
+        });
+      }
+    }
 
     for (const order of allOrders) {
       // GUARDRAIL: Exclude refunded, cancelled, and test orders from production planning
