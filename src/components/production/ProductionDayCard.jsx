@@ -9,7 +9,8 @@ function SourceBreakdown({ sources }) {
 
   const direct = sources.filter(s => s.source_type === 'direct');
   const bundles = sources.filter(s => s.source_type === 'bundle');
-  const subs = sources.filter(s => s.source_type === 'subscription');
+  // Match both 'subscription' and 'subscription_fulfillment' source types
+  const subs = sources.filter(s => s.source_type === 'subscription' || s.source_type === 'subscription_fulfillment');
 
   return (
     <div className="mt-3 pt-3 border-t border-border space-y-2">
@@ -35,13 +36,23 @@ function SourceBreakdown({ sources }) {
       )}
       {subs.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-foreground/80 mb-1">Subscriptions ({subs.reduce((s, x) => s + x.quantity, 0)} units)</p>
-          {subs.map((s, i) => (
-            <p key={i} className="text-xs text-foreground/70 pl-2">
-              · {s.order_number} — {s.customer_name || s.customer_email} × {s.quantity}
-              {s.fulfillment_index && s.fulfillment_total ? ` (fulfillment ${s.fulfillment_index} of ${s.fulfillment_total})` : ''}
-            </p>
-          ))}
+          <p className="text-xs font-semibold text-foreground/80 mb-1">
+            <span className="inline-flex items-center gap-1">
+              <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">SUB</span>
+              Subscriptions ({subs.reduce((s, x) => s + x.quantity, 0)} units)
+            </span>
+          </p>
+          {subs.map((s, i) => {
+            const fulfillmentLabel = s.fulfillment_number
+              ? ` — Fulfillment #${s.fulfillment_number}`
+              : (s.fulfillment_index && s.fulfillment_total ? ` (${s.fulfillment_index}/${s.fulfillment_total})` : '');
+            return (
+              <p key={i} className="text-xs text-foreground/70 pl-2">
+                · <span className="font-medium text-blue-700">{s.customer_name || s.customer_email}</span>
+                {' '}— {s.order_number}{fulfillmentLabel} × {s.quantity}
+              </p>
+            );
+          })}
         </div>
       )}
     </div>
