@@ -20,6 +20,9 @@ Deno.serve(async (req) => {
     // Task statuses that are fully inactive — never show in driver portal
     const INACTIVE_TASK_STATUSES = ['cancelled', 'canceled', 'Cancelled', 'Canceled'];
 
+    // Payment states that are NEVER operational — hard gate, belt-and-suspenders
+    const UNPAID_STATUSES = new Set(['pending', 'unpaid', 'failed', 'expired', 'abandoned', 'do_not_sync']);
+
     // Get all data
     const [tasks, orders, subscriptions] = await Promise.all([
       base44.entities.FulfillmentTask.list('-created_date', 1000),
@@ -41,20 +44,24 @@ Deno.serve(async (req) => {
       if (s.shopify_order_number) subscriptionMap[s.shopify_order_number] = s;
     });
 
-    // Filter valid orders — must be paid, not excluded/refunded/canceled
+    // Filter valid orders — must be paid, not excluded/refunded/canceled/pending
     const validOrders = orders.filter(o => {
       if (BLOCKED.includes(o.shopify_order_number)) return false;
-      if (!VALID_PAYMENT.includes(o.payment_status)) return false;
+      if (!VALID_PAYMENT.includes(o.payment_status)) return false;  // HARD GATE: must be paid/captured
       if (o.payment_status === 'refunded') return false;
+      if (UNPAID_STATUSES.has(o.payment_status)) return false;      // HARD GATE: never pending/abandoned
       if (o.production_status === 'canceled' || o.production_status === 'cancelled') return false;
       if (Array.isArray(o.tags) && o.tags.includes('excluded')) return false;
+      if (o.sync_status === 'do_not_sync') return false;            // HARD GATE: explicitly excluded
       if (!o.line_items?.length) return false;
       if (!o.address_line1 && o.fulfillment_method !== 'pickup') return false;
       return true;
     });
 
-    // Build a set of valid order IDs for fast lookup when filtering tasks
-    const validOrderIds = new Set(validOrders.map(o => o.id));
+    // Build a set of VALID (paid) order IDs — used to gate FulfillmentTask inclusion
+    const paidOrderIds = new Set(validOrders.map(o => o.id));
+
+    // (paidOrderIds built above — used to gate FulfillmentTask inclusion)
 
     // Helper: resolve delivery date — scheduled_date is canonical
     const resolveDeliveryDate = (task) => {
@@ -100,13 +107,25 @@ Deno.serve(async (req) => {
         if (resolveDeliveryDate(t) !== selectedDate) return false;
         // Hard-exclude cancelled tasks
         if (INACTIVE_TASK_STATUSES.includes(t.status)) return false;
-        // Hard-exclude tasks whose linked order is refunded/excluded/canceled
+        // HARD GATE: only include tasks whose linked order is confirmed PAID
+        // This is the primary defense against abandoned/pending checkout records leaking into driver portal
         if (t.order_id) {
+          // If we know the linked order, it MUST be in the paid set
           const linkedOrder = orderMap[t.order_id];
           if (linkedOrder) {
+            if (!VALID_PAYMENT.includes(linkedOrder.payment_status)) return false;  // not paid
+            if (UNPAID_STATUSES.has(linkedOrder.payment_status)) return false;       // pending/abandoned
             if (linkedOrder.payment_status === 'refunded') return false;
             if (linkedOrder.production_status === 'canceled' || linkedOrder.production_status === 'cancelled') return false;
             if (Array.isArray(linkedOrder.tags) && linkedOrder.tags.includes('excluded')) return false;
+            if (linkedOrder.sync_status === 'do_not_sync') return false;
+          }
+          // If order_id is set but we have no record, require it to be in the paid set
+          // (unknown order_id = unverifiable = exclude for safety)
+          if (!linkedOrder && !paidOrderIds.has(t.order_id)) {
+            // Allow orphaned tasks (no linked ShopifyOrder) only if no order_id mismatch
+            // i.e. the FulfillmentTask was created manually by admin without an order
+            if (t.order_id) return false; // has order_id but order not found = exclude
           }
         }
         return true;

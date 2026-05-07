@@ -84,6 +84,10 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'success', orders: [], optimized_orders: [] });
     }
 
+    // Payment states that are NEVER operational — hard gate against abandoned checkouts
+    const UNPAID_PAYMENT_STATUSES = new Set(['pending', 'unpaid', 'failed', 'expired', 'abandoned']);
+    const VALID_PAYMENT_STATUSES = new Set(['paid', 'captured']);
+
     const hasCompleteAddressAtParent = (order) => {
       // postal_code is optional — a city+state address is sufficient for routing
       return order.address_line1 && order.address_city && order.address_state;
