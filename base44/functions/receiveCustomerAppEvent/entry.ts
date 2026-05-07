@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
     }
 
     // ── customer.subscription_created ────────────────────────────────────────
-    // Create immediate first fulfillment cycle for PAID subscriptions only
+    // For PAID subscriptions: create subscription operational ShopifyOrder + FulfillmentTask
     if (event === 'customer.subscription_created') {
       if (!data?.customer_email || !data?.stripe_subscription_id || !data?.first_delivery_date) {
         return Response.json({
@@ -116,37 +116,10 @@ Deno.serve(async (req) => {
         }, { status: 200 });
       }
 
-      // Idempotency key: stripe_subscription_id + first_delivery_date + fulfillment_number=1
-      const idempotencyKey = `${data.stripe_subscription_id}__${data.first_delivery_date}__1`;
-
       try {
-        // Check if FulfillmentTask already exists for this subscription + date
-        const existing = await base44.asServiceRole.entities.FulfillmentTask.filter({
-          customer_email: data.customer_email,
-          scheduled_date: data.first_delivery_date,
-        });
-
-        let matchingTask = null;
-        if (existing && existing.length > 0) {
-          // Look for a task that links to this subscription
-          matchingTask = existing.find(t => 
-            (t.notes && t.notes.includes(data.stripe_subscription_id)) ||
-            (t.order_id === data.stripe_subscription_id)
-          );
-        }
-
-        if (matchingTask) {
-          console.log(`[RECEIVE-CUSTOMER-EVENT] FulfillmentTask already exists for ${data.stripe_subscription_id} on ${data.first_delivery_date} — deduping`);
-          return Response.json({
-            status: 'success',
-            action: 'dedupe_existing',
-            fulfillment_task_id: matchingTask.id,
-            note: 'Subscription FulfillmentTask already exists'
-          }, { status: 200 });
-        }
-
-        // Derive production_date from first_delivery_date (1 day before on valid production day: Tue/Fri/Sat)
         const PRODUCTION_DAYS = [2, 5, 6]; // 0=Sun, 2=Tue, 5=Fri, 6=Sat
+
+        // Derive production_date from first_delivery_date (1 day before on valid production day)
         const d = new Date(data.first_delivery_date + 'T00:00:00');
         let productionDate = null;
         for (let i = 1; i <= 7; i++) {
@@ -163,11 +136,10 @@ Deno.serve(async (req) => {
           productionDate = fallback.toISOString().split('T')[0];
         }
 
-        // Build items summary from products array
-        let itemsSummary = '';
-        if (Array.isArray(data.products) && data.products.length > 0) {
-          itemsSummary = data.products.map(p => `${p.quantity}x ${p.product_name}`).join(', ');
-        }
+        // Build fulfillment items from products array
+        const fulfillmentItems = Array.isArray(data.products) && data.products.length > 0
+          ? data.products.map(p => ({ title: p.product_name, quantity: p.quantity, price: 0 }))
+          : [];
 
         // Build full address
         const addr = data.address || {};
@@ -178,8 +150,101 @@ Deno.serve(async (req) => {
           addr.postal_code || data.address_postal_code || ''
         ].filter(Boolean).join(', ');
 
-        // Create FulfillmentTask for first subscription fulfillment
-        const taskData = {
+        const itemsSummary = fulfillmentItems.map(i => `${i.quantity}x ${i.title}`).join(', ');
+
+        // Idempotency check: look for existing subscription operational ShopifyOrder
+        const existingOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
+          stripe_subscription_id: data.stripe_subscription_id,
+        });
+
+        let operationalOrderId = null;
+
+        if (existingOrders && existingOrders.length > 0) {
+          // Reuse existing subscription operational order
+          operationalOrderId = existingOrders[0].id;
+          console.log(`[RECEIVE-CUSTOMER-EVENT] Using existing subscription operational order ${operationalOrderId}`);
+        } else {
+          // Create subscription operational ShopifyOrder (not a customer-facing one-time order)
+          const operationalOrder = await base44.asServiceRole.entities.ShopifyOrder.create({
+            shopify_order_id: `sub_operational_${data.stripe_subscription_id}`,
+            shopify_order_number: `#SUB-${data.stripe_subscription_id.slice(-10)}`,
+            order_type: 'subscription',
+            source_type: 'subscription_fulfillment',
+            source_channel: 'subscription',
+            fulfillment_method: 'delivery',
+            fulfillment_mode: 'single_delivery',
+            payment_status: 'paid',
+            production_status: 'awaiting_production',
+            order_lock_status: 'verified',
+            data_quality_status: 'complete',
+            sync_status: 'synced',
+            customer_name: data.customer_name || '',
+            customer_email: data.customer_email,
+            customer_phone: data.phone || data.customer_phone || '',
+            address_line1: data.address_line1 || '',
+            address_line2: data.address_line2 || '',
+            address_city: data.address_city || '',
+            address_state: data.address_state || '',
+            address_postal_code: data.address_postal_code || '',
+            address_country: data.address_country || 'US',
+            delivery_notes: data.delivery_notes || '',
+            customer_notes: `Subscription: ${data.stripe_subscription_id} | Plan: ${data.plan_name || 'N/A'} | Cadence: ${data.cadence || 'N/A'}`,
+            line_items: fulfillmentItems,
+            fulfillments: [
+              {
+                fulfillment_number: 1,
+                production_date: productionDate,
+                delivery_date: data.first_delivery_date,
+                items: fulfillmentItems,
+                status: 'pending',
+                address_line1: data.address_line1 || '',
+                address_line2: data.address_line2 || '',
+                address_city: data.address_city || '',
+                address_state: data.address_state || '',
+                address_postal_code: data.address_postal_code || '',
+                address_country: data.address_country || 'US',
+                delivery_notes: data.delivery_notes || '',
+              },
+            ],
+            assigned_delivery_date: data.first_delivery_date,
+            delivery_window_label: data.delivery_window_label || '5 PM – 8 PM',
+            total_price: 0,
+            subtotal: 0,
+            stripe_subscription_id: data.stripe_subscription_id,
+            customer_order_date: new Date().toISOString(),
+          });
+
+          operationalOrderId = operationalOrder.id;
+          console.log(`[RECEIVE-CUSTOMER-EVENT] Created subscription operational order ${operationalOrderId}`);
+        }
+
+        // Check if FulfillmentTask already exists for this subscription + date
+        const existingTasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
+          customer_email: data.customer_email,
+          scheduled_date: data.first_delivery_date,
+        });
+
+        let matchingTask = null;
+        if (existingTasks && existingTasks.length > 0) {
+          matchingTask = existingTasks.find(t => 
+            (t.notes && t.notes.includes(data.stripe_subscription_id)) ||
+            (t.order_id === operationalOrderId || t.order_id === data.stripe_subscription_id)
+          );
+        }
+
+        if (matchingTask) {
+          console.log(`[RECEIVE-CUSTOMER-EVENT] FulfillmentTask already exists for ${data.stripe_subscription_id} — deduping`);
+          return Response.json({
+            status: 'success',
+            action: 'dedupe_existing',
+            fulfillment_task_id: matchingTask.id,
+            operational_order_id: operationalOrderId,
+            note: 'Subscription operational order and FulfillmentTask already exist'
+          }, { status: 200 });
+        }
+
+        // Create FulfillmentTask linked to the operational order
+        const createdTask = await base44.asServiceRole.entities.FulfillmentTask.create({
           customer_name: data.customer_name || '',
           customer_email: data.customer_email,
           phone: data.phone || data.customer_phone || '',
@@ -187,47 +252,49 @@ Deno.serve(async (req) => {
           status: 'Scheduled',
           scheduled_date: data.first_delivery_date,
           delivery_address: deliveryAddress,
+          address_line1: data.address_line1 || '',
+          address_city: data.address_city || '',
+          address_state: data.address_state || '',
+          address_postal_code: data.address_postal_code || '',
           time_window: data.delivery_window_label || '5 PM – 8 PM',
+          delivery_window_label: data.delivery_window_label || '5 PM – 8 PM',
           items_summary: itemsSummary,
-          order_id: data.stripe_subscription_id, // Link to Stripe subscription ID
+          order_id: operationalOrderId, // Link to the subscription operational order
+          source_type: 'subscription_fulfillment',
+          stripe_subscription_id: data.stripe_subscription_id,
+          customer_app_subscription_id: data.customer_app_subscription_id || null,
+          payment_status: 'paid',
+          fulfillment_number: 1,
+          plan_id: data.plan_id || null,
+          plan_name: data.plan_name || null,
+          cadence: data.cadence || null,
           notes: [
             `Subscription: ${data.stripe_subscription_id}`,
             data.customer_app_subscription_id ? `CA Sub ID: ${data.customer_app_subscription_id}` : null,
             data.plan_name ? `Plan: ${data.plan_name}` : null,
             data.cadence ? `Cadence: ${data.cadence}` : null,
             `Fulfillment #1`,
-            `Payment Status: ${paymentStatus}`
+            `Payment Status: paid`
           ].filter(Boolean).join(' | '),
-        };
+        });
 
-        const createdTask = await base44.asServiceRole.entities.FulfillmentTask.create(taskData);
-
-        console.log(`[RECEIVE-CUSTOMER-EVENT] Created subscription FulfillmentTask ${createdTask.id} for ${data.customer_email} on ${data.first_delivery_date}`);
-
-        // Trigger production batch creation for the derived production_date
-        // This ensures recalculateProductionBatches will find fulfillment data
-        try {
-          await base44.asServiceRole.functions.invoke('createFulfillmentTasks', {
-            date: data.first_delivery_date,
-          });
-        } catch (err) {
-          console.warn(`[RECEIVE-CUSTOMER-EVENT] Failed to trigger createFulfillmentTasks: ${err.message}`);
-        }
+        console.log(`[RECEIVE-CUSTOMER-EVENT] Created subscription FulfillmentTask ${createdTask.id} linked to order ${operationalOrderId}`);
 
         return Response.json({
           status: 'success',
           action: 'created',
           event,
+          operational_order_id: operationalOrderId,
           fulfillment_task_id: createdTask.id,
           fulfillment_details: {
-            customer_name: taskData.customer_name,
-            customer_email: taskData.customer_email,
-            scheduled_date: taskData.scheduled_date,
-            derived_production_date: productionDate,
+            customer_name: data.customer_name,
+            customer_email: data.customer_email,
+            scheduled_date: data.first_delivery_date,
+            production_date: productionDate,
             items: itemsSummary,
             stripe_subscription_id: data.stripe_subscription_id,
             fulfillment_number: 1,
-            payment_status: paymentStatus,
+            payment_status: 'paid',
           },
         }, { status: 200 });
 
