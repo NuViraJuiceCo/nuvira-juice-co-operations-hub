@@ -85,11 +85,12 @@ Deno.serve(async (req) => {
     }
 
     const hasCompleteAddressAtParent = (order) => {
-      return order.address_line1 && order.address_city && order.address_state && order.address_postal_code;
+      // postal_code is optional — a city+state address is sufficient for routing
+      return order.address_line1 && order.address_city && order.address_state;
     };
 
     const hasCompleteAddressAtFulfillment = (fulfillment) => {
-      return fulfillment && fulfillment.address_line1 && fulfillment.address_city && fulfillment.address_state && fulfillment.address_postal_code;
+      return fulfillment && fulfillment.address_line1 && fulfillment.address_city && fulfillment.address_state;
     };
 
     // Map ShopifyOrder to driver portal format — INCLUDE ALL orders, flag missing addresses
@@ -122,7 +123,9 @@ Deno.serve(async (req) => {
         const fulfillmentAddr = fulfillmentsForDate[0] || o.fulfillments?.[0];
         const hasParentAddr = hasCompleteAddressAtParent(o);
         const hasFulfillmentAddr = hasCompleteAddressAtFulfillment(fulfillmentAddr);
-        const missing_address = o.fulfillment_method === 'delivery' && !hasParentAddr && !hasFulfillmentAddr;
+        // For pre-filtered Driver Portal orders, delivery_address string is sufficient
+        const hasDeliveryAddressString = !!(o.delivery_address || o.address);
+        const missing_address = o.fulfillment_method === 'delivery' && !hasParentAddr && !hasFulfillmentAddr && !hasDeliveryAddressString;
 
         if (missing_address) {
           console.warn(`[OPTIMIZE-ROUTE] Order ${o.shopify_order_number} (${o.customer_name}) is missing a delivery address — included with flag`);
