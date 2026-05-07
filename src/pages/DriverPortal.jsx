@@ -667,8 +667,8 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   const optimizeRoute = async () => {
-    // Include ALL non-completed stops for optimization — not just "ready" status stops.
-    // Today's deliveries may have status "Scheduled" from FulfillmentTasks and should still be routed.
+    // Include ALL non-completed stops for optimization — Scheduled AND ready-status stops.
+    // FulfillmentTasks from Hub are commonly Scheduled until driver marks them out_for_delivery.
     const allTasksToOptimize = (deliveryScheduleItems || []).filter(d => {
       const s = (d.status || '').toLowerCase();
       return !['delivered', 'completed', 'fulfilled', 'cancelled', 'canceled'].includes(s);
