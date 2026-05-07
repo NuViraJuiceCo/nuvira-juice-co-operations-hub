@@ -2,15 +2,18 @@ import { ShoppingCart, TrendingUp } from "lucide-react";
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function ActiveOrderStatusWidget({ orders }) {
+  // Only count PAID orders to exclude abandoned/pending checkouts
+  const paidOrders = orders.filter(o => o.payment_status === "paid");
+  
   const statusCounts = {
-    New: orders.filter(o => o.production_status === "new").length,
-    "In Production": orders.filter(o => o.production_status === "in_production").length,
-    Packed: orders.filter(o => o.production_status === "packed").length,
-    Fulfilled: orders.filter(o => o.production_status === "fulfilled").length,
+    New: paidOrders.filter(o => o.production_status === "new").length,
+    "In Production": paidOrders.filter(o => o.production_status === "in_production").length,
+    Packed: paidOrders.filter(o => o.production_status === "packed").length,
+    Fulfilled: paidOrders.filter(o => o.production_status === "fulfilled").length,
   };
 
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.total_price || 0), 0);
-  const avgOrderValue = orders.length > 0 ? (totalRevenue / orders.length).toFixed(2) : 0;
+  const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+  const avgOrderValue = paidOrders.length > 0 ? (totalRevenue / paidOrders.length).toFixed(2) : 0;
 
   const chartData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
   const colors = ["#991b1b", "#ea580c", "#2563eb", "#059669"];
@@ -23,7 +26,7 @@ export default function ActiveOrderStatusWidget({ orders }) {
           <h3 className="font-semibold text-foreground">Active Order Status</h3>
         </div>
         <span className="text-sm font-medium text-blue-600 flex items-center gap-1">
-          <TrendingUp className="h-4 w-4" /> {orders.length} Orders
+         <TrendingUp className="h-4 w-4" /> {paidOrders.length} Orders
         </span>
       </div>
 
