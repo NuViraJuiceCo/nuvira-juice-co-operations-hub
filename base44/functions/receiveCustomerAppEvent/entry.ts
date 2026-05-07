@@ -21,6 +21,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 
 Deno.serve(async (req) => {
+  console.log('[RECEIVE-CUSTOMER-EVENT] Incoming request:', {
+    method: req.method,
+    url: req.url,
+    auth_header_present: !!req.headers.get('Authorization'),
+  });
+
   if (req.method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 });
   }
@@ -28,10 +34,15 @@ Deno.serve(async (req) => {
   // Authenticate
   const authHeader = req.headers.get('Authorization') || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  if (!token || token !== SYNC_SECRET) {
-    console.warn('[RECEIVE-CUSTOMER-EVENT] Unauthorized request — invalid or missing Bearer token');
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!token) {
+    console.error('[RECEIVE-CUSTOMER-EVENT] Missing Authorization header or Bearer token');
+    return Response.json({ error: 'Missing Authorization header' }, { status: 401 });
   }
+  if (token !== SYNC_SECRET) {
+    console.error('[RECEIVE-CUSTOMER-EVENT] Invalid Bearer token (does not match CUSTOMER_APP_SYNC_SECRET)');
+    return Response.json({ error: 'Invalid Bearer token' }, { status: 401 });
+  }
+  console.log('[RECEIVE-CUSTOMER-EVENT] ✓ Authorization successful');
 
   try {
     const base44 = createClientFromRequest(req);
