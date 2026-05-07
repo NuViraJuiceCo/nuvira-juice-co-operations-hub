@@ -285,27 +285,54 @@ export default function BatchProcessForm({ batch, mode = 'edit', onClose, onSave
           )}
 
           {/* Batch Details */}
-          <section className="bg-muted/30 rounded-lg p-4 grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Batch ID</p>
-              <p className="text-sm font-medium">{batch.batch_id}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Product</p>
-              <p className="text-sm font-medium">{batch.product_name}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Category</p>
-              <p className="text-sm font-medium capitalize">{batch.product_category || '—'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Planned Qty</p>
-              <p className="text-sm font-semibold text-primary">{batch.planned_units || '—'}</p>
-            </div>
-            {batch.actual_start_time && (
+          <section className="bg-muted/30 rounded-lg p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-xs text-muted-foreground">Started</p>
-                <p className="text-sm font-medium">{moment(batch.actual_start_time).format('MMM D, HH:mm')}</p>
+                <p className="text-xs text-muted-foreground">Batch ID</p>
+                <p className="text-sm font-medium">{batch.batch_id}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Product</p>
+                <p className="text-sm font-medium">{batch.product_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Category</p>
+                <p className="text-sm font-medium capitalize">{batch.product_category || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Planned Qty</p>
+                <p className="text-sm font-semibold text-primary">{batch.planned_units || '—'}</p>
+              </div>
+              {batch.actual_start_time && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Started</p>
+                  <p className="text-sm font-medium">{moment(batch.actual_start_time).format('MMM D, HH:mm')}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Order Sources Breakdown */}
+            {batch.order_sources && batch.order_sources.length > 0 && (
+              <div className="border-t pt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Order Sources</p>
+                {batch.order_sources.map((src, i) => {
+                  const isSub = src.source_type === 'subscription' || src.source_type === 'subscription_fulfillment';
+                  const isBundle = src.source_type === 'bundle';
+                  return (
+                    <div key={i} className={`text-xs p-2 rounded ${
+                      isSub ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                      isBundle ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                      'bg-background text-foreground/80 border border-border'
+                    }`}>
+                      <p className="font-semibold">{src.customer_name || src.customer_email}</p>
+                      <p className="text-[11px]">{src.order_number}
+                        {src.source_type === 'subscription_fulfillment' && src.fulfillment_number ? ` — Fulfillment #${src.fulfillment_number}` : ''}
+                        {isBundle ? ` (via ${src.source_item})` : ''}
+                      </p>
+                      <p className="text-[10px] opacity-80">Qty: {src.quantity}</p>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
