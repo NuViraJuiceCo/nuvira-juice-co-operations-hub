@@ -75,30 +75,28 @@ const DEPOT_LNG = -90.6639;
 function buildFullRouteUrl(orders) {
   const remaining = orders.filter(o => !['delivered', 'Delivered', 'fulfilled'].includes((o.status || '').toLowerCase()));
   if (remaining.length === 0) return null;
-  const origin = encodeURIComponent(DEPOT);
-  
+
   const formatAddress = (order) => {
-    // Try order-level address first
     if (order.address_line1) {
-      return `${order.address_line1}${order.address_line2 ? ' ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}`;
+      return `${order.address_line1}${order.address_line2 ? ' ' + order.address_line2 : ''}, ${order.address_city}, ${order.address_state} ${order.address_postal_code}`.trim();
     }
-    // Try fulfillment address (for subscriptions)
     if (order.fulfillments?.[0]?.address_line1) {
-      return `${order.fulfillments[0].address_line1}${order.fulfillments[0].address_line2 ? ' ' + order.fulfillments[0].address_line2 : ''}, ${order.fulfillments[0].address_city}, ${order.fulfillments[0].address_state} ${order.fulfillments[0].address_postal_code}`;
+      const f = order.fulfillments[0];
+      return `${f.address_line1}${f.address_line2 ? ' ' + f.address_line2 : ''}, ${f.address_city}, ${f.address_state} ${f.address_postal_code}`.trim();
     }
-    // Last resort
     return order.delivery_address || '';
   };
-  
-  // Google Maps API limit: max 25 waypoints (origin + 25 stops + destination = 27)
-  // For >25 stops, use first N and return to origin
-  const maxWaypoints = 23; // 25 - 2 (origin + destination)
-  const routeStops = remaining.slice(0, maxWaypoints + 1); // origin + destination + up to 23 waypoints
-  
-  const destination = encodeURIComponent(formatAddress(routeStops[routeStops.length - 1]));
-  const waypoints = routeStops.slice(0, -1).map((o, idx) => idx === 0 ? encodeURIComponent(DEPOT) : encodeURIComponent(formatAddress(o))).slice(1).join('|');
-  
-  return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ''}&travelmode=driving`;
+
+  // Google Maps: origin=depot, waypoints=stops 1..N-1, destination=last stop
+  // Max 23 intermediate waypoints (Google limit)
+  const stops = remaining.slice(0, 25); // depot + up to 23 waypoints + destination = 25 total
+  const origin = encodeURIComponent(DEPOT);
+  const destination = encodeURIComponent(formatAddress(stops[stops.length - 1]));
+  // All stops before the last one are waypoints (none for a 1-stop route)
+  const waypointAddresses = stops.slice(0, -1).map(o => encodeURIComponent(formatAddress(o))).filter(Boolean);
+  const waypointsParam = waypointAddresses.length > 0 ? `&waypoints=${waypointAddresses.join('|')}` : '';
+
+  return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypointsParam}&travelmode=driving`;
 }
 
 function formatDuration(seconds) {
@@ -631,34 +629,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     setLoading(true);
     setRouteData(null);
     try {
-      // First, resolve all delivery obligations for the date (including futures, subscriptions, paid order fallbacks)
+      // Resolve all delivery obligations for the date — ALL statuses, not just ready ones
       const resolveRes = await base44.functions.invoke('resolveDeliveryScheduleForDate', { selectedDate });
       const allDeliveries = resolveRes.data?.deliveries || [];
-      
-      // Then optimize route if requested (only on Ready tasks)
-      if (allDeliveries.length > 0) {
-        const readyForRoute = allDeliveries.filter(d => 
-          ['packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery', 'ready_for_route', 'out_for_delivery'].includes((d.status || '').toLowerCase())
-        );
-        
-        if (readyForRoute.length > 0) {
-          try {
-            const routeRes = await base44.functions.invoke('optimizeDeliveryRoute', { 
-              date: selectedDate || undefined, 
-              optimize: false,
-              orders: readyForRoute 
-            });
-            setDeliveryScheduleItems(routeRes.data?.orders || allDeliveries);
-          } catch (routeErr) {
-            console.warn('Route optimization skipped, using resolved orders:', routeErr.message);
-            setDeliveryScheduleItems(allDeliveries);
-          }
-        } else {
-          setDeliveryScheduleItems(allDeliveries);
-        }
-      } else {
-        setDeliveryScheduleItems([]);
-      }
+      setDeliveryScheduleItems(allDeliveries);
     } catch {
       toast.error('Failed to load delivery queue');
     } finally {
@@ -853,8 +827,8 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     return completedStatuses.includes((task.status || '').toLowerCase());
   };
 
-  // Separate all delivery obligations into readiness buckets
-  const allTasksForDate = (deliveryScheduleItems || []).filter(task => resolveTaskDeliveryDate(task) === date);
+  // All deliveries are already scoped to the selected date by the resolver
+  const allTasksForDate = deliveryScheduleItems || [];
   const readyForRouteOrders = allTasksForDate.filter(isRouteEligible);
   const scheduledNotReadyOrders = allTasksForDate.filter(task => !isRouteEligible(task) && !isCompleted(task));
   const completedOrders = allTasksForDate.filter(isCompleted);
