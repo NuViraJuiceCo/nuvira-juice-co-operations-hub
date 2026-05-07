@@ -5,6 +5,26 @@ const CUSTOMER_APP_API = Deno.env.get('CUSTOMER_APP_API_URL');
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 const stripe = new Stripe(Deno.env.get('STRIPE_API_KEY'), { apiVersion: '2023-10-16' });
 
+// ── PRODUCTION DATE DERIVATION ───────────────────────────────────────────────
+// Derive production_date from assigned_delivery_date using Hub production rules.
+// Production occurs Tue/Fri/Sat (day before delivery, adjusted for production day).
+function deriveProductionDate(deliveryDateStr) {
+  if (!deliveryDateStr) return null;
+  const PRODUCTION_DAYS_DOW = { 2: true, 5: true, 6: true }; // Tue, Fri, Sat
+  const d = new Date(deliveryDateStr + 'T00:00:00');
+  for (let i = 1; i <= 7; i++) {
+    const check = new Date(d);
+    check.setDate(d.getDate() - i);
+    if (PRODUCTION_DAYS_DOW[check.getDay()]) {
+      return check.toISOString().split('T')[0];
+    }
+  }
+  // Fallback: simple day before
+  const fallback = new Date(d);
+  fallback.setDate(d.getDate() - 1);
+  return fallback.toISOString().split('T')[0];
+}
+
 // ── STRIPE HYDRATION FALLBACK ────────────────────────────────────────────────
 // When a CA order arrives with missing address/items/delivery fields but has a
 // stripe_checkout_session_id, fetch from Stripe and hydrate the missing fields.
@@ -368,7 +388,8 @@ Deno.serve(async (req) => {
             requested_delivery_date: ord.requested_delivery_date || ord.delivery_date || '',
             selected_delivery_date: ord.selected_delivery_date || null,
             assigned_delivery_date: ord.assigned_delivery_date || null,
-            production_date: ord.production_date || null,
+            // Derive production_date from assigned_delivery_date if not provided
+            production_date: ord.production_date || (ord.assigned_delivery_date ? deriveProductionDate(ord.assigned_delivery_date) : null) || (ord.selected_delivery_date ? deriveProductionDate(ord.selected_delivery_date) : null),
             delivery_window_label: ord.delivery_window_label || null,
             payment_status: ord.payment_status || 'pending',
             subtotal: ord.subtotal || 0,
