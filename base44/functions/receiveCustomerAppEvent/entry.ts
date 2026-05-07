@@ -96,10 +96,150 @@ Deno.serve(async (req) => {
     }
 
     // ── customer.subscription_created ────────────────────────────────────────
-    // Acknowledged — the 30-min scheduled pull will pick up the new subscription order
+    // Create immediate first fulfillment cycle for PAID subscriptions only
     if (event === 'customer.subscription_created') {
-      console.log(`[RECEIVE-CUSTOMER-EVENT] Subscription created for ${data?.customer_email} — will be picked up on next scheduled pull`);
-      return Response.json({ status: 'success', event, note: 'Order will sync on next scheduled pull (every 30 min)' });
+      if (!data?.customer_email || !data?.stripe_subscription_id || !data?.first_delivery_date) {
+        return Response.json({
+          error: 'Missing required fields: customer_email, stripe_subscription_id, first_delivery_date',
+          status: 400
+        }, { status: 400 });
+      }
+
+      // GUARDRAIL: Only process paid subscriptions
+      const paymentStatus = data.payment_status || data.financial_status || '';
+      if (paymentStatus !== 'paid') {
+        console.log(`[RECEIVE-CUSTOMER-EVENT] Subscription for ${data.customer_email} payment_status=${paymentStatus} (not paid) — acknowledged but no fulfillment created`);
+        return Response.json({
+          status: 'acknowledged',
+          event,
+          note: `Subscription acknowledged but not yet paid (payment_status=${paymentStatus}). Will process when payment succeeds.`
+        }, { status: 200 });
+      }
+
+      // Idempotency key: stripe_subscription_id + first_delivery_date + fulfillment_number=1
+      const idempotencyKey = `${data.stripe_subscription_id}__${data.first_delivery_date}__1`;
+
+      try {
+        // Check if FulfillmentTask already exists for this subscription + date
+        const existing = await base44.asServiceRole.entities.FulfillmentTask.filter({
+          customer_email: data.customer_email,
+          scheduled_date: data.first_delivery_date,
+        });
+
+        let matchingTask = null;
+        if (existing && existing.length > 0) {
+          // Look for a task that links to this subscription
+          matchingTask = existing.find(t => 
+            (t.notes && t.notes.includes(data.stripe_subscription_id)) ||
+            (t.order_id === data.stripe_subscription_id)
+          );
+        }
+
+        if (matchingTask) {
+          console.log(`[RECEIVE-CUSTOMER-EVENT] FulfillmentTask already exists for ${data.stripe_subscription_id} on ${data.first_delivery_date} — deduping`);
+          return Response.json({
+            status: 'success',
+            action: 'dedupe_existing',
+            fulfillment_task_id: matchingTask.id,
+            note: 'Subscription FulfillmentTask already exists'
+          }, { status: 200 });
+        }
+
+        // Derive production_date from first_delivery_date (1 day before on valid production day: Tue/Fri/Sat)
+        const PRODUCTION_DAYS = [2, 5, 6]; // 0=Sun, 2=Tue, 5=Fri, 6=Sat
+        const d = new Date(data.first_delivery_date + 'T00:00:00');
+        let productionDate = null;
+        for (let i = 1; i <= 7; i++) {
+          const check = new Date(d);
+          check.setDate(d.getDate() - i);
+          if (PRODUCTION_DAYS.includes(check.getDay())) {
+            productionDate = check.toISOString().split('T')[0];
+            break;
+          }
+        }
+        if (!productionDate) {
+          const fallback = new Date(d);
+          fallback.setDate(d.getDate() - 1);
+          productionDate = fallback.toISOString().split('T')[0];
+        }
+
+        // Build items summary from products array
+        let itemsSummary = '';
+        if (Array.isArray(data.products) && data.products.length > 0) {
+          itemsSummary = data.products.map(p => `${p.quantity}x ${p.product_name}`).join(', ');
+        }
+
+        // Build full address
+        const addr = data.address || {};
+        const deliveryAddress = [
+          addr.street || data.address_line1 || '',
+          addr.city || data.address_city || '',
+          addr.state || data.address_state || '',
+          addr.postal_code || data.address_postal_code || ''
+        ].filter(Boolean).join(', ');
+
+        // Create FulfillmentTask for first subscription fulfillment
+        const taskData = {
+          customer_name: data.customer_name || '',
+          customer_email: data.customer_email,
+          phone: data.phone || data.customer_phone || '',
+          fulfillment_type: 'Delivery',
+          status: 'Scheduled',
+          scheduled_date: data.first_delivery_date,
+          delivery_address: deliveryAddress,
+          time_window: data.delivery_window_label || '5 PM – 8 PM',
+          items_summary: itemsSummary,
+          order_id: data.stripe_subscription_id, // Link to Stripe subscription ID
+          notes: [
+            `Subscription: ${data.stripe_subscription_id}`,
+            data.customer_app_subscription_id ? `CA Sub ID: ${data.customer_app_subscription_id}` : null,
+            data.plan_name ? `Plan: ${data.plan_name}` : null,
+            data.cadence ? `Cadence: ${data.cadence}` : null,
+            `Fulfillment #1`,
+            `Payment Status: ${paymentStatus}`
+          ].filter(Boolean).join(' | '),
+        };
+
+        const createdTask = await base44.asServiceRole.entities.FulfillmentTask.create(taskData);
+
+        console.log(`[RECEIVE-CUSTOMER-EVENT] Created subscription FulfillmentTask ${createdTask.id} for ${data.customer_email} on ${data.first_delivery_date}`);
+
+        // Trigger production batch creation for the derived production_date
+        // This ensures recalculateProductionBatches will find fulfillment data
+        try {
+          await base44.asServiceRole.functions.invoke('createFulfillmentTasks', {
+            date: data.first_delivery_date,
+          });
+        } catch (err) {
+          console.warn(`[RECEIVE-CUSTOMER-EVENT] Failed to trigger createFulfillmentTasks: ${err.message}`);
+        }
+
+        return Response.json({
+          status: 'success',
+          action: 'created',
+          event,
+          fulfillment_task_id: createdTask.id,
+          fulfillment_details: {
+            customer_name: taskData.customer_name,
+            customer_email: taskData.customer_email,
+            scheduled_date: taskData.scheduled_date,
+            derived_production_date: productionDate,
+            items: itemsSummary,
+            stripe_subscription_id: data.stripe_subscription_id,
+            fulfillment_number: 1,
+            payment_status: paymentStatus,
+          },
+        }, { status: 200 });
+
+      } catch (err) {
+        console.error(`[RECEIVE-CUSTOMER-EVENT] Failed to create subscription fulfillment: ${err.message}`);
+        return Response.json({
+          status: 'error',
+          event,
+          error: err.message,
+          customer_email: data.customer_email,
+        }, { status: 500 });
+      }
     }
 
     // ── order.created / order.paid ───────────────────────────────────────────
