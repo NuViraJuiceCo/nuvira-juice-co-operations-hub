@@ -101,53 +101,71 @@ Deno.serve(async (req) => {
       return completedStatuses.includes((status || '').toLowerCase());
     };
 
-    // Helper: detect if task is a subscription_fulfillment source (look in notes field OR order_id pattern)
+    // Helper: detect if task is a subscription_fulfillment source (check structured fields + notes)
     const isSubscriptionFulfillmentTask = (task) => {
-      // Check notes if available
-      if (task.notes) {
-        if (task.notes.includes('subscription_fulfillment') || task.notes.includes('Subscription:')) {
-          return true;
-        }
-      }
-      // Fallback: check order_id pattern for Stripe subscription IDs
-      if (task.order_id && String(task.order_id).startsWith('sub_')) {
+      // Primary: check source_type if available
+      if (task.source_type === 'subscription_fulfillment') return true;
+      
+      // Secondary: check notes for subscription marker (e.g., "Subscription: sub_xxx")
+      if (task.notes && (task.notes.includes('Subscription:') || task.notes.includes('subscription_fulfillment'))) {
         return true;
       }
+      
+      // Tertiary: check if task has subscription identifiers
+      if (task.stripe_subscription_id || task.customer_app_subscription_id) {
+        return true;
+      }
+      
       return false;
     };
 
     // Helper: validate subscription_fulfillment task eligibility (does NOT require linked ShopifyOrder)
+    // Uses structured proof fields: status, payment_status, subscription IDs, address, items
     const isSubscriptionTaskEligible = (task) => {
-      // Required fields for any subscription task
+      // ── REQUIRED FIELDS ────────────────────────────────────────────────────
       if (!task.customer_name || !task.customer_name.trim()) return false;
       if (!task.customer_email || !task.customer_email.trim()) return false;
       
-      // Require delivery address (subscription must be deliverable)
+      // ── ACTIVE STATUS CHECK ────────────────────────────────────────────────
+      // Reject known inactive statuses (case-insensitive)
+      const inactiveStatuses = ['cancelled', 'canceled', 'failed', 'refunded', 'paused', 'skipped'];
+      if (task.status && inactiveStatuses.includes(String(task.status).toLowerCase())) {
+        return false;
+      }
+      
+      // ── DELIVERY ADDRESS ───────────────────────────────────────────────────
       // Check all possible address field names (delivery_address, address, address_line1, etc)
       const hasAddress = (task.delivery_address && task.delivery_address.trim()) || 
                          (task.address && task.address.trim()) || 
                          (task.address_line1 && task.address_line1.trim());
       if (!hasAddress) {
-        // No address field found — reject subscription task (cannot fulfill without address)
         return false;
       }
       
-      // Require items (subscription must list what's being delivered)
+      // ── ITEMS / ITEMS_SUMMARY ─────────────────────────────────────────────
+      // Subscription must specify what's being delivered
       const hasItems = (task.items && task.items.length > 0) || 
                        (task.items_summary && task.items_summary.trim());
       if (!hasItems) return false;
       
-      // Check payment status: explicit field first, then notes, then allow by default if neither set
-      // (assumes task was verified before creation)
-      const paymentStatus = task.payment_status;
-      const notesLower = (task.notes || '').toLowerCase();
+      // ── SUBSCRIPTION IDENTIFIER ───────────────────────────────────────────
+      // Must have proof of subscription (Stripe ID or Customer App subscription ID)
+      if (!task.stripe_subscription_id && !task.customer_app_subscription_id) {
+        // Also accept if order_id starts with 'sub_' (indicates Stripe subscription)
+        if (!task.order_id || !String(task.order_id).startsWith('sub_')) {
+          return false;
+        }
+      }
       
-      // HARD REJECT: explicit failed/pending/refunded/cancelled payment statuses
-      if (paymentStatus && ['failed', 'pending', 'unpaid', 'refunded', 'cancelled', 'canceled'].includes(paymentStatus)) {
+      // ── PAYMENT STATUS ────────────────────────────────────────────────────
+      // Structured payment_status field (preferred)
+      const paymentStatus = task.payment_status;
+      if (paymentStatus && ['failed', 'pending', 'unpaid', 'refunded', 'cancelled', 'canceled', 'paused'].includes(String(paymentStatus).toLowerCase())) {
         return false;
       }
       
-      // HARD REJECT: notes contain explicit failure keywords
+      // Notes-based payment check (fallback)
+      const notesLower = (task.notes || '').toLowerCase();
       if (notesLower.includes('refunded') || notesLower.includes('cancelled') || notesLower.includes('canceled') || notesLower.includes('paused')) {
         return false;
       }
@@ -155,7 +173,7 @@ Deno.serve(async (req) => {
         return false;
       }
       
-      // If neither field explicitly rejects it, allow (assume pre-verified if task exists)
+      // If no explicit rejection, allow (assume pre-verified if task exists)
       return true;
     };
 
