@@ -323,6 +323,13 @@ Deno.serve(async (req) => {
 
     const activeStatuses = ['new', 'awaiting_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage'];
 
+    // Keywords that are NOT producible items — shared across both FulfillmentTask and Order loops
+    const NON_PRODUCTION_KEYWORDS = [
+      'delivery fee', 'delivery charge', 'shipping fee', 'shipping charge',
+      'tip', 'gratuity', 'discount', 'coupon', 'gift card', 'gift wrap',
+      'service fee', 'handling fee', 'tax',
+    ];
+
     // CRITICAL: First, process active FulfillmentTasks (subscription fulfillments)
     // These are the canonical source for subscription delivery demand.
     for (const task of allFulfillmentTasks) {
@@ -546,12 +553,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Keywords that are NOT producible items — skip them for batch planning
-      const NON_PRODUCTION_KEYWORDS = [
-        'delivery fee', 'delivery charge', 'shipping fee', 'shipping charge',
-        'tip', 'gratuity', 'discount', 'coupon', 'gift card', 'gift wrap',
-        'service fee', 'handling fee', 'tax',
-      ];
+      // NON_PRODUCTION_KEYWORDS defined above — skip non-producible items
 
       // CRITICAL FIX: For subscriptions, iterate through fulfillments directly
       // Each fulfillment has its own items with correct weekly quantities
