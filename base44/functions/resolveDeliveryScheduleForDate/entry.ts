@@ -143,21 +143,19 @@ Deno.serve(async (req) => {
       const notesLower = (task.notes || '').toLowerCase();
       
       // HARD REJECT: explicit failed/pending/refunded/cancelled payment statuses
-      if (paymentStatus && paymentStatus !== 'paid') return false;
-      if (notesLower.includes('payment status: pending')) return false;
-      if (notesLower.includes('payment status: failed')) return false;
-      if (notesLower.includes('payment status: unpaid')) return false;
-      if (notesLower.includes('payment status: refunded')) return false;
-      if (notesLower.includes('payment status: cancelled')) return false;
+      if (paymentStatus && ['failed', 'pending', 'unpaid', 'refunded', 'cancelled', 'canceled'].includes(paymentStatus)) {
+        return false;
+      }
       
-      // Exclude other known failure keywords regardless of payment status field
-      if (notesLower.includes('failed') && notesLower.includes('payment')) return false;
-      if (notesLower.includes('refunded')) return false;
-      if (notesLower.includes('cancelled') || notesLower.includes('canceled')) return false;
-      if (notesLower.includes('paused')) return false;
+      // HARD REJECT: notes contain explicit failure keywords
+      if (notesLower.includes('refunded') || notesLower.includes('cancelled') || notesLower.includes('canceled') || notesLower.includes('paused')) {
+        return false;
+      }
+      if (notesLower.includes('failed') && notesLower.includes('payment')) {
+        return false;
+      }
       
-      // If we get here and payment_status is explicitly 'paid' or notes say 'paid', allow it
-      // If neither field is set (missing data), allow by default (assume pre-verified)
+      // If neither field explicitly rejects it, allow (assume pre-verified if task exists)
       return true;
     };
 
