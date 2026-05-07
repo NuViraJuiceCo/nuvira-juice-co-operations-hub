@@ -77,6 +77,12 @@ const FIELD_OWNERSHIP = {
     'fulfillments', 'delivery_photo_url', 'delivery_drop_location', 'delivered_by', 'delivered_at',
     'fulfillment_method',
   ],
+  // Hub Driver Portal and Customer App driver actions — same delivery fields as operations
+  customer_app_driver: [
+    'fulfillment_status', 'production_status',
+    'delivered_at', 'delivered_by', 'delivery_photo_url', 'delivery_drop_location',
+    'internal_notes', 'sync_status',
+  ],
   admin: [
     // Admin can write anything
     '__all__',

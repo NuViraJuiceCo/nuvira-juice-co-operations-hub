@@ -707,21 +707,33 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const handleMarkDelivered = async (order, proofPhotoUrl, dropLocation) => {
     setUpdatingId(order.id);
     try {
-      // Send to Customer App's receiveDriverStatusUpdate function for proper routing
-      await base44.functions.invoke('receiveDriverStatusUpdate', {
-        order_id: order.id,
-        order_number: order.order_number,
-        driver_email: user?.email,
-        action: 'delivered',
-        delivery_photo_url: proofPhotoUrl,
-        delivery_drop_location: dropLocation,
-        delivery_notes: '',
-      });
+      // Prefer updateDriverDeliveryTask (updates FulfillmentTask + ShopifyOrder via operations source)
+      if (order.fulfillment_task_id) {
+        const res = await base44.functions.invoke('updateDriverDeliveryTask', {
+          task_id: order.fulfillment_task_id,
+          action: 'mark_delivered',
+          driver_email: user?.email,
+          driver_name: user?.full_name || user?.email,
+          photo_url: proofPhotoUrl,
+          timestamp: new Date().toISOString(),
+        });
+        if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Task update failed');
+      } else {
+        // Fallback: use receiveDriverStatusUpdate for orders without a task_id
+        await base44.functions.invoke('receiveDriverStatusUpdate', {
+          order_id: order.id,
+          order_number: order.order_number,
+          driver_email: user?.email,
+          action: 'delivered',
+          delivery_photo_url: proofPhotoUrl,
+          delivery_drop_location: dropLocation,
+        });
+      }
       toast.success('Delivery confirmed & customer notified');
       loadQueue();
       setRouteData(null);
-    } catch {
-      toast.error('Update failed');
+    } catch (err) {
+      toast.error('Update failed: ' + (err.message || 'Unknown error'));
     } finally {
       setUpdatingId(null);
     }
@@ -730,15 +742,26 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const handleMarkUnableToDeliver = async (order, reason, notes) => {
     setUpdatingId(order.id);
     try {
-      // Send to Customer App's receiveDriverStatusUpdate function for proper routing
-      await base44.functions.invoke('receiveDriverStatusUpdate', {
-        order_id: order.id,
-        order_number: order.order_number,
-        driver_email: user?.email,
-        action: 'unable_to_deliver',
-        unable_reason: reason,
-        delivery_notes: notes,
-      });
+      if (order.fulfillment_task_id) {
+        const res = await base44.functions.invoke('updateDriverDeliveryTask', {
+          task_id: order.fulfillment_task_id,
+          action: 'mark_unable_to_deliver',
+          driver_email: user?.email,
+          failure_reason: reason,
+          note: notes,
+          timestamp: new Date().toISOString(),
+        });
+        if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Task update failed');
+      } else {
+        await base44.functions.invoke('receiveDriverStatusUpdate', {
+          order_id: order.id,
+          order_number: order.order_number,
+          driver_email: user?.email,
+          action: 'unable_to_deliver',
+          unable_reason: reason,
+          delivery_notes: notes,
+        });
+      }
       const linkedReturn = bagReturns.find(r => r.customer_email === order.customer_email && r.verification_status === 'requested');
       if (linkedReturn) {
         await base44.entities.BagReturn.update(linkedReturn.id, {
@@ -762,20 +785,31 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const handleMarkStage = async (order, nextStage) => {
     setUpdatingId(order.id);
     try {
-       await base44.functions.invoke('safeSyncOrderUpdate', {
-         incomingData: { production_status: nextStage.key },
-         source: 'operations',
-         matchBy: { internal_id: order.id },
-       });
+      if (nextStage.key === 'out_for_delivery' && order.fulfillment_task_id) {
+        // Use updateDriverDeliveryTask for proper FulfillmentTask persistence
+        const res = await base44.functions.invoke('updateDriverDeliveryTask', {
+          task_id: order.fulfillment_task_id,
+          action: 'mark_out_for_delivery',
+          driver_email: user?.email,
+          timestamp: new Date().toISOString(),
+        });
+        if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Task update failed');
+      } else {
+        await base44.functions.invoke('safeSyncOrderUpdate', {
+          incomingData: { production_status: nextStage.key },
+          source: 'operations',
+          matchBy: { internal_id: order.id },
+        });
+      }
       if (routeData?.optimized_orders) {
-       const updated = routeData.optimized_orders.map(o => 
-         o.id === order.id ? { ...o, status: nextStage.key } : o
-       );
+        const updated = routeData.optimized_orders.map(o =>
+          o.id === order.id ? { ...o, status: nextStage.key } : o
+        );
         setRouteData({ ...routeData, optimized_orders: updated });
       }
       toast.success(`Marked ${nextStage.label}`);
-    } catch {
-      toast.error('Update failed');
+    } catch (err) {
+      toast.error('Update failed: ' + (err.message || 'Unknown error'));
     } finally {
       setUpdatingId(null);
     }

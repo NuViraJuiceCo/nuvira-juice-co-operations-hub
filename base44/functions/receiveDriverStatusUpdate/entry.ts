@@ -62,42 +62,74 @@ Deno.serve(async (req) => {
       changes: {},
     };
 
+    const now = new Date().toISOString();
+    const nowLocal = new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' });
+
     // Build update payload based on action
     if (action === 'delivered') {
       updateData.production_status = 'fulfilled';
-      updateData.delivered_at = new Date().toISOString();
+      updateData.fulfillment_status = 'fulfilled';
+      updateData.delivered_at = now;
       updateData.delivered_by = driver_email || 'driver';
-      updateData.delivery_photo_url = delivery_photo_url;
-      updateData.delivery_drop_location = delivery_drop_location;
-      updateData.internal_notes = (order.internal_notes || '') + `\n[Driver delivered on ${new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })}]` + (delivery_notes ? `\nNotes: ${delivery_notes}` : '');
-      
+      updateData.delivery_photo_url = delivery_photo_url || null;
+      updateData.delivery_drop_location = delivery_drop_location || null;
+      updateData.internal_notes = (order.internal_notes || '') + `\n[Driver delivered on ${nowLocal}]` + (delivery_notes ? `\nNotes: ${delivery_notes}` : '');
+
       auditLog.changes = {
-        status: 'new -> fulfilled',
+        status: 'fulfilled',
         delivery_confirmed: true,
         photo: delivery_photo_url ? 'captured' : 'none',
         location: delivery_drop_location,
       };
 
     } else if (action === 'unable_to_deliver') {
-      updateData.production_status = 'new'; // Reset to allow rescheduling
-      updateData.internal_notes = (order.internal_notes || '') + `\n[Driver unable to deliver on ${new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })}]\nReason: ${unable_reason}` + (delivery_notes ? `\nNotes: ${delivery_notes}` : '');
-      
+      updateData.internal_notes = (order.internal_notes || '') + `\n[Driver unable to deliver on ${nowLocal}]\nReason: ${unable_reason}` + (delivery_notes ? `\nNotes: ${delivery_notes}` : '');
+
       auditLog.changes = {
-        status: 'delivery_failed',
+        status: 'unable_to_deliver',
         reason: unable_reason,
-        resettable: true,
       };
 
     } else if (action === 'bag_return_verified') {
-      // Preserve existing status, but add bag return metadata
       if (bag_data) {
-        updateData.internal_notes = (order.internal_notes || '') + `\n[Bag return verified on ${new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })}]` + `\nSmall bags: ${bag_data.small_bags_accepted}/${bag_data.small_bags_requested}, Tote bags: ${bag_data.tote_bags_accepted}/${bag_data.tote_bags_requested}` + (bag_data.credit_issued ? `\nCredit issued: $${bag_data.credit_issued.toFixed(2)}` : '');
+        updateData.internal_notes = (order.internal_notes || '') + `\n[Bag return verified on ${nowLocal}]` + `\nSmall bags: ${bag_data.small_bags_accepted}/${bag_data.small_bags_requested}, Tote bags: ${bag_data.tote_bags_accepted}/${bag_data.tote_bags_requested}` + (bag_data.credit_issued ? `\nCredit issued: $${bag_data.credit_issued.toFixed(2)}` : '');
       }
-      
       auditLog.changes = {
         action: 'bag_return',
         bags: bag_data ? `${bag_data.small_bags_accepted}s/${bag_data.tote_bags_accepted}t` : 'none',
       };
+    }
+
+    // ── UPDATE LINKED FULFILLMENT TASK ────────────────────────────────────────
+    // Find FulfillmentTask linked to this order and update its status directly
+    let taskUpdateResult = null;
+    try {
+      const linkedTasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
+        order_id: order.id,
+      });
+      const activeTasks = linkedTasks.filter(t =>
+        !['Completed', 'Cancelled', 'cancelled', 'canceled'].includes(t.status)
+      );
+
+      for (const task of activeTasks) {
+        const taskPatch = {};
+        if (action === 'delivered') {
+          taskPatch.status = 'Completed';
+          taskPatch.delivered_at = now;
+          if (delivery_photo_url) taskPatch.delivery_photo_url = delivery_photo_url;
+          if (delivery_drop_location) taskPatch.delivery_drop_location = delivery_drop_location;
+        } else if (action === 'unable_to_deliver') {
+          taskPatch.status = 'Unable To Deliver';
+          taskPatch.delivery_note = unable_reason || delivery_notes || 'Unable to deliver';
+        }
+        if (Object.keys(taskPatch).length > 0) {
+          await base44.asServiceRole.entities.FulfillmentTask.update(task.id, taskPatch);
+          taskUpdateResult = { task_id: task.id, updated: taskPatch };
+          console.log(`[DRIVER-STATUS-UPDATE] FulfillmentTask ${task.id} updated: ${JSON.stringify(taskPatch)}`);
+        }
+      }
+    } catch (taskErr) {
+      console.warn(`[DRIVER-STATUS-UPDATE] FulfillmentTask update failed (non-fatal): ${taskErr.message}`);
     }
 
     // Route through safeSyncOrderUpdate to enforce protections
