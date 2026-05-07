@@ -21,19 +21,22 @@ export default function Dashboard() {
   const [orders, setOrders] = useState([]);
   const [batches, setBatches] = useState([]);
   const [items, setItems] = useState([]);
+  const [exceptions, setExceptions] = useState(0);
   const [loading, setLoading] = useState(true);
   const [visibleWidgets, setVisibleWidgets] = useState(["production", "orders", "inventory"]);
 
   useEffect(() => {
     async function load() {
-      const [orderData, batchData, inventoryData] = await Promise.all([
+      const [orderData, batchData, inventoryData, reviewQueue] = await Promise.all([
         base44.entities.ShopifyOrder.list("-created_date", 50),
         base44.entities.ProductionBatch.list("-production_date", 50),
         base44.entities.InventoryItem.list("-updated_date", 100),
+        base44.entities.OrderReviewQueue.filter({ status: "pending" }),
       ]);
       setOrders(orderData);
       setBatches(batchData);
       setItems(inventoryData);
+      setExceptions(reviewQueue?.length || 0);
       setLoading(false);
     }
     load();
@@ -47,22 +50,26 @@ export default function Dashboard() {
     );
   }
 
-  const newOrders = orders.filter((o) => o.production_status === "new").length;
-  const inProduction = orders.filter((o) => o.production_status === "in_production").length;
-  const toFulfill = orders.filter((o) => !["fulfilled", "canceled", "refunded"].includes(o.production_status)).length;
-  const lowStock = batches.filter((b) => b.status === "Awaiting Ingredients").length;
-  const revenue = orders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+  // Only count PAID orders to exclude abandoned/pending checkouts
+  const paidOrders = orders.filter((o) => o.payment_status === "paid");
+  const newOrders = paidOrders.filter((o) => o.production_status === "new").length;
+  const inProduction = paidOrders.filter((o) => o.production_status === "in_production").length;
+  const toFulfill = paidOrders.filter((o) => !["fulfilled", "canceled", "refunded"].includes(o.production_status)).length;
+  const lowStock = batches.filter((b) => b.status === "ready_for_production" || b.status === "planned").length;
+  const revenue = paidOrders.reduce((sum, o) => sum + (o.total_price || 0), 0);
 
   const handleRefresh = async () => {
-    const [orderData, batchData, inventoryData] = await Promise.all([
+    const [orderData, batchData, inventoryData, reviewQueue] = await Promise.all([
       base44.entities.ShopifyOrder.list("-created_date", 50),
-        base44.entities.ProductionBatch.list("-production_date", 50),
-        base44.entities.InventoryItem.list("-updated_date", 100),
-      ]);
-      setOrders(orderData);
-      setBatches(batchData);
-      setItems(inventoryData);
-      };
+      base44.entities.ProductionBatch.list("-production_date", 50),
+      base44.entities.InventoryItem.list("-updated_date", 100),
+      base44.entities.OrderReviewQueue.filter({ status: "pending" }),
+    ]);
+    setOrders(orderData);
+    setBatches(batchData);
+    setItems(inventoryData);
+    setExceptions(reviewQueue?.length || 0);
+  };
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
@@ -97,7 +104,7 @@ export default function Dashboard() {
         <StatCard label="To Fulfill" value={toFulfill} icon={Truck} variant={toFulfill > 0 ? "warning" : "default"} />
         <StatCard label="Low Stock" value={lowStock} icon={AlertTriangle} variant={lowStock > 0 ? "danger" : "default"} />
         <StatCard label="Revenue" value={`$${revenue.toFixed(0)}`} icon={DollarSign} variant="success" />
-        <StatCard label="Exceptions" value={0} icon={AlertCircle} variant="default" />
+        <StatCard label="Exceptions" value={exceptions} icon={AlertCircle} variant={exceptions > 0 ? "warning" : "default"} />
       </div>
 
       {/* Sync Panel */}
