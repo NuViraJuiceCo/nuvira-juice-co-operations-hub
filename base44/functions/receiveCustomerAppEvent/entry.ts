@@ -122,9 +122,11 @@ Deno.serve(async (req) => {
         if (data.plan_name || data.plan_id) {
           console.log(`[RECEIVE-CUSTOMER-EVENT] No products in payload — auto-decomposing plan: ${data.plan_name}`);
           try {
+            const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
             const decompResult = await base44.asServiceRole.functions.invoke('decomposeSubscriptionPlan', {
               plan_name: data.plan_name || null,
               plan_id: data.plan_id || null,
+              _internalSecret: internalSecret,
             });
             const d = decompResult?.data;
             if (d?.products?.length > 0) {
