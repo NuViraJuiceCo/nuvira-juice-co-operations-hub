@@ -824,14 +824,19 @@ Deno.serve(async (req) => {
     // ─── BUILD EXISTING BATCH LOOKUP (date+product -> batch record) ────────────
     // IMPORTANT: Include ALL batches (including locked) so we never create duplicates.
     // Locked batches will be found here and skipped at update time, not at lookup time.
+    // CRITICAL: Match on BOTH date+product AND batch_id to prevent duplicate batch IDs in DB
     const existingBatchMap = {};
+    const existingBatchIdSet = new Set(); // Track batch_id values to prevent duplicates
     for (const batch of dedupedBatches) {
       const key = `${batch.production_date}__${normalizeProductName(batch.product_name)}`;
       // If duplicate keys exist in DB, prefer the locked one, then the most recently updated
       if (!existingBatchMap[key]) {
         existingBatchMap[key] = batch;
+        existingBatchIdSet.add(batch.batch_id); // Track this batch_id
       } else if (batch.is_locked && !existingBatchMap[key].is_locked) {
+        existingBatchIdSet.delete(existingBatchMap[key].batch_id); // Remove old batch_id
         existingBatchMap[key] = batch;
+        existingBatchIdSet.add(batch.batch_id); // Add new batch_id
       }
     }
 
@@ -898,11 +903,21 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.ProductionBatch.update(existing.id, batchData);
         results.updated++;
       } else {
-        // Create new batch
+        // Create new batch — but check if batch_id already exists (dedupe against duplicate batch_ids)
         const datePart = plan.productionDate.replace(/-/g, '');
         const productPart = plan.productName.replace(/\s+/g, '').toUpperCase().slice(0, 8);
-        batchData.batch_id = `BATCH-${datePart}-${productPart}`;
+        const proposedBatchId = `BATCH-${datePart}-${productPart}`;
+        
+        // CRITICAL: If batch_id already exists in database, skip creation to avoid duplicates
+        if (existingBatchIdSet.has(proposedBatchId)) {
+          console.log(`[RECALC] Skipping batch creation: ${proposedBatchId} already exists`);
+          results.skipped++;
+          continue;
+        }
+        
+        batchData.batch_id = proposedBatchId;
         await base44.asServiceRole.entities.ProductionBatch.create(batchData);
+        existingBatchIdSet.add(proposedBatchId); // Track newly created batch_id
         results.created++;
       }
     }
