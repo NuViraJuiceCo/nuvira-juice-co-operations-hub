@@ -82,20 +82,33 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validate required fields
-    if (!customer_email || !data.stripe_subscription_id || !data.first_delivery_date) {
+    // Validate required fields with diagnostic logging
+    const missingFields = [];
+    if (!customer_email) missingFields.push('customer_email');
+    if (!data.stripe_subscription_id) missingFields.push('stripe_subscription_id');
+    if (!data.first_delivery_date) missingFields.push('first_delivery_date');
+    
+    if (missingFields.length > 0) {
+      console.error('[CUSTOMER-APP-GATEWAY] ❌ VALIDATION FAILED - Missing fields:', missingFields);
+      console.error('[CUSTOMER-APP-GATEWAY] customer_email:', customer_email || 'MISSING');
+      console.error('[CUSTOMER-APP-GATEWAY] data.stripe_subscription_id:', data.stripe_subscription_id || 'MISSING');
+      console.error('[CUSTOMER-APP-GATEWAY] data.first_delivery_date:', data.first_delivery_date || 'MISSING');
+      console.error('[CUSTOMER-APP-GATEWAY] Payload keys:', Object.keys(data).join(', '));
       return Response.json({
         error: 'Missing required fields',
+        missing_fields: missingFields,
+        hint: 'Required: customer_email, stripe_subscription_id, first_delivery_date. Optional: products (auto-decomposes by plan_name), address_*, payment_status'
       }, { status: 400 });
     }
 
     // Validate payment status
     const paymentStatus = data.payment_status || data.financial_status || '';
     if (paymentStatus !== 'paid') {
+      console.warn('[CUSTOMER-APP-GATEWAY] ⚠ NOT YET PAID - payment_status:', paymentStatus || 'MISSING');
       return Response.json({
         status: 'acknowledged',
         event,
-        note: `Not yet paid (${paymentStatus})`,
+        note: `Not yet paid (payment_status=${paymentStatus || 'missing'})`,
       });
     }
 
@@ -121,12 +134,47 @@ Deno.serve(async (req) => {
       productionDate = fb.toISOString().split('T')[0];
     }
 
-    const fulfillmentItems = Array.isArray(data.products) && data.products.length > 0
+    // Build fulfillment items, with auto-decomposition fallback
+    let fulfillmentItems = Array.isArray(data.products) && data.products.length > 0
       ? data.products.map(p => ({ title: p.product_name, quantity: p.quantity, price: 0 }))
       : [];
 
+    if (fulfillmentItems.length === 0 && (data.plan_name || data.plan_id)) {
+      console.log('[CUSTOMER-APP-GATEWAY] ⚠ No products array - attempting auto-decomposition for plan:', data.plan_name);
+      try {
+        const decompResult = await base44.asServiceRole.functions.invoke('decomposeSubscriptionPlan', {
+          plan_name: data.plan_name || null,
+          plan_id: data.plan_id || null,
+          _internalSecret: INTERNAL_SECRET,
+        });
+        const d = decompResult?.data;
+        if (d?.products?.length > 0) {
+          fulfillmentItems = d.products.map(p => ({ title: p.product_name, quantity: p.quantity, price: 0 }));
+          console.log('[CUSTOMER-APP-GATEWAY] ✅ Auto-decomposed plan:', d.items_summary);
+        } else {
+          console.error('[CUSTOMER-APP-GATEWAY] ❌ Decomposition returned no products');
+          return Response.json({ 
+            error: 'Could not decompose subscription plan',
+            plan_name: data.plan_name,
+            hint: 'Provide plan_name or send products array with product_name and quantity'
+          }, { status: 400 });
+        }
+      } catch (decompErr) {
+        console.error('[CUSTOMER-APP-GATEWAY] ❌ Decomposition error:', decompErr.message);
+        return Response.json({ 
+          error: 'Plan decomposition failed',
+          detail: decompErr.message,
+          hint: 'Send products array directly: [{product_name: "Aura", quantity: 1}, ...]'
+        }, { status: 400 });
+      }
+    }
+
     if (fulfillmentItems.length === 0) {
-      return Response.json({ error: 'No products provided' }, { status: 400 });
+      console.error('[CUSTOMER-APP-GATEWAY] ❌ NO PRODUCTS - data.products:', data.products);
+      return Response.json({ 
+        error: 'No products provided',
+        hint: 'Provide products array with product_name and quantity, OR provide plan_name for auto-decomposition'
+      }, { status: 400 });
     }
 
     // Check for existing order
