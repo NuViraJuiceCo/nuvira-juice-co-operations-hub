@@ -258,28 +258,38 @@ Deno.serve(async (req) => {
           console.log(`[RECEIVE-CUSTOMER-EVENT] Created subscription operational order ${operationalOrderId}`);
         }
 
-        // Check if FulfillmentTask already exists for this subscription + date
+        // ── FULFILLMENT TASK DEDUPE ──────────────────────────────────────────────
+        // Dedupe on: stripe_subscription_id + fulfillment_number=1 + scheduled_date (+ optional customer_app_subscription_id)
         const existingTasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
-          customer_email: data.customer_email,
-          scheduled_date: data.first_delivery_date,
+          stripe_subscription_id: data.stripe_subscription_id,
         });
 
         let matchingTask = null;
         if (existingTasks && existingTasks.length > 0) {
-          matchingTask = existingTasks.find(t => 
-            (t.notes && t.notes.includes(data.stripe_subscription_id)) ||
-            (t.order_id === operationalOrderId || t.order_id === data.stripe_subscription_id)
-          );
+          matchingTask = existingTasks.find(t => {
+            const sameDate = t.scheduled_date === data.first_delivery_date;
+            const sameFulfillment = (t.fulfillment_number === 1 || t.fulfillment_number === 1.0);
+            const sameCASubId = !data.customer_app_subscription_id ||
+              !t.customer_app_subscription_id ||
+              t.customer_app_subscription_id === data.customer_app_subscription_id;
+            const notRetired = !(t.notes && t.notes.includes('RETIRED'));
+            return sameDate && sameFulfillment && sameCASubId && notRetired;
+          });
         }
 
         if (matchingTask) {
-          console.log(`[RECEIVE-CUSTOMER-EVENT] FulfillmentTask already exists for ${data.stripe_subscription_id} — deduping`);
+          // Patch items_summary if it was blank
+          if (!matchingTask.items_summary && itemsSummary) {
+            await base44.asServiceRole.entities.FulfillmentTask.update(matchingTask.id, { items_summary: itemsSummary });
+            console.log(`[RECEIVE-CUSTOMER-EVENT] Patched blank items_summary on existing task ${matchingTask.id}`);
+          }
+          console.log(`[RECEIVE-CUSTOMER-EVENT] FulfillmentTask already exists for ${data.stripe_subscription_id} — deduping on task ${matchingTask.id}`);
           return Response.json({
             status: 'success',
             action: 'dedupe_existing',
             fulfillment_task_id: matchingTask.id,
             operational_order_id: operationalOrderId,
-            note: 'Subscription operational order and FulfillmentTask already exist'
+            note: 'Subscription operational order and FulfillmentTask already exist — idempotent dedupe'
           }, { status: 200 });
         }
 
