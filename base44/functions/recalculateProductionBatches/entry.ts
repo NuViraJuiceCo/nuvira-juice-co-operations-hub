@@ -321,7 +321,7 @@ Deno.serve(async (req) => {
     // Map: "YYYY-MM-DD__ProductName" -> { units: number, sources: [] }
     const planMap = {};
 
-    const activeStatuses = ['new', 'awaiting_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage'];
+    const activeStatuses = ['new', 'awaiting_production', 'scheduled_for_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage'];
 
     // Keywords that are NOT producible items — shared across both FulfillmentTask and Order loops
     const NON_PRODUCTION_KEYWORDS = [
@@ -344,9 +344,13 @@ Deno.serve(async (req) => {
       if (!isExcludedCheck) activeOrderIds.add(o.id);
     }
 
-    // Build a set of order IDs whose demand will be covered by ShopifyOrder loop
-    // (active, non-excluded, non-subscription orders). FulfillmentTasks linked to these
-    // orders must NOT be treated as additional production demand to avoid double-counting.
+    // Build a set of order IDs whose demand will be covered by ShopifyOrder loop.
+    // This includes:
+    //   - All active one-time orders (source_channel !== 'subscription')
+    //   - All active subscription operational ShopifyOrders that have valid fulfillments
+    //     (order_type='subscription' OR source_type='subscription_fulfillment' OR source_channel='subscription')
+    // FulfillmentTasks linked to any of these orders must NOT be processed as additional
+    // production demand — doing so causes double-counting (order + task both contribute).
     const ordersCoveredByOrderLoop = new Set();
     for (const o of allOrders) {
       const isExcludedCheck =
@@ -357,8 +361,18 @@ Deno.serve(async (req) => {
         (Array.isArray(o.tags) && o.tags.includes('excluded')) ||
         o.do_not_recover === true ||
         o.do_not_sync === true;
-      // One-time (non-subscription) active orders are covered by the order loop
-      if (!isExcludedCheck && o.source_channel !== 'subscription') {
+      if (isExcludedCheck) continue;
+
+      const isSubscriptionOrder =
+        o.source_channel === 'subscription' ||
+        o.order_type === 'subscription' ||
+        o.source_type === 'subscription_fulfillment';
+
+      // Subscription orders with valid fulfillments OR line_items are covered by the ShopifyOrder loop
+      const hasProductData = (isSubscriptionOrder && ((o.fulfillments && o.fulfillments.length > 0) || (o.line_items && o.line_items.length > 0)))
+        || (!isSubscriptionOrder && o.line_items && o.line_items.length > 0);
+
+      if (hasProductData) {
         ordersCoveredByOrderLoop.add(o.id);
       }
     }
@@ -484,7 +498,11 @@ Deno.serve(async (req) => {
 
       // CRITICAL FIX: For subscriptions, read from fulfillments directly instead of parent line_items
       // Parent line_items are empty; fulfillments contain the actual weekly quantities
-      const isSubscription = order.source_channel === 'subscription';
+      // Match ALL subscription order variants: source_channel, order_type, source_type
+      const isSubscription =
+        order.source_channel === 'subscription' ||
+        order.order_type === 'subscription' ||
+        order.source_type === 'subscription_fulfillment';
       const hasValidFulfillments = isSubscription && order.fulfillments && order.fulfillments.length > 0;
       
       if (isSubscription && !hasValidFulfillments) {
@@ -551,7 +569,7 @@ Deno.serve(async (req) => {
       }
       
       // Build fulfillment breakdown for the order (for driver visibility)
-      if (order.source_channel === 'subscription' && fulfillmentCount > 1) {
+      if (isSubscription && fulfillmentCount > 1) {
         const fulfillmentItems = buildFulfillmentItemsMap(order, fulfillmentCount, bundleMap, bundleFullData);
         const fulfillmentsArray = [];
 
@@ -591,7 +609,7 @@ Deno.serve(async (req) => {
         if (!order.assigned_delivery_date && fulfillmentsArray.length > 0) {
           order._deliveryDateAssigned = fulfillmentsArray[0].delivery_date;
         }
-      } else if (order.source_channel !== 'subscription') {
+      } else if (!isSubscription) {
         // One-time orders: decompose bundles if present (into fulfillments.items ONLY)
         // CRITICAL GUARDRAIL: Never update order.line_items for one-time orders during production recalc.
         // line_items = customer-facing product identity (immutable after order placed)
@@ -626,7 +644,9 @@ Deno.serve(async (req) => {
       // NON_PRODUCTION_KEYWORDS defined above — skip non-producible items
 
       // CRITICAL FIX: For subscriptions, iterate through fulfillments directly
-      // Each fulfillment has its own items with correct weekly quantities
+      // Each fulfillment has its own items with correct weekly quantities.
+      // DOUBLE-COUNT GUARD: subscription operational ShopifyOrders are the single source of truth.
+      // Their linked FulfillmentTasks are already excluded from the FulfillmentTask loop via ordersCoveredByOrderLoop.
       if (isSubscription && order.fulfillments && order.fulfillments.length > 0) {
         // ─── SUBSCRIPTION: Process fulfillments array ───
         for (let fi = 0; fi < order.fulfillments.length; fi++) {
@@ -664,6 +684,13 @@ Deno.serve(async (req) => {
                 if (!planMap[key]) {
                   planMap[key] = { productionDate: fDate, productName, units: 0, sources: [] };
                 }
+
+                // Dedupe guard
+                const alreadyAdded = planMap[key].sources.some(
+                  s => s.order_id === order.id && s.fulfillment_index === fi + 1 && s.source_item === itemTitle
+                );
+                if (alreadyAdded) continue;
+
                 planMap[key].units += componentQty;
                 planMap[key].sources.push({
                   order_id: order.id,
@@ -671,7 +698,7 @@ Deno.serve(async (req) => {
                   customer_email: order.customer_email,
                   customer_name: order.customer_name || '',
                   quantity: componentQty,
-                  source_type: 'subscription',
+                  source_type: 'subscription_fulfillment',
                   source_item: itemTitle,
                   fulfillment_index: fi + 1,
                   fulfillment_total: fulfillmentCount,
@@ -686,6 +713,13 @@ Deno.serve(async (req) => {
               if (!planMap[key]) {
                 planMap[key] = { productionDate: fDate, productName: normalizedTitle, units: 0, sources: [] };
               }
+
+              // Dedupe guard: skip if this exact order+fulfillment index is already in sources
+              const alreadyAdded = planMap[key].sources.some(
+                s => s.order_id === order.id && s.fulfillment_index === fi + 1 && s.source_item === normalizedTitle
+              );
+              if (alreadyAdded) continue;
+
               planMap[key].units += qty;
               planMap[key].sources.push({
                 order_id: order.id,
@@ -693,7 +727,7 @@ Deno.serve(async (req) => {
                 customer_email: order.customer_email,
                 customer_name: order.customer_name || '',
                 quantity: qty,
-                source_type: 'subscription',
+                source_type: 'subscription_fulfillment',
                 source_item: normalizedTitle,
                 fulfillment_index: fi + 1,
                 fulfillment_total: fulfillmentCount,
