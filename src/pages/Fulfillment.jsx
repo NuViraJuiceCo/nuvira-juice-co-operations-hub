@@ -182,15 +182,28 @@ export default function Fulfillment() {
                     }`}>{order.production_status?.replace(/_/g, ' ')}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span><span className="font-medium text-foreground">Total:</span> ${order.total_price?.toFixed(2)}</span>
+                    <span><span className="font-medium text-foreground">Total:</span> {
+                      (order.order_type === 'subscription' || order.source_type === 'subscription_fulfillment' || order.fulfillment_mode === 'multi_delivery')
+                        ? '$144/mo'
+                        : `$${(order.total_price || 0).toFixed(2)}`
+                    }</span>
                     <span><span className="font-medium text-foreground">Payment:</span> {order.payment_status}</span>
                     <span><span className="font-medium text-foreground">Delivery:</span> {order.requested_delivery_date || order.assigned_delivery_date || '—'}</span>
-                    <span><span className="font-medium text-foreground">Method:</span> {order.fulfillment_method || '—'}</span>
+                    <span><span className="font-medium text-foreground">Method:</span> {order.fulfillment_mode === 'multi_delivery' ? `${order.fulfillments?.length || 4} weekly deliveries` : (order.fulfillment_method || '—')}</span>
                   </div>
+                  {(order.order_type === 'subscription' || order.fulfillment_mode === 'multi_delivery') && order.fulfillments?.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {order.fulfillments.map((f, i) => (
+                        <span key={i} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-0.5">
+                          #{f.fulfillment_number} · {f.delivery_date}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {order.address_line1 && (
                     <p className="text-xs text-muted-foreground">{order.address_line1}, {order.address_city}, {order.address_state} {order.address_postal_code}</p>
                   )}
-                  {!order.address_line1 && order.fulfillment_method === 'delivery' && (
+                  {!order.address_line1 && order.fulfillment_method === 'delivery' && order.fulfillment_mode !== 'multi_delivery' && (
                     <p className="text-xs text-red-500 font-semibold">⚠ Missing delivery address</p>
                   )}
                   <div className="text-xs text-muted-foreground">

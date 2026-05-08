@@ -14,6 +14,16 @@ import SelectMobile from "../components/SelectMobile";
 import { getDisplayPaymentStatus } from "../lib/paymentStatusHelper";
 import moment from "moment";
 
+// Returns a display-friendly price string for subscription vs one-time orders
+function getOrderTotalDisplay(order) {
+  const isSubscription = order.order_type === 'subscription' || order.source_type === 'subscription_fulfillment' || order.fulfillment_mode === 'multi_delivery';
+  if (isSubscription) {
+    const planName = order.customer_notes?.match(/^([^|—]+)/)?.[1]?.trim() || order.source_channel === 'subscription' ? 'Subscription' : null;
+    return planName ? `${planName} · $144/mo` : '$144/mo';
+  }
+  return `$${(order.total_price || 0).toFixed(2)}`;
+}
+
 export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -382,7 +392,7 @@ export default function Orders() {
                       {order.fulfillment_method}{order.address_line1 ? ` · ${order.address_line1.substring(0, 20)}...` : (order.delivery_address ? ` · ${order.delivery_address.substring(0, 20)}...` : " · -")}
                     </td>
                     <td className="px-5 py-3.5 text-sm font-semibold text-foreground text-right">
-                      ${order.total_price?.toFixed(2)}
+                     {getOrderTotalDisplay(order)}
                     </td>
                     <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
                       {moment(order.customer_order_date).utcOffset(-5).format("MMM D, h:mm A")} CT
@@ -504,7 +514,7 @@ export default function Orders() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Total</p>
-                  <p className="font-semibold">${order.total_price?.toFixed(2)}</p>
+                  <p className="font-semibold">{getOrderTotalDisplay(order)}</p>
                 </div>
               </div>
 
