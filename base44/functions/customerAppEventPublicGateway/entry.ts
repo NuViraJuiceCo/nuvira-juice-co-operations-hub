@@ -250,21 +250,6 @@ Deno.serve(async (req) => {
       console.log('[CUSTOMER-APP-GATEWAY] Created task', fulfillmentTaskId);
     }
 
-    // ───────────────────────────────────────────────────────────────────────────
-    // TRIGGER CANONICAL PRODUCTION BATCH RECALCULATION
-    // ───────────────────────────────────────────────────────────────────────────
-    console.log('[CUSTOMER-APP-GATEWAY] Triggering canonical batch recalculation for production_date', productionDate);
-    try {
-      const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
-      const batchResult = await base44.asServiceRole.functions.invoke('recalculateProductionBatches', {
-        _internalSecret: internalSecret,
-      });
-      console.log('[CUSTOMER-APP-GATEWAY] Batch recalculation result:', batchResult?.data?.results || 'no result');
-    } catch (batchErr) {
-      console.error('[CUSTOMER-APP-GATEWAY] Batch recalculation failed:', batchErr.message);
-      // Don't fail the entire sync if batch recalc fails — order/task are created
-    }
-
     console.log('[CUSTOMER-APP-GATEWAY] ════════════════════════════════════════');
 
     return Response.json({
@@ -275,7 +260,7 @@ Deno.serve(async (req) => {
       fulfillment_task_id: fulfillmentTaskId,
       customer_email,
       stripe_subscription_id: data.stripe_subscription_id,
-      batch_recalculation_triggered: true,
+      note: 'Order and FulfillmentTask created. Run recalculateProductionBatches separately to generate batches.',
     }, { status: 200 });
 
   } catch (error) {
