@@ -96,10 +96,16 @@ async function removeOrderFromProductionBatches(base44, orderId, orderNumber) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const body = await req.json();
+
+    // Auth: accept authenticated user OR internal secret (for internal function calls / regression tests)
+    const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+    const isInternalCall = body._internalSecret && internalSecret && body._internalSecret === internalSecret;
+    if (!isInternalCall) {
+      const user = await base44.auth.me();
+      if (!user) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
 
     const {
@@ -113,7 +119,7 @@ Deno.serve(async (req) => {
       is_full_refund,                // Explicit full-refund flag from CA subscription cancellation path
       cancel_type,                   // 'admin_refund_cancel' | 'internal_test_owner_override' | undefined (Stripe webhook)
       admin_reason,                  // Required reason code for admin overrides
-    } = await req.json();
+    } = body;
 
     // POLICY GUARD: This function is the FULL CASCADE path.
     // It must never be called from customer self-service future cancel/pause flows.

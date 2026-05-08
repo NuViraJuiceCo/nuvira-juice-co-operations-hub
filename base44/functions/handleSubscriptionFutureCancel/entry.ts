@@ -66,16 +66,19 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Method not allowed' }, { status: 405 });
   }
 
-  // Auth — same secret as receiveCustomerAppEvent
-  const authHeader = req.headers.get('Authorization') || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  if (!token || token !== SYNC_SECRET) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
+
+    // Auth: accept either the CUSTOMER_APP_SYNC_SECRET Bearer token (external CA calls)
+    // OR an _internalSecret in the body (internal function-to-function calls / regression tests)
+    const authHeader = req.headers.get('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+    const isInternalCall = body._internalSecret && internalSecret && body._internalSecret === internalSecret;
+    if (!isInternalCall && token !== SYNC_SECRET) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const {
       stripe_subscription_id,
