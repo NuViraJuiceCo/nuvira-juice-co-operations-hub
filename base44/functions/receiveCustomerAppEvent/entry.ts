@@ -528,6 +528,71 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── customer.subscription_cancelled ──────────────────────────────────────────
+    // Customer App sends this when a subscription is refunded/cancelled in Stripe.
+    // Triggers the same full cancellation cascade as order.refunded.
+    // Matches Hub order by stripe_subscription_id (primary) or customer_app_subscription_id.
+    // Idempotent: processStripeRefund checks OrderSyncLog for stripe_event_id.
+    if (event === 'customer.subscription_cancelled') {
+      const subId = data?.stripe_subscription_id;
+      const caSubId = data?.customer_app_subscription_id;
+      if (!subId && !caSubId) {
+        return Response.json({ error: 'Missing stripe_subscription_id or customer_app_subscription_id' }, { status: 400 });
+      }
+
+      console.log(`[RECEIVE-CUSTOMER-EVENT] customer.subscription_cancelled: stripe_sub=${subId} ca_sub=${caSubId}`);
+
+      // Find canonical Hub order by stripe_subscription_id
+      let cancelOrder = null;
+      if (subId) {
+        const bySubId = await base44.asServiceRole.entities.ShopifyOrder.filter({ stripe_subscription_id: subId });
+        cancelOrder = (bySubId || []).find(o =>
+          o.payment_status !== 'refunded' &&
+          o.production_status !== 'canceled' &&
+          o.production_status !== 'cancelled'
+        ) || null;
+      }
+
+      if (!cancelOrder && caSubId) {
+        const byCASubId = await base44.asServiceRole.entities.ShopifyOrder.filter({ customer_app_subscription_id: caSubId });
+        cancelOrder = (byCASubId || []).find(o =>
+          o.payment_status !== 'refunded' &&
+          o.production_status !== 'canceled' &&
+          o.production_status !== 'cancelled'
+        ) || null;
+      }
+
+      if (!cancelOrder) {
+        console.warn(`[RECEIVE-CUSTOMER-EVENT] customer.subscription_cancelled: no active Hub order found for sub=${subId} — may already be cancelled`);
+        return Response.json({ status: 'acknowledged', event, note: 'No active Hub order found — may already be cancelled or never created' });
+      }
+
+      console.log(`[RECEIVE-CUSTOMER-EVENT] Found Hub order ${cancelOrder.shopify_order_number} (${cancelOrder.id}) — routing to processStripeRefund`);
+
+      const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+      const refundResult = await base44.asServiceRole.functions.invoke('processStripeRefund', {
+        stripe_charge_id: data.stripe_charge_id || null,
+        stripe_payment_intent_id: data.stripe_payment_intent_id || cancelOrder.stripe_payment_intent_id || null,
+        stripe_refund_id: data.stripe_refund_id || null,
+        stripe_event_id: data.stripe_event_id || `ca_sub_cancel_${subId || caSubId}_${Date.now()}`,
+        refund_amount: data.refund_amount || cancelOrder.total_price || 0,
+        charge_amount: data.charge_amount || data.refund_amount || cancelOrder.total_price || 0,
+        manual_order_number: cancelOrder.shopify_order_number,
+        _internalSecret: internalSecret,
+      });
+
+      const { status: refundStatus } = refundResult?.data || {};
+      console.log(`[RECEIVE-CUSTOMER-EVENT] customer.subscription_cancelled cascade result: ${refundStatus}`);
+
+      return Response.json({
+        status: 'success',
+        event,
+        refund_status: refundStatus,
+        hub_order_id: cancelOrder.id,
+        hub_order_number: cancelOrder.shopify_order_number,
+      }, { status: 200 });
+    }
+
     // ── order.refunded ──────────────────────────────────────────────────────────
     // Customer App notifies Hub of full or partial refund
     if (event === 'order.refunded') {
