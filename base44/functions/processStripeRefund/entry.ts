@@ -220,6 +220,29 @@ Deno.serve(async (req) => {
       });
     }
 
+    // IDEMPOTENCY: If order is already in terminal refund state, skip cascade and log as skipped
+    if (hubOrder.payment_status === 'refunded' && hubOrder.production_status === 'canceled') {
+      console.log(`[REFUND] Order ${hubOrder.shopify_order_number} already cancelled — skipping duplicate cascade for event ${stripe_event_id}`);
+      await base44.asServiceRole.entities.OrderSyncLog.create({
+        sync_timestamp: new Date().toISOString(),
+        sync_source: 'stripe_refund_webhook',
+        event_type: 'charge.refunded',
+        stripe_event_id: stripe_event_id,
+        order_id: hubOrder.id,
+        order_number: hubOrder.shopify_order_number,
+        customer_email: hubOrder.customer_email,
+        action: 'skipped',
+        reason: 'Order already in refunded/canceled state — idempotent replay skipped',
+        success: true,
+      });
+      return Response.json({
+        status: 'skipped',
+        reason: 'already_cancelled',
+        order_number: hubOrder.shopify_order_number,
+        order_id: hubOrder.id,
+      });
+    }
+
     // FULL REFUND: Process cascading cancellations
     console.log(`[REFUND] Processing FULL REFUND for ${hubOrder.shopify_order_number} ($${refund_amount})`);
 
