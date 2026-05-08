@@ -26,8 +26,15 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
+const INTERNAL_SECRET = Deno.env.get('INTERNAL_FUNCTION_SECRET');
 
 Deno.serve(async (req) => {
+  // ───────────────────────────────────────────────────────────────────────────
+  // CHECK FOR GATEWAY AUTH FLAG EARLY (before body parsing)
+  // ───────────────────────────────────────────────────────────────────────────
+  let isFromGateway = false;
+  let internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+
   // ───────────────────────────────────────────────────────────────────────────
   // DIAGNOSTIC LOGGING: Log all incoming request details (no secrets)
   // ───────────────────────────────────────────────────────────────────────────
@@ -53,35 +60,7 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Method not allowed. Expected POST.' }, { status: 405 });
   }
 
-  // Authenticate
-  const authHeader = req.headers.get('Authorization') || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  
-  if (!token) {
-    console.error('[RECEIVE-CUSTOMER-EVENT] REJECT: Missing Authorization header or Bearer token');
-    console.error('[RECEIVE-CUSTOMER-EVENT] Authorization header value:', authHeader ? 'Present but malformed' : 'Missing');
-    return Response.json({ 
-      error: 'Unauthorized: Missing Authorization header',
-      detail: 'Expected: Authorization: Bearer <CUSTOMER_APP_SYNC_SECRET>',
-      received_header: authHeader ? 'Present' : 'Missing'
-    }, { status: 401 });
-  }
-  
-  // Validate secret
-  if (token !== SYNC_SECRET) {
-    console.error('[RECEIVE-CUSTOMER-EVENT] REJECT: Invalid Bearer token (does not match CUSTOMER_APP_SYNC_SECRET)');
-    console.error('[RECEIVE-CUSTOMER-EVENT] Token length:', token.length, 'Secret length:', SYNC_SECRET?.length || 0);
-    console.error('[RECEIVE-CUSTOMER-EVENT] Token first 10 chars:', token.slice(0, 10));
-    console.error('[RECEIVE-CUSTOMER-EVENT] Secret first 10 chars:', SYNC_SECRET?.slice(0, 10));
-    return Response.json({ 
-      error: 'Unauthorized: Invalid token',
-      detail: 'Token does not match CUSTOMER_APP_SYNC_SECRET',
-      token_length: token.length,
-      secret_length: SYNC_SECRET?.length || 0
-    }, { status: 401 });
-  }
-  
-  console.log('[RECEIVE-CUSTOMER-EVENT] ✅ AUTHORIZATION SUCCESSFUL');
+  // NOTE: Auth check will happen after body parsing so we can check for gateway flag
 
   try {
     const base44 = createClientFromRequest(req);
@@ -93,14 +72,43 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const { event } = body;
+    const { event, _gatewayAuth, _internalSecret } = body;
     // Customer App sends order data under body.order OR body.data — support both
     const data = body.order || body.data || {};
+
+    // GATEWAY BYPASS: If called via customerAppEventPublicGateway, skip Bearer token validation
+    // Gateway already validated the token, so we trust it
+    if (_gatewayAuth === 'trusted' && _internalSecret === internalSecret) {
+      isFromGateway = true;
+      console.log('[RECEIVE-CUSTOMER-EVENT] ✅ GATEWAY AUTH FLAG DETECTED — skipping Bearer validation');
+    } else {
+      // Direct HTTP call — validate Bearer token
+      const authHeader = req.headers.get('Authorization') || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      
+      if (!token) {
+        console.error('[RECEIVE-CUSTOMER-EVENT] REJECT: Missing Authorization header or Bearer token');
+        return Response.json({ 
+          error: 'Unauthorized: Missing Authorization header',
+          detail: 'Expected: Authorization: Bearer <CUSTOMER_APP_SYNC_SECRET>',
+        }, { status: 401 });
+      }
+      
+      if (token !== SYNC_SECRET) {
+        console.error('[RECEIVE-CUSTOMER-EVENT] REJECT: Invalid Bearer token');
+        return Response.json({ 
+          error: 'Unauthorized: Invalid token',
+        }, { status: 401 });
+      }
+      
+      console.log('[RECEIVE-CUSTOMER-EVENT] ✅ AUTHORIZATION SUCCESSFUL (Direct HTTP)');
+    }
 
     console.log('[RECEIVE-CUSTOMER-EVENT] PARSED EVENT:');
     console.log('[RECEIVE-CUSTOMER-EVENT]  - event:', event);
     console.log('[RECEIVE-CUSTOMER-EVENT]  - customer_email:', body.customer_email || data.customer_email || 'NOT_PROVIDED');
     console.log('[RECEIVE-CUSTOMER-EVENT]  - stripe_subscription_id:', body.stripe_subscription_id || data.stripe_subscription_id || 'NOT_PROVIDED');
+    console.log('[RECEIVE-CUSTOMER-EVENT]  - from_gateway:', isFromGateway);
     console.log('[RECEIVE-CUSTOMER-EVENT]  - payload_keys:', Object.keys(body).join(', '));
 
     if (!event) {
