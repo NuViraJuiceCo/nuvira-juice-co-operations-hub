@@ -110,12 +110,18 @@ Deno.serve(async (req) => {
       refund_amount,                 // Full amount refunded
       charge_amount,                 // Total charge amount
       manual_order_number,           // Override for finding order
+      is_full_refund,                // Explicit full-refund flag from CA subscription cancellation path
     } = await req.json();
 
-    if (!stripe_event_id || (!stripe_refund_id && !stripe_charge_id) || !stripe_payment_intent_id) {
+    // Validation: stripe_event_id always required for idempotency.
+    // At least one of: stripe_refund_id, stripe_charge_id, stripe_payment_intent_id, OR manual_order_number
+    // must be present to locate the order. CA subscription cancellation path provides
+    // payment_intent_id + manual_order_number but no stripe_refund_id/stripe_charge_id — that's valid.
+    const hasOrderLocator = stripe_refund_id || stripe_charge_id || stripe_payment_intent_id || manual_order_number;
+    if (!stripe_event_id || !hasOrderLocator) {
       return Response.json({
-        error: 'Missing required Stripe refund identifiers',
-        required: ['stripe_event_id', '(stripe_refund_id OR stripe_charge_id)', 'stripe_payment_intent_id'],
+        error: 'Missing required fields',
+        required: ['stripe_event_id', 'at least one of: stripe_refund_id, stripe_charge_id, stripe_payment_intent_id, manual_order_number'],
       }, { status: 400 });
     }
 
@@ -173,7 +179,10 @@ Deno.serve(async (req) => {
     }
 
     // DETERMINE REFUND TYPE (full vs partial)
-    const isFullRefund = Math.abs(refund_amount - charge_amount) < 0.01;
+    // Accept explicit is_full_refund=true flag (CA subscription cancellation path)
+    // OR compute from amounts. If charge_amount is missing, default to full refund when is_full_refund=true.
+    const effectiveChargeAmount = charge_amount || hubOrder.total_price || refund_amount || 0;
+    const isFullRefund = is_full_refund === true || Math.abs((refund_amount || 0) - effectiveChargeAmount) < 0.01;
     
     if (!isFullRefund) {
       console.warn(`[REFUND] PARTIAL REFUND for ${hubOrder.shopify_order_number}: $${refund_amount} of $${charge_amount}. Flagging for manual review.`);

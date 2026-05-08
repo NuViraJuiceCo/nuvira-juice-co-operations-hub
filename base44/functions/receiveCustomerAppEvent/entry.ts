@@ -536,9 +536,10 @@ Deno.serve(async (req) => {
     // Idempotent: processStripeRefund checks OrderSyncLog for stripe_event_id.
     if (event === 'customer.subscription_cancelled') {
       // Accept fields from both top-level body AND nested data{}
+      // Normalize payment_intent_id → stripe_payment_intent_id (CA sends either name)
       const subId = data?.stripe_subscription_id || body.stripe_subscription_id;
-      const caSubId = data?.customer_app_subscription_id || body.customer_app_subscription_id;
-      const piId = data?.stripe_payment_intent_id || body.stripe_payment_intent_id;
+      const caSubId = data?.customer_app_subscription_id || body.customer_app_subscription_id || data?.subscription_id || body.subscription_id;
+      const piId = data?.stripe_payment_intent_id || body.stripe_payment_intent_id || data?.payment_intent_id || body.payment_intent_id;
       const orderNum = data?.order_number || body.order_number;
 
       console.log(`[RECEIVE-CUSTOMER-EVENT] customer.subscription_cancelled: stripe_sub=${subId} ca_sub=${caSubId} pi=${piId} order_num=${orderNum}`);
@@ -591,11 +592,12 @@ Deno.serve(async (req) => {
       const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
       const refundResult = await base44.asServiceRole.functions.invoke('processStripeRefund', {
         stripe_charge_id: data.stripe_charge_id || body.stripe_charge_id || null,
-        stripe_payment_intent_id: data.stripe_payment_intent_id || body.stripe_payment_intent_id || cancelOrder.stripe_payment_intent_id || null,
+        stripe_payment_intent_id: piId || cancelOrder.stripe_payment_intent_id || null,
         stripe_refund_id: data.stripe_refund_id || body.stripe_refund_id || null,
         stripe_event_id: data.stripe_event_id || body.stripe_event_id || `ca_sub_cancel_${subId || caSubId || piId}_${Date.now()}`,
         refund_amount: data.refund_amount || body.refund_amount || cancelOrder.total_price || 0,
-        charge_amount: data.charge_amount || body.charge_amount || data.refund_amount || body.refund_amount || cancelOrder.total_price || 0,
+        charge_amount: data.charge_amount || body.charge_amount || cancelOrder.total_price || 0,
+        is_full_refund: data.is_full_refund !== undefined ? data.is_full_refund : body.is_full_refund !== undefined ? body.is_full_refund : true,
         manual_order_number: cancelOrder.shopify_order_number,
         _internalSecret: internalSecret,
       });
