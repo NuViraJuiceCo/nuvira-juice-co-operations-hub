@@ -163,17 +163,46 @@ Deno.serve(async (req) => {
 
         const itemsSummary = fulfillmentItems.map(i => `${i.quantity}x ${i.title}`).join(', ');
 
-        // Idempotency check: look for existing subscription operational ShopifyOrder
+        // Idempotency check: dedupe on stripe_subscription_id + customer_app_subscription_id + fulfillment_number=1 + first_delivery_date
+        // This prevents duplicate operational orders when CA retries the same subscription sync.
         const existingOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
           stripe_subscription_id: data.stripe_subscription_id,
         });
 
+        // Filter out quarantined/archived duplicates — only match active subscription orders
+        const activeExisting = (existingOrders || []).filter(o =>
+          o.data_quality_status !== 'quarantined' &&
+          o.order_type === 'subscription' &&
+          o.source_type === 'subscription_fulfillment'
+        );
+
         let operationalOrderId = null;
 
-        if (existingOrders && existingOrders.length > 0) {
-          // Reuse existing subscription operational order
-          operationalOrderId = existingOrders[0].id;
-          console.log(`[RECEIVE-CUSTOMER-EVENT] Using existing subscription operational order ${operationalOrderId}`);
+        if (activeExisting.length > 0) {
+          // Reuse existing canonical subscription operational order — patch in any new data from CA
+          operationalOrderId = activeExisting[0].id;
+          console.log(`[RECEIVE-CUSTOMER-EVENT] Deduped: using existing subscription operational order ${operationalOrderId} for sub=${data.stripe_subscription_id}`);
+
+          // Patch address + items if CA now provides them and they were previously blank
+          const existing = activeExisting[0];
+          const patch = {};
+          if (!existing.address_line1 && (data.address_line1 || addr.street)) {
+            patch.address_line1 = data.address_line1 || addr.street || '';
+            patch.address_line2 = data.address_line2 || addr.apt || '';
+            patch.address_city = data.address_city || addr.city || '';
+            patch.address_state = data.address_state || addr.state || '';
+            patch.address_postal_code = data.address_postal_code || addr.postal_code || '';
+          }
+          if (fulfillmentItems.length > 0 && (!existing.line_items || existing.line_items.length === 0)) {
+            patch.line_items = fulfillmentItems;
+          }
+          if (data.customer_app_subscription_id && !existing.customer_app_subscription_id) {
+            patch.customer_app_subscription_id = data.customer_app_subscription_id;
+          }
+          if (Object.keys(patch).length > 0) {
+            await base44.asServiceRole.entities.ShopifyOrder.update(operationalOrderId, patch);
+            console.log(`[RECEIVE-CUSTOMER-EVENT] Patched existing order ${operationalOrderId} with:`, Object.keys(patch));
+          }
         } else {
           // Create subscription operational ShopifyOrder (not a customer-facing one-time order)
           const operationalOrder = await base44.asServiceRole.entities.ShopifyOrder.create({
