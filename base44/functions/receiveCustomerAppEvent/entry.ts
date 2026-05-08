@@ -531,52 +531,71 @@ Deno.serve(async (req) => {
     // ── customer.subscription_cancelled ──────────────────────────────────────────
     // Customer App sends this when a subscription is refunded/cancelled in Stripe.
     // Triggers the same full cancellation cascade as order.refunded.
-    // Matches Hub order by stripe_subscription_id (primary) or customer_app_subscription_id.
+    // Accepts identifiers at top level OR inside data{} — both are checked.
+    // Lookup priority: stripe_subscription_id → customer_app_subscription_id → stripe_payment_intent_id → order_number
     // Idempotent: processStripeRefund checks OrderSyncLog for stripe_event_id.
     if (event === 'customer.subscription_cancelled') {
-      const subId = data?.stripe_subscription_id;
-      const caSubId = data?.customer_app_subscription_id;
-      if (!subId && !caSubId) {
-        return Response.json({ error: 'Missing stripe_subscription_id or customer_app_subscription_id' }, { status: 400 });
+      // Accept fields from both top-level body AND nested data{}
+      const subId = data?.stripe_subscription_id || body.stripe_subscription_id;
+      const caSubId = data?.customer_app_subscription_id || body.customer_app_subscription_id;
+      const piId = data?.stripe_payment_intent_id || body.stripe_payment_intent_id;
+      const orderNum = data?.order_number || body.order_number;
+
+      console.log(`[RECEIVE-CUSTOMER-EVENT] customer.subscription_cancelled: stripe_sub=${subId} ca_sub=${caSubId} pi=${piId} order_num=${orderNum}`);
+
+      if (!subId && !caSubId && !piId && !orderNum) {
+        return Response.json({ error: 'Missing at least one identifier: stripe_subscription_id, customer_app_subscription_id, stripe_payment_intent_id, or order_number' }, { status: 400 });
       }
 
-      console.log(`[RECEIVE-CUSTOMER-EVENT] customer.subscription_cancelled: stripe_sub=${subId} ca_sub=${caSubId}`);
+      const isActive = (o) =>
+        o.payment_status !== 'refunded' &&
+        o.production_status !== 'canceled' &&
+        o.production_status !== 'cancelled';
 
-      // Find canonical Hub order by stripe_subscription_id
+      // Priority 1: stripe_subscription_id
       let cancelOrder = null;
       if (subId) {
-        const bySubId = await base44.asServiceRole.entities.ShopifyOrder.filter({ stripe_subscription_id: subId });
-        cancelOrder = (bySubId || []).find(o =>
-          o.payment_status !== 'refunded' &&
-          o.production_status !== 'canceled' &&
-          o.production_status !== 'cancelled'
-        ) || null;
+        const results = await base44.asServiceRole.entities.ShopifyOrder.filter({ stripe_subscription_id: subId });
+        cancelOrder = (results || []).find(isActive) || null;
+        console.log(`[RECEIVE-CUSTOMER-EVENT] Lookup by stripe_subscription_id=${subId}: found ${results?.length || 0}, active=${!!cancelOrder}`);
       }
 
+      // Priority 2: customer_app_subscription_id
       if (!cancelOrder && caSubId) {
-        const byCASubId = await base44.asServiceRole.entities.ShopifyOrder.filter({ customer_app_subscription_id: caSubId });
-        cancelOrder = (byCASubId || []).find(o =>
-          o.payment_status !== 'refunded' &&
-          o.production_status !== 'canceled' &&
-          o.production_status !== 'cancelled'
-        ) || null;
+        const results = await base44.asServiceRole.entities.ShopifyOrder.filter({ customer_app_subscription_id: caSubId });
+        cancelOrder = (results || []).find(isActive) || null;
+        console.log(`[RECEIVE-CUSTOMER-EVENT] Lookup by customer_app_subscription_id=${caSubId}: found ${results?.length || 0}, active=${!!cancelOrder}`);
+      }
+
+      // Priority 3: stripe_payment_intent_id
+      if (!cancelOrder && piId) {
+        const results = await base44.asServiceRole.entities.ShopifyOrder.filter({ stripe_payment_intent_id: piId });
+        cancelOrder = (results || []).find(isActive) || null;
+        console.log(`[RECEIVE-CUSTOMER-EVENT] Lookup by stripe_payment_intent_id=${piId}: found ${results?.length || 0}, active=${!!cancelOrder}`);
+      }
+
+      // Priority 4: order_number
+      if (!cancelOrder && orderNum) {
+        const results = await base44.asServiceRole.entities.ShopifyOrder.filter({ shopify_order_number: orderNum });
+        cancelOrder = (results || []).find(isActive) || null;
+        console.log(`[RECEIVE-CUSTOMER-EVENT] Lookup by order_number=${orderNum}: found ${results?.length || 0}, active=${!!cancelOrder}`);
       }
 
       if (!cancelOrder) {
-        console.warn(`[RECEIVE-CUSTOMER-EVENT] customer.subscription_cancelled: no active Hub order found for sub=${subId} — may already be cancelled`);
+        console.warn(`[RECEIVE-CUSTOMER-EVENT] customer.subscription_cancelled: no active Hub order found — may already be cancelled`);
         return Response.json({ status: 'acknowledged', event, note: 'No active Hub order found — may already be cancelled or never created' });
       }
 
-      console.log(`[RECEIVE-CUSTOMER-EVENT] Found Hub order ${cancelOrder.shopify_order_number} (${cancelOrder.id}) — routing to processStripeRefund`);
+      console.log(`[RECEIVE-CUSTOMER-EVENT] Found Hub order ${cancelOrder.shopify_order_number} (${cancelOrder.id}) — routing to processStripeRefund cascade`);
 
       const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
       const refundResult = await base44.asServiceRole.functions.invoke('processStripeRefund', {
-        stripe_charge_id: data.stripe_charge_id || null,
-        stripe_payment_intent_id: data.stripe_payment_intent_id || cancelOrder.stripe_payment_intent_id || null,
-        stripe_refund_id: data.stripe_refund_id || null,
-        stripe_event_id: data.stripe_event_id || `ca_sub_cancel_${subId || caSubId}_${Date.now()}`,
-        refund_amount: data.refund_amount || cancelOrder.total_price || 0,
-        charge_amount: data.charge_amount || data.refund_amount || cancelOrder.total_price || 0,
+        stripe_charge_id: data.stripe_charge_id || body.stripe_charge_id || null,
+        stripe_payment_intent_id: data.stripe_payment_intent_id || body.stripe_payment_intent_id || cancelOrder.stripe_payment_intent_id || null,
+        stripe_refund_id: data.stripe_refund_id || body.stripe_refund_id || null,
+        stripe_event_id: data.stripe_event_id || body.stripe_event_id || `ca_sub_cancel_${subId || caSubId || piId}_${Date.now()}`,
+        refund_amount: data.refund_amount || body.refund_amount || cancelOrder.total_price || 0,
+        charge_amount: data.charge_amount || body.charge_amount || data.refund_amount || body.refund_amount || cancelOrder.total_price || 0,
         manual_order_number: cancelOrder.shopify_order_number,
         _internalSecret: internalSecret,
       });
@@ -587,9 +606,11 @@ Deno.serve(async (req) => {
       return Response.json({
         status: 'success',
         event,
+        cascade: 'triggered',
         refund_status: refundStatus,
         hub_order_id: cancelOrder.id,
         hub_order_number: cancelOrder.shopify_order_number,
+        matched_by: subId ? 'stripe_subscription_id' : caSubId ? 'customer_app_subscription_id' : piId ? 'stripe_payment_intent_id' : 'order_number',
       }, { status: 200 });
     }
 
