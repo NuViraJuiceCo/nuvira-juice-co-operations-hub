@@ -111,7 +111,14 @@ Deno.serve(async (req) => {
       charge_amount,                 // Total charge amount
       manual_order_number,           // Override for finding order
       is_full_refund,                // Explicit full-refund flag from CA subscription cancellation path
+      cancel_type,                   // 'admin_refund_cancel' | 'internal_test_owner_override' | undefined (Stripe webhook)
+      admin_reason,                  // Required reason code for admin overrides
     } = await req.json();
+
+    // POLICY GUARD: This function is the FULL CASCADE path.
+    // It must never be called from customer self-service future cancel/pause flows.
+    // customer.subscription_future_cancel → handleSubscriptionFutureCancel (no cascade)
+    // processStripeRefund → admin_refund_cancel or Stripe charge.refunded webhook ONLY
 
     // Validation: stripe_event_id always required for idempotency.
     // At least one of: stripe_refund_id, stripe_charge_id, stripe_payment_intent_id, OR manual_order_number
@@ -244,27 +251,38 @@ Deno.serve(async (req) => {
     }
 
     // FULL REFUND: Process cascading cancellations
-    console.log(`[REFUND] Processing FULL REFUND for ${hubOrder.shopify_order_number} ($${refund_amount})`);
+    // Determine the cancel type for audit logging
+    const effectiveCancelType = cancel_type || 'admin_refund_cancel';
+    const isInternalTest = cancel_type === 'internal_test_owner_override';
+    console.log(`[REFUND] Processing FULL REFUND for ${hubOrder.shopify_order_number} ($${refund_amount}) — cancel_type=${effectiveCancelType}`);
 
     // Update Hub Order
+    const cancelTags = ['refunded', 'excluded'];
+    if (isInternalTest) cancelTags.push('internal_test_owner_override');
+    const notePrefix = isInternalTest ? '[INTERNAL_TEST_OWNER_OVERRIDE]' : '[ADMIN_REFUND]';
+
     await base44.asServiceRole.entities.ShopifyOrder.update(hubOrder.id, {
       payment_status: 'refunded',
       production_status: 'canceled',
       fulfillment_status: 'cancelled',
-      tags: [...(hubOrder.tags || []), 'refunded', 'excluded'],
+      tags: [...new Set([...(hubOrder.tags || []), ...cancelTags])],
       sync_status: 'do_not_sync',
       refunded_at: new Date().toISOString(),
       stripe_event_id_applied: stripe_event_id,
-      internal_notes: (hubOrder.internal_notes || '') + `\n[REFUND] Stripe refund ${stripe_refund_id || stripe_charge_id} - $${refund_amount} on ${new Date().toISOString()}`,
+      cancel_type: effectiveCancelType,
+      internal_notes: (hubOrder.internal_notes || '') +
+        `\n${notePrefix} Stripe refund ${stripe_refund_id || stripe_charge_id} - $${refund_amount} on ${new Date().toISOString()}` +
+        (admin_reason ? ` | Reason: ${admin_reason}` : ''),
       audit_trail: [
         ...(hubOrder.audit_trail || []),
         {
           timestamp: new Date().toISOString(),
-          action: 'RefundProcessed',
+          action: isInternalTest ? 'InternalTestOwnerOverride' : 'AdminRefundCancel',
           performed_by: 'system_stripe_webhook',
           before: { payment_status: hubOrder.payment_status, production_status: hubOrder.production_status },
           after: { payment_status: 'refunded', production_status: 'canceled' },
-          reason: `Full Stripe refund: ${stripe_refund_id || stripe_charge_id}`,
+          reason: admin_reason || `Full Stripe refund: ${stripe_refund_id || stripe_charge_id}`,
+          cancel_type: effectiveCancelType,
         },
       ],
     });

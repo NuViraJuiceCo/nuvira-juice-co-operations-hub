@@ -11,11 +11,18 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * Supported event types:
  *   customer.profile_updated      — update customer name/phone on existing orders
  *   customer.bag_return           — create/update BagReturn record
- *   customer.onboarding_complete  — no-op, acknowledged
- *   customer.subscription_created — trigger order pull for this customer
- *   order.created / order.paid    — sync paid order to Hub
- *   order.refunded                — cascade refund through Hub (cancel order, tasks, batches)
- *   order.status_updated          — acknowledged (hub owns status, not customer app)
+ *   customer.onboarding_complete        — no-op, acknowledged
+ *   customer.subscription_created       — trigger order pull for this customer
+ *   customer.subscription_future_cancel — customer cancels FUTURE renewal (no cascade, current cycle preserved)
+ *   customer.subscription_future_pause  — customer pauses NEXT cycle (no cascade, current cycle preserved)
+ *   customer.subscription_cancelled     — admin/Stripe-triggered full cancel with cascade (refund path)
+ *   order.created / order.paid          — sync paid order to Hub
+ *   order.refunded                      — cascade refund through Hub (cancel order, tasks, batches)
+ *   order.status_updated                — acknowledged (hub owns status, not customer app)
+ *
+ * POLICY: customer.subscription_future_cancel and customer.subscription_future_pause are
+ * customer self-service events. They do NOT cascade. Current paid cycle is PRESERVED.
+ * Only customer.subscription_cancelled (admin/Stripe refund path) triggers the full cascade.
  */
 
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
@@ -528,6 +535,45 @@ Deno.serve(async (req) => {
           order_number: orderData.order_number,
         }, { status: 500 });
       }
+    }
+
+    // ── customer.subscription_future_cancel / customer.subscription_future_pause ──
+    // POLICY: Customer self-service future cancel or pause.
+    // Current paid cycle is LOCKED and PRESERVED. No FulfillmentTask cancellation.
+    // No ProductionBatch removal. No loyalty reversal.
+    // Routes to handleSubscriptionFutureCancel which sets cancel_at_period_end on Stripe + Hub metadata only.
+    if (event === 'customer.subscription_future_cancel' || event === 'customer.subscription_future_pause') {
+      const cancel_type = event === 'customer.subscription_future_cancel' ? 'future_cancel' : 'future_pause';
+
+      if (!data?.customer_email) {
+        return Response.json({ error: 'Missing customer_email' }, { status: 400 });
+      }
+      const subId = data.stripe_subscription_id || body.stripe_subscription_id;
+      const caSubId = data.customer_app_subscription_id || body.customer_app_subscription_id;
+      if (!subId && !caSubId) {
+        return Response.json({ error: 'stripe_subscription_id or customer_app_subscription_id required' }, { status: 400 });
+      }
+
+      console.log(`[RECEIVE-CUSTOMER-EVENT] Routing ${event} to handleSubscriptionFutureCancel (NO CASCADE — current cycle preserved)`);
+
+      const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+      // Call handleSubscriptionFutureCancel internally via service role
+      const futureCancelResult = await base44.asServiceRole.functions.invoke('handleSubscriptionFutureCancel', {
+        stripe_subscription_id: subId || null,
+        customer_app_subscription_id: caSubId || null,
+        customer_email: data.customer_email,
+        cancel_type,
+        effective_date: data.effective_date || null,
+        reason: data.reason || null,
+        _internalSecret: internalSecret,
+      });
+
+      return Response.json({
+        status: 'success',
+        event,
+        cancel_type,
+        ...(futureCancelResult?.data || {}),
+      }, { status: 200 });
     }
 
     // ── customer.subscription_cancelled ──────────────────────────────────────────
