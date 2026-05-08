@@ -36,19 +36,15 @@ async function getStripeObject(objectId, objectType) {
  * Output: 4 ShopifyOrder records with fulfillment dates 7 days apart.
  */
 
-const PRODUCT_NAMES = {
-  oasis: 'Oasis',
-  aura: 'Aura',
-  renu: 'Re-Nu',
-};
-
-const SUBSCRIPTION_PLANS = {
+// Plan decomposition is now handled by decomposeSubscriptionPlan function (v2).
+// These are kept as an inline fallback only — decomposeSubscriptionPlan is the source of truth.
+const SUBSCRIPTION_PLANS_FALLBACK = {
   vip_wellness: {
     display_name: 'VIP Wellness',
     products: [
-      { name: PRODUCT_NAMES.oasis, qty: 2 },
-      { name: PRODUCT_NAMES.aura, qty: 2 },
-      { name: PRODUCT_NAMES.renu, qty: 2 },
+      { name: 'Oasis', qty: 2 },
+      { name: 'Aura', qty: 2 },
+      { name: 'Re-Nu', qty: 2 },
     ],
     total_bottles_per_delivery: 6,
     deliveries: 4,
@@ -56,9 +52,9 @@ const SUBSCRIPTION_PLANS = {
   monthly_ritual: {
     display_name: 'Monthly Ritual',
     products: [
-      { name: PRODUCT_NAMES.oasis, qty: 1 },
-      { name: PRODUCT_NAMES.aura, qty: 1 },
-      { name: PRODUCT_NAMES.renu, qty: 1 },
+      { name: 'Oasis', qty: 1 },
+      { name: 'Aura', qty: 1 },
+      { name: 'Re-Nu', qty: 1 },
     ],
     total_bottles_per_delivery: 3,
     deliveries: 4,
@@ -67,23 +63,21 @@ const SUBSCRIPTION_PLANS = {
 
 const PRODUCTION_DAYS = [2, 5, 6]; // Tue, Fri, Sat
 
-function detectSubscriptionPlan(subscription) {
-  // Look for plan name or metadata that indicates plan type
-  if (subscription.metadata?.plan) {
-    const plan = subscription.metadata.plan.toLowerCase();
-    if (plan.includes('vip') || plan.includes('wellness')) return 'vip_wellness';
-    if (plan.includes('ritual') || plan.includes('monthly')) return 'monthly_ritual';
-  }
-  
-  // Fallback: check plan description or product names
-  if (subscription.description) {
-    const desc = subscription.description.toLowerCase();
-    if (desc.includes('vip') || desc.includes('wellness')) return 'vip_wellness';
-    if (desc.includes('ritual') || desc.includes('monthly')) return 'monthly_ritual';
-  }
+function detectSubscriptionPlanKey(subscription) {
+  // Look for plan name in metadata (CA stores plan_name in Stripe metadata)
+  const metaPlanName = subscription.metadata?.plan_name || subscription.metadata?.plan || '';
+  const desc = (subscription.description || '').toLowerCase();
+  const planLower = metaPlanName.toLowerCase();
 
-  // Default to vip_wellness if unclear
-  return 'vip_wellness';
+  if (planLower.includes('vip') || planLower.includes('wellness') || desc.includes('vip') || desc.includes('wellness')) return 'vip_wellness';
+  if (planLower.includes('ritual') || planLower.includes('monthly') || desc.includes('ritual') || desc.includes('monthly')) return 'monthly_ritual';
+
+  // Default to monthly_ritual (safer — smaller quantities)
+  return 'monthly_ritual';
+}
+
+function detectSubscriptionPlan(subscription) {
+  return detectSubscriptionPlanKey(subscription);
 }
 
 function getNextProductionDate(fromDate) {
@@ -105,8 +99,32 @@ function getNextProductionDate(fromDate) {
 }
 
 async function generateSubscriptionFulfillments(base44, subscription, customer) {
-  const planKey = detectSubscriptionPlan(subscription);
-  const plan = SUBSCRIPTION_PLANS[planKey];
+  const planKey = detectSubscriptionPlanKey(subscription);
+  const metaPlanName = subscription.metadata?.plan_name || subscription.metadata?.plan || null;
+
+  // Use decomposeSubscriptionPlan as the canonical source — falls back to inline map
+  let plan;
+  try {
+    const decompResult = await base44.asServiceRole.functions.invoke('decomposeSubscriptionPlan', {
+      plan_name: metaPlanName || (planKey === 'vip_wellness' ? 'VIP Wellness' : 'Monthly Ritual'),
+    });
+    const d = decompResult?.data;
+    if (d?.products?.length > 0) {
+      plan = {
+        display_name: d.plan_name,
+        products: d.products.map(p => ({ name: p.product_name, qty: p.quantity })),
+        total_bottles_per_delivery: d.products.reduce((s, p) => s + p.quantity, 0),
+        deliveries: d.fulfillments_per_cycle || 4,
+      };
+      console.log(`[GEN-SUB-FULFILLMENTS] Using decomposeSubscriptionPlan result: ${d.plan_name} — ${d.items_summary}`);
+    } else {
+      throw new Error('decomposeSubscriptionPlan returned no products');
+    }
+  } catch (err) {
+    console.warn('[GEN-SUB-FULFILLMENTS] decomposeSubscriptionPlan failed, using fallback:', err.message);
+    plan = SUBSCRIPTION_PLANS_FALLBACK[planKey];
+  }
+
   const subscriptionId = subscription.id;
   const customerId = subscription.customer;
   const email = customer.email || 'unknown@stripe.local';

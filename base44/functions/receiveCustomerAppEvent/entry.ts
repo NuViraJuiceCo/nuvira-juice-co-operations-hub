@@ -116,6 +116,37 @@ Deno.serve(async (req) => {
         }, { status: 400 });
       }
 
+      // GUARDRAIL: Validate and auto-decompose products if CA sent only plan name
+      // Products must be per-weekly-fulfillment quantities, NOT total monthly quantities
+      if (!Array.isArray(data.products) || data.products.length === 0) {
+        if (data.plan_name || data.plan_id) {
+          console.log(`[RECEIVE-CUSTOMER-EVENT] No products in payload — auto-decomposing plan: ${data.plan_name}`);
+          try {
+            const decompResult = await base44.asServiceRole.functions.invoke('decomposeSubscriptionPlan', {
+              plan_name: data.plan_name || null,
+              plan_id: data.plan_id || null,
+            });
+            const d = decompResult?.data;
+            if (d?.products?.length > 0) {
+              data.products = d.products;
+              data.items_summary = d.items_summary;
+              data.fulfillment_cadence = d.fulfillment_cadence;
+              data.billing_cadence = d.billing_cadence;
+              console.log(`[RECEIVE-CUSTOMER-EVENT] Auto-decomposed: ${d.items_summary}`);
+            } else {
+              return Response.json({ error: 'Could not decompose subscription plan — no products resolved' }, { status: 400 });
+            }
+          } catch (decompErr) {
+            return Response.json({ error: `Decomposition failed: ${decompErr.message}` }, { status: 400 });
+          }
+        } else {
+          return Response.json({
+            error: 'Missing products array. Send decomposed per-fulfillment products (e.g. 1x Aura, 1x Oasis, 1x Re-Nu for Monthly Ritual) or include plan_name for auto-decomposition.',
+            status: 400
+          }, { status: 400 });
+        }
+      }
+
       // GUARDRAIL: Only process paid subscriptions
       const paymentStatus = data.payment_status || data.financial_status || '';
       if (paymentStatus !== 'paid') {
