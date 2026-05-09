@@ -28,6 +28,9 @@ const FULFILLMENT_STATUS = {
   CANCELLED: 'Cancelled',
 };
 
+// DELIVERY_STAGES: key = canonical DB status to save, label = what driver sees on button
+// EXCEPTION: 'Out For Delivery' button saves 'In Transit' (see handleMarkStage)
+// We keep key='Out For Delivery' as a sentinel to trigger the updateDriverDeliveryTask path
 const DELIVERY_STAGES = [
   { key: 'Packed', label: 'Packed' },
   { key: 'In Transit', label: 'In Transit' },
@@ -82,8 +85,10 @@ const DEPOT = "619 N Main St Unit 3, O'Fallon, MO 63366";
 const DEPOT_LAT = 38.6849;
 const DEPOT_LNG = -90.6639;
 
+const DONE_STATUSES_GLOBAL = new Set(['Completed', 'Unable To Deliver', 'Cancelled', 'completed', 'delivered', 'fulfilled', 'cancelled']);
+
 function buildFullRouteUrl(orders) {
-  const remaining = orders.filter(o => !['delivered', 'Delivered', 'fulfilled'].includes((o.status || '').toLowerCase()));
+  const remaining = orders.filter(o => !DONE_STATUSES_GLOBAL.has(o.status || ''));
   if (remaining.length === 0) return null;
 
   const formatAddress = (order) => {
@@ -303,8 +308,16 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
 
   const isDelivered = order.status === FULFILLMENT_STATUS.COMPLETED;
   const isUnableToDeliver = order.status === FULFILLMENT_STATUS.UNABLE_TO_DELIVER;
-  const currentStageIndex = DELIVERY_STAGES.findIndex(s => s.key === order.status);
-  const nextStage = currentStageIndex >= 0 ? DELIVERY_STAGES[currentStageIndex + 1] : DELIVERY_STAGES[0];
+  // Map DB canonical status to stage index
+  // 'In Transit' and 'Out For Delivery' both map to index 1 (In Transit stage done, show OFD next)
+  const statusToStageIndex = {
+    'Scheduled': -1,
+    'Packed': 0,
+    'In Transit': 1,
+    'Out For Delivery': 2, // also canonical for completed staging
+  };
+  const currentStageIndex = statusToStageIndex[order.status] !== undefined ? statusToStageIndex[order.status] : -1;
+  const nextStage = currentStageIndex < DELIVERY_STAGES.length - 1 ? DELIVERY_STAGES[currentStageIndex + 1] : null;
 
   const handleUnableSubmit = () => {
     onMarkUnableToDeliver(order, unableReason, unableNotes);
@@ -379,6 +392,16 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Customer</p>
                 <p className="text-xs">{order.customer_email}</p>
                 {order.contact_phone && <p className="text-xs font-semibold">{order.contact_phone}</p>}
+              </div>
+
+              {/* DEBUG: Visible raw status for live verification */}
+              <div className="bg-slate-100 border border-slate-300 rounded-lg p-2.5 space-y-1">
+                <p className="text-[9px] font-mono text-slate-700">
+                  <span className="font-bold">Task ID:</span> {order.id}
+                </p>
+                <p className="text-[9px] font-mono text-slate-700">
+                  <span className="font-bold">Status:</span> <span className="bg-yellow-200 px-1 rounded">{order.status || '(none)'}</span>
+                </p>
               </div>
 
               <div className="space-y-0.5">
@@ -695,6 +718,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
       return;
     }
     setUpdatingId(order.id);
+    console.log(`[DriverPortal] handleMarkDelivered: task_id=${order.id}, drop_location=${dropLocation}`);
     try {
       const res = await base44.functions.invoke('recordDriverDelivery', {
         task_id: order.id,
@@ -705,13 +729,14 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         timestamp: new Date().toISOString(),
       });
       if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Save failed');
+      console.log(`[DriverPortal] recordDriverDelivery succeeded:`, res.data);
       toast.success('✓ Delivery confirmed & saved');
       await new Promise(resolve => setTimeout(resolve, 500)); // brief pause for DB commit
-      loadQueue();
+      await loadQueue();
       setRouteData(null);
     } catch (err) {
+      console.error('[DriverPortal] Delivery save error:', err);
       toast.error('Failed to save delivery: ' + (err.message || 'Unknown error'));
-      console.error('Delivery save error:', err);
     } finally {
       setUpdatingId(null);
     }
@@ -763,17 +788,16 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
   const handleMarkStage = async (order, nextStage) => {
     setUpdatingId(order.id);
+    console.log(`[DriverPortal] handleMarkStage called: order_id=${order.id}, nextStage.key=${nextStage.key}, driver_email=${user?.email}`);
     try {
-      // Map stage key to the correct action
-      const actionMap = {
-        'Out For Delivery': 'mark_out_for_delivery',
-        'Packed': 'add_note',
-        'In Transit': 'add_note',
-      };
-      const action = actionMap[nextStage.key] || 'add_note';
-
-      if (action === 'mark_out_for_delivery') {
+      // CRITICAL: 'Out For Delivery' button saves canonical status='In Transit'
+      // Only 'Out For Delivery' button calls updateDriverDeliveryTask (which handles the mapping)
+      // Other stages (Packed, In Transit) save directly to their canonical status values
+      if (nextStage.key === 'Out For Delivery') {
+        // The 'Out For Delivery' button triggers updateDriverDeliveryTask
+        // which will map to canonical status 'In Transit' in the backend
         const taskId = order.fulfillment_task_id || order.id;
+        console.log(`[DriverPortal] Calling updateDriverDeliveryTask: task_id=${taskId}, action=mark_out_for_delivery`);
         const res = await base44.functions.invoke('updateDriverDeliveryTask', {
           task_id: taskId,
           action: 'mark_out_for_delivery',
@@ -781,15 +805,19 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           timestamp: new Date().toISOString(),
         });
         if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Task update failed');
+        console.log(`[DriverPortal] updateDriverDeliveryTask succeeded:`, res.data);
       } else {
-        // For Packed/In Transit — direct entity update with canonical status
-        await base44.entities.FulfillmentTask.update(order.id, { status: nextStage.key });
+        // For Packed/In Transit — direct entity update with the ACTUAL canonical status key
+        console.log(`[DriverPortal] Direct update: task_id=${order.id}, status=${nextStage.key}`);
+        const updateResult = await base44.entities.FulfillmentTask.update(order.id, { status: nextStage.key });
+        console.log(`[DriverPortal] Direct update succeeded:`, updateResult);
       }
       toast.success(`✓ Marked ${nextStage.label}`);
       await new Promise(resolve => setTimeout(resolve, 300));
-      loadQueue();
+      await loadQueue();
       setRouteData(null);
     } catch (err) {
+      console.error(`[DriverPortal] handleMarkStage error:`, err);
       toast.error('Update failed: ' + (err.message || 'Unknown error'));
     } finally {
       setUpdatingId(null);
@@ -822,17 +850,18 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     return task.scheduled_date || task.scheduled_delivery_date || task.delivery_date || task.assigned_delivery_date;
   };
 
+  // CANONICAL STATUSES: Completed, Unable To Deliver, Cancelled = done
+  // ACTIVE STATUSES: Scheduled, Packed, In Transit, Out For Delivery = show in route
+  const DONE_STATUSES = new Set(['Completed', 'Unable To Deliver', 'Cancelled', 'completed', 'delivered', 'fulfilled', 'cancelled']);
+
   // Determine if task is route-eligible (active, non-completed)
   const isRouteEligible = (task) => {
-    const s = task.status || '';
-    // All non-completed, non-cancelled statuses are route-eligible
-    return !['Completed', 'Unable To Deliver', 'Cancelled', 'completed', 'delivered', 'fulfilled', 'cancelled'].includes(s);
+    return !DONE_STATUSES.has(task.status || '');
   };
 
   // Determine if task is completed/done
   const isCompleted = (task) => {
-    const s = task.status || '';
-    return ['Completed', 'Unable To Deliver', 'Cancelled', 'completed', 'delivered', 'fulfilled'].includes(s);
+    return DONE_STATUSES.has(task.status || '');
   };
 
   // All deliveries are already scoped to the selected date by the resolver
@@ -1019,7 +1048,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           )}
           {(() => {
             const optimizedStops = (routeData?.optimized_orders || []).filter(o =>
-              !['delivered','completed','fulfilled','cancelled','canceled'].includes((o.status||'').toLowerCase())
+              !DONE_STATUSES_GLOBAL.has(o.status || '')
             );
             const url = buildFullRouteUrl(optimizedStops);
             const copyAddresses = () => {
