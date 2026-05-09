@@ -17,11 +17,21 @@ import DeliveryProductBreakdown from '@/components/driver/DeliveryProductBreakdo
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
+// Canonical FulfillmentTask status enum values (must match entities/FulfillmentTask.json)
+const FULFILLMENT_STATUS = {
+  SCHEDULED: 'Scheduled',
+  PACKED: 'Packed',
+  IN_TRANSIT: 'In Transit',
+  OUT_FOR_DELIVERY: 'Out For Delivery',
+  COMPLETED: 'Completed',
+  UNABLE_TO_DELIVER: 'Unable To Deliver',
+  CANCELLED: 'Cancelled',
+};
+
 const DELIVERY_STAGES = [
-  { key: 'bottled_packed', label: 'Packed' },
-  { key: 'out_for_delivery', label: 'Out for Delivery' },
-  { key: 'arriving_soon', label: 'Arriving Soon' },
-  { key: 'delivered', label: 'Delivered' },
+  { key: 'Packed', label: 'Packed' },
+  { key: 'In Transit', label: 'In Transit' },
+  { key: 'Out For Delivery', label: 'Out for Delivery' },
 ];
 
 const UNABLE_TO_DELIVER_REASONS = [
@@ -291,9 +301,10 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const proofFileRef = useRef(null);
 
-  const isDelivered = order.status === 'delivered';
+  const isDelivered = order.status === FULFILLMENT_STATUS.COMPLETED;
+  const isUnableToDeliver = order.status === FULFILLMENT_STATUS.UNABLE_TO_DELIVER;
   const currentStageIndex = DELIVERY_STAGES.findIndex(s => s.key === order.status);
-  const nextStage = DELIVERY_STAGES[currentStageIndex + 1];
+  const nextStage = currentStageIndex >= 0 ? DELIVERY_STAGES[currentStageIndex + 1] : DELIVERY_STAGES[0];
 
   const handleUnableSubmit = () => {
     onMarkUnableToDeliver(order, unableReason, unableNotes);
@@ -326,19 +337,20 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
       animate={{ opacity: 1, y: 0 }}
       className={`bg-card border rounded-2xl overflow-hidden ${
         isDelivered ? 'border-green-200 opacity-75'
+        : isUnableToDeliver ? 'border-red-200 opacity-75'
         : pendingReturn ? 'border-amber-300'
         : 'border-border/50'
       }`}
     >
       <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center gap-3 p-4 text-left active:bg-secondary/30 transition-colors">
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isDelivered ? 'bg-green-100 text-green-600' : 'bg-primary/10 text-primary'}`}>
-          {isDelivered ? <CheckCircle2 className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
+        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isDelivered ? 'bg-green-100 text-green-600' : isUnableToDeliver ? 'bg-red-100 text-red-600' : 'bg-primary/10 text-primary'}`}>
+          {isDelivered ? <CheckCircle2 className="w-4 h-4" /> : isUnableToDeliver ? <XCircle className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="text-sm font-semibold">#{order.order_number}</p>
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isDelivered ? 'bg-green-100 text-green-700' : 'bg-primary/10 text-primary'}`}>
-              {isDelivered ? 'Delivered ✓' : DELIVERY_STAGES.find(s => s.key === order.status)?.label || order.status}
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isDelivered ? 'bg-green-100 text-green-700' : isUnableToDeliver ? 'bg-red-100 text-red-700' : 'bg-primary/10 text-primary'}`}>
+              {isDelivered ? 'Delivered ✓' : isUnableToDeliver ? 'Unable to Deliver' : (order.status || 'Scheduled')}
             </span>
           </div>
           <p className="text-xs font-medium text-foreground mt-0.5">{order.customer_name || order.customer_email}</p>
@@ -412,14 +424,14 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                 Navigate to Stop
               </a>
 
-              {!isDelivered && (
+              {!isDelivered && !isUnableToDeliver && (
                 <>
                   {!showDeliverForm && !showUnableForm && (
                     <>
-                      {nextStage && nextStage.key !== 'delivered' && (
+                      {nextStage && (
                         <button onClick={() => onMarkStage(order, nextStage)} disabled={isUpdating}
-                          className="w-full py-2.5 border border-primary text-primary rounded-xl text-xs font-semibold active:scale-95 transition-transform">
-                          → Mark {nextStage.label}
+                          className="w-full py-2.5 border border-primary text-primary rounded-xl text-xs font-semibold active:scale-95 transition-transform disabled:opacity-50">
+                          {isUpdating ? 'Updating...' : `→ Mark ${nextStage.label}`}
                         </button>
                       )}
 
@@ -644,8 +656,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     // Include ALL non-completed stops for optimization — Scheduled AND ready-status stops.
     // FulfillmentTasks from Hub are commonly Scheduled until driver marks them out_for_delivery.
     const allTasksToOptimize = (deliveryScheduleItems || []).filter(d => {
-      const s = (d.status || '').toLowerCase();
-      return !['delivered', 'completed', 'fulfilled', 'cancelled', 'canceled'].includes(s);
+      return !isCompleted(d);
     });
     // Only optimize stops with a valid address
     const optimizableStops = allTasksToOptimize.filter(d => d.address_line1 || d.delivery_address);
@@ -753,8 +764,15 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const handleMarkStage = async (order, nextStage) => {
     setUpdatingId(order.id);
     try {
-      if (nextStage.key === 'out_for_delivery') {
-        // Use updateDriverDeliveryTask for proper FulfillmentTask persistence
+      // Map stage key to the correct action
+      const actionMap = {
+        'Out For Delivery': 'mark_out_for_delivery',
+        'Packed': 'add_note',
+        'In Transit': 'add_note',
+      };
+      const action = actionMap[nextStage.key] || 'add_note';
+
+      if (action === 'mark_out_for_delivery') {
         const taskId = order.fulfillment_task_id || order.id;
         const res = await base44.functions.invoke('updateDriverDeliveryTask', {
           task_id: taskId,
@@ -764,16 +782,13 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         });
         if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Task update failed');
       } else {
-        await base44.functions.invoke('safeSyncOrderUpdate', {
-          incomingData: { production_status: nextStage.key },
-          source: 'operations',
-          matchBy: { internal_id: order.id },
-        });
+        // For Packed/In Transit — direct entity update with canonical status
+        await base44.entities.FulfillmentTask.update(order.id, { status: nextStage.key });
       }
       toast.success(`✓ Marked ${nextStage.label}`);
-      await new Promise(resolve => setTimeout(resolve, 300)); // Brief pause for DB commit
-      loadQueue(); // Refresh task list after successful update
-      setRouteData(null); // Clear route data so it refreshes from latest task state
+      await new Promise(resolve => setTimeout(resolve, 300));
+      loadQueue();
+      setRouteData(null);
     } catch (err) {
       toast.error('Update failed: ' + (err.message || 'Unknown error'));
     } finally {
@@ -807,16 +822,17 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     return task.scheduled_date || task.scheduled_delivery_date || task.delivery_date || task.assigned_delivery_date;
   };
 
-  // Determine if task is route-eligible
+  // Determine if task is route-eligible (active, non-completed)
   const isRouteEligible = (task) => {
-    const routeEligibleStatuses = ['packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery', 'ready_for_route', 'out_for_delivery'];
-    return routeEligibleStatuses.includes((task.status || '').toLowerCase());
+    const s = task.status || '';
+    // All non-completed, non-cancelled statuses are route-eligible
+    return !['Completed', 'Unable To Deliver', 'Cancelled', 'completed', 'delivered', 'fulfilled', 'cancelled'].includes(s);
   };
 
-  // Determine if task is completed
+  // Determine if task is completed/done
   const isCompleted = (task) => {
-    const completedStatuses = ['completed', 'delivered', 'fulfilled'];
-    return completedStatuses.includes((task.status || '').toLowerCase());
+    const s = task.status || '';
+    return ['Completed', 'Unable To Deliver', 'Cancelled', 'completed', 'delivered', 'fulfilled'].includes(s);
   };
 
   // All deliveries are already scoped to the selected date by the resolver
@@ -930,17 +946,17 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         </div>
       )}
 
-      {allTasksForDate.filter(d => !['delivered','completed','fulfilled','cancelled','canceled'].includes((d.status||'').toLowerCase())).length > 0 && !routeData?.route_stats && (
+      {allTasksForDate.filter(d => !isCompleted(d)).length > 0 && !routeData?.route_stats && (
         <div className="px-4 mt-4 space-y-2">
           <button onClick={optimizeRoute} disabled={optimizing}
             className="w-full py-3.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
             {optimizing
               ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Optimizing...</>
-              : <><Route className="w-4 h-4" /> Optimize Route ({allTasksForDate.filter(d => !['delivered','completed','fulfilled','cancelled','canceled'].includes((d.status||'').toLowerCase())).length} stops)</>
+              : <><Route className="w-4 h-4" /> Optimize Route ({allTasksForDate.filter(d => !isCompleted(d)).length} stops)</>
             }
           </button>
           {(() => {
-            const nonCompleted = allTasksForDate.filter(d => !['delivered','completed','fulfilled','cancelled','canceled'].includes((d.status||'').toLowerCase()));
+            const nonCompleted = allTasksForDate.filter(d => !isCompleted(d));
             const url = buildFullRouteUrl(nonCompleted);
             const copyAddresses = () => {
               const addrs = nonCompleted.map((o, i) => `Stop ${i+1}: ${o.customer_name} — ${o.address_line1 || o.delivery_address}`).join('\n');
@@ -1049,12 +1065,12 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
               <div className="space-y-2">
                 <p className="text-xs font-bold uppercase tracking-wider text-primary px-1 flex items-center gap-1">
                   <Route className="w-3.5 h-3.5" />
-                  {routeData?.optimized_orders ? `Optimized Route (${routeData.optimized_orders.filter(o => !['delivered','completed','fulfilled','cancelled','canceled'].includes((o.status||'').toLowerCase())).length} stops)` : `Delivery Stops (${readyForRouteOrders.length + scheduledNotReadyOrders.length})`}
+                  {routeData?.optimized_orders ? `Optimized Route (${routeData.optimized_orders.filter(o => !isCompleted(o)).length} stops)` : `Delivery Stops (${readyForRouteOrders.length + scheduledNotReadyOrders.length})`}
                 </p>
                 {routeData?.optimized_orders ? (
                   // Show optimized route order with stop numbers
                   routeData.optimized_orders
-                    .filter(o => !['delivered', 'Delivered', 'fulfilled'].includes((o.status || '').toLowerCase()))
+                    .filter(o => !isCompleted(o))
                     .map((order, idx) => (
                       <div key={`${order.id}-${idx}`} className="relative">
                         <div className="absolute -left-4 top-4 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-bold text-xs">

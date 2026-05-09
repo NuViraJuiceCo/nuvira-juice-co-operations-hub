@@ -6,6 +6,14 @@
       "type": "string",
       "description": "Customer name"
     },
+    "customer_email": {
+      "type": "string",
+      "description": "Customer email address"
+    },
+    "customer_phone": {
+      "type": "string",
+      "description": "Customer phone number"
+    },
     "fulfillment_type": {
       "type": "string",
       "enum": [
@@ -20,6 +28,10 @@
       "type": "string",
       "description": "Delivery/pickup time window"
     },
+    "delivery_window_label": {
+      "type": "string",
+      "description": "Readable delivery window label (e.g., '5 PM \u2013 8 PM')"
+    },
     "status": {
       "type": "string",
       "enum": [
@@ -27,22 +39,54 @@
         "Scheduled",
         "Packed",
         "In Transit",
-        "Completed"
+        "Out For Delivery",
+        "Completed",
+        "Unable To Deliver",
+        "Cancelled"
       ],
       "description": "Fulfillment status"
     },
     "scheduled_date": {
       "type": "string",
       "format": "date",
-      "description": "Scheduled date"
+      "description": "Scheduled delivery date"
+    },
+    "production_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Derived production date (day before delivery)"
     },
     "address": {
       "type": "string",
       "description": "Delivery address"
     },
+    "delivery_address": {
+      "type": "string",
+      "description": "Delivery address (alternative field name)"
+    },
+    "address_line1": {
+      "type": "string",
+      "description": "Address line 1"
+    },
+    "address_line2": {
+      "type": "string",
+      "description": "Address line 2"
+    },
+    "address_city": {
+      "type": "string",
+      "description": "City"
+    },
+    "address_state": {
+      "type": "string",
+      "description": "State/Province"
+    },
+    "address_postal_code": {
+      "type": "string",
+      "description": "Postal code"
+    },
     "assigned_driver": {
       "type": "string",
-      "description": "Assigned delivery driver"
+      "description": "Assigned delivery driver name or email"
     },
     "items_summary": {
       "type": "string",
@@ -50,7 +94,90 @@
     },
     "order_id": {
       "type": "string",
-      "description": "Related order ID"
+      "description": "Related order ID or Stripe subscription ID"
+    },
+    "order_number": {
+      "type": "string",
+      "description": "Related order number"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "one_time_order",
+        "subscription_fulfillment",
+        "manual",
+        "order_derived"
+      ],
+      "description": "Source of this fulfillment task"
+    },
+    "stripe_subscription_id": {
+      "type": "string",
+      "description": "Stripe subscription ID for subscription fulfillments"
+    },
+    "customer_app_subscription_id": {
+      "type": "string",
+      "description": "Customer App subscription ID"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "paid",
+        "pending",
+        "failed",
+        "refunded",
+        "cancelled"
+      ],
+      "description": "Payment status for subscription fulfillments"
+    },
+    "fulfillment_number": {
+      "type": "number",
+      "description": "Subscription fulfillment cycle number (1, 2, 3, etc.)"
+    },
+    "plan_id": {
+      "type": "string",
+      "description": "Subscription plan ID"
+    },
+    "plan_name": {
+      "type": "string",
+      "description": "Subscription plan name"
+    },
+    "cadence": {
+      "type": "string",
+      "description": "Subscription cadence (weekly, biweekly, monthly, etc.)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "driver_notes": {
+      "type": "string",
+      "description": "Structured driver action audit log"
+    },
+    "delivered_at": {
+      "type": "string",
+      "description": "ISO timestamp when delivery was confirmed"
+    },
+    "delivery_photo_url": {
+      "type": "string",
+      "description": "URL of proof-of-delivery photo"
+    },
+    "delivery_drop_location": {
+      "type": "string",
+      "description": "Where the package was left (e.g. Front Door, Mailroom)"
+    },
+    "delivery_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "out_for_delivery",
+        "delivered",
+        "unable_to_deliver"
+      ],
+      "description": "Granular driver delivery status"
+    },
+    "schedule_source": {
+      "type": "string",
+      "description": "Source of schedule calculation (e.g. central_engine)"
     }
   },
   "required": [
