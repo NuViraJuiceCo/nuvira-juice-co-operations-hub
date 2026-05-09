@@ -2,18 +2,18 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
  * NuVira Production Scheduling Rules:
- * Orders placed before Friday midnight ship on the NEXT Friday.
- * Production happens 3 days before delivery:
- *   - Friday delivery → produce Tuesday
- *   - Saturday delivery → produce Wednesday
+ * Production/juicing days are TUESDAY and FRIDAY ONLY.
+ * We do NOT produce on Thursdays, Saturdays, or any other day.
  *
- * Simple rule used here:
- *   Find the next upcoming production day (Tue, Fri, Sat) from today.
- *   Orders with requested_delivery_date use that date's preceding production day.
- *   Orders without a delivery date use the next upcoming production day.
+ * Delivery → Production mapping:
+ *   Saturday delivery → Friday production (1 day prior)
+ *   Wednesday delivery → Tuesday production (1 day prior)
+ *
+ * General rule: find the nearest valid production day (Tue or Fri)
+ * that is STRICTLY BEFORE the delivery date (never same day).
  */
 
-const PRODUCTION_DAYS = [2, 5, 6]; // Tue=2, Fri=5, Sat=6 (0=Sun)
+const PRODUCTION_DAYS = [2, 5]; // Tue=2, Fri=5 — NuVira production days ONLY (no Saturday)
 
 const FIRST_PRODUCTION_DATE = '2026-05-01'; // First production date (May 1st)
 const FIRST_DELIVERY_DATE = '2026-05-02'; // Deliveries start May 2nd
@@ -45,15 +45,15 @@ function getNextProductionDate(fromDate) {
 
 /**
  * Map delivery date to production date using NuVira's schedule:
- *   Wednesday delivery → Tuesday production (1 day prior)
  *   Saturday delivery  → Friday production  (1 day prior)
- *   Sunday delivery    → Saturday production (1 day prior)
+ *   Wednesday delivery → Tuesday production (1 day prior)
  *
- * General rule: production is always 1 day before the delivery day,
- * snapping to the nearest valid PRODUCTION_DAY (Tue=2, Fri=5, Sat=6)
- * searching backwards up to 7 days.
+ * Searches STRICTLY backwards (starting at -1) for the nearest
+ * valid NuVira production day (Tue=2, Fri=5). Never uses the delivery
+ * date itself as the production date.
  *
  * CRITICAL: Do NOT use delivery date as production date.
+ * CRITICAL: Sat=6 is NOT a production day.
  */
 function getProductionDateForDelivery(deliveryDateStr) {
   const d = new Date(deliveryDateStr + 'T00:00:00');
@@ -576,12 +576,11 @@ Deno.serve(async (req) => {
         for (let fi = 0; fi < fulfillmentDates.length; fi++) {
           const fDate = fulfillmentDates[fi];
           // Production day → delivery day mapping:
-          // Tue (2) → Fri (5): +3 days
           // Fri (5) → Sat (6): +1 day
-          // Sat (6) → Sun (0): +1 day (next day)
+          // Tue (2) → Wed (3) OR Sat (6): use +1 for standard Wed delivery
           const prodDate = new Date(fDate + 'T00:00:00');
           const dayOfWeek = prodDate.getDay();
-          const daysToAdd = dayOfWeek === 5 ? 1 : (dayOfWeek === 6 ? 1 : 3);
+          const daysToAdd = dayOfWeek === 5 ? 1 : (dayOfWeek === 2 ? 1 : 1); // Fri→Sat, Tue→Wed
           const deliveryDate = new Date(prodDate);
           deliveryDate.setDate(deliveryDate.getDate() + daysToAdd);
 
@@ -621,7 +620,8 @@ Deno.serve(async (req) => {
           delivery_date: (() => {
             const d = new Date(productionDate + 'T00:00:00');
             const dayOfWeek = d.getDay();
-            const daysToAdd = dayOfWeek === 5 ? 1 : (dayOfWeek === 6 ? 1 : 3);
+            // Fri (5) → Sat (6): +1 day; Tue (2) → Wed (3): +1 day
+            const daysToAdd = 1;
             d.setDate(d.getDate() + daysToAdd);
             return d.toISOString().split('T')[0];
           })(),
