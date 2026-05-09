@@ -3,52 +3,74 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 /**
  * recordDriverDelivery
  *
- * Frontend-safe endpoint for drivers to confirm deliveries.
- * Internally calls updateDriverDeliveryTask with proper authentication.
+ * Marks a FulfillmentTask as delivered with photo proof.
+ * Authenticates user, updates task status, syncs to ShopifyOrder.
  */
-
-const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me().catch(() => null);
+    const user = await base44.auth.me();
     
     if (!user) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await req.json();
-    const { task_id, order_id, driver_email, driver_name, photo_url, drop_location, timestamp } = body;
+    const { task_id, driver_email, driver_name, photo_url, drop_location, timestamp } = body;
 
     if (!task_id) {
       return Response.json({ error: 'task_id required' }, { status: 400 });
     }
 
-    // Call updateDriverDeliveryTask with auth secret
-    const updateRes = await fetch(new URL(req.url).origin + '/functions/updateDriverDeliveryTask', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SYNC_SECRET}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        task_id,
-        action: 'mark_delivered',
-        driver_email: driver_email || user.email,
-        driver_name: driver_name || user.full_name,
-        photo_url,
-        timestamp: timestamp || new Date().toISOString(),
-      }),
-    });
+    const ts = timestamp || new Date().toISOString();
 
-    if (!updateRes.ok) {
-      const error = await updateRes.json();
-      return Response.json(error, { status: updateRes.status });
+    // Fetch task
+    const tasks = await base44.asServiceRole.entities.FulfillmentTask.filter({ id: task_id });
+    const task = tasks?.[0];
+
+    if (!task) {
+      return Response.json({ error: `FulfillmentTask not found: ${task_id}` }, { status: 404 });
     }
 
-    const result = await updateRes.json();
-    return Response.json({ status: 'success', ...result });
+    // Update FulfillmentTask
+    await base44.asServiceRole.entities.FulfillmentTask.update(task_id, {
+      status: 'Completed',
+      delivery_status: 'delivered',
+      delivered_at: ts,
+      delivery_photo_url: photo_url || null,
+      delivery_drop_location: drop_location || null,
+      driver_notes: `[DELIVERY CONFIRMED | ${ts}] driver: ${driver_email || user.email}${driver_name ? ` (${driver_name})` : ''}${drop_location ? ` | drop: ${drop_location}` : ''}`,
+    });
+
+    console.log(`[RECORD-DELIVERY] Task ${task_id} marked delivered by ${driver_email || user.email}`);
+
+    // Sync to ShopifyOrder if linked
+    if (task.order_id) {
+      try {
+        await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+          incomingData: {
+            fulfillment_status: 'fulfilled',
+            delivered_at: ts,
+            delivered_by: driver_name || driver_email || user.email,
+            delivery_photo_url: photo_url || null,
+            internal_notes: `[DELIVERY | ${ts}] driver: ${driver_email || user.email}`,
+          },
+          source: 'operations',
+          matchBy: { internal_id: task.order_id },
+        });
+      } catch (syncErr) {
+        console.warn(`[RECORD-DELIVERY] Order sync failed (non-fatal): ${syncErr.message}`);
+      }
+    }
+
+    return Response.json({
+      status: 'success',
+      task_id,
+      action: 'mark_delivered',
+      new_status: 'Completed',
+      timestamp: ts,
+    });
 
   } catch (error) {
     console.error('[RECORD-DELIVERY]', error.message);

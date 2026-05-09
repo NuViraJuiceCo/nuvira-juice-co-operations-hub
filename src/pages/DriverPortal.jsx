@@ -679,24 +679,28 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   }, [date]);
 
   const handleMarkDelivered = async (order, proofPhotoUrl, dropLocation) => {
+    if (!proofPhotoUrl) {
+      toast.error('Proof of delivery photo is required');
+      return;
+    }
     setUpdatingId(order.id);
     try {
-      // Call backend to handle delivery confirmation
       const res = await base44.functions.invoke('recordDriverDelivery', {
         task_id: order.id,
-        order_id: order.id,
         driver_email: user?.email,
         driver_name: user?.full_name || user?.email,
         photo_url: proofPhotoUrl,
         drop_location: dropLocation,
         timestamp: new Date().toISOString(),
       });
-      if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Delivery confirmation failed');
-      toast.success('Delivery confirmed');
+      if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Save failed');
+      toast.success('✓ Delivery confirmed & saved');
+      await new Promise(resolve => setTimeout(resolve, 500)); // brief pause for DB commit
       loadQueue();
       setRouteData(null);
     } catch (err) {
-      toast.error('Delivery confirmation failed: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to save delivery: ' + (err.message || 'Unknown error'));
+      console.error('Delivery save error:', err);
     } finally {
       setUpdatingId(null);
     }
