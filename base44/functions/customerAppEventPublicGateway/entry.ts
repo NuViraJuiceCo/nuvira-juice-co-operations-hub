@@ -262,12 +262,29 @@ Deno.serve(async (req) => {
       stripe_subscription_id,
     });
 
-    // QUARANTINE GUARD: If ANY order for this sub_id is refunded/quarantined/excluded,
-    // block all further ingestion — this subscription has been administratively retired.
+    // QUARANTINE GUARD: If ANY order for this sub_id carries ANY retirement signal,
+    // block all ingestion — create AND patch — unconditionally.
+    // Signals checked (any one is sufficient to block):
+    //   payment_status       : 'refunded'
+    //   production_status    : 'canceled' | 'cancelled'
+    //   fulfillment_status   : 'cancelled'
+    //   sync_status          : 'do_not_sync'
+    //   data_quality_status  : 'quarantined'
+    //   tags (any of)        : refunded, excluded, archived, do_not_sync,
+    //                          internal_test_owner_override,
+    //                          customer_confusion_duplicate_subscription
+    const BLOCKED_TAGS = new Set([
+      'refunded', 'excluded', 'archived', 'do_not_sync',
+      'internal_test_owner_override', 'customer_confusion_duplicate_subscription',
+    ]);
     const quarantinedOrder = (existingOrders || []).find(o =>
       o.data_quality_status === 'quarantined' ||
       o.payment_status === 'refunded' ||
-      (Array.isArray(o.tags) && (o.tags.includes('excluded') || o.tags.includes('refunded') || o.tags.includes('do_not_sync')))
+      o.production_status === 'canceled' ||
+      o.production_status === 'cancelled' ||
+      o.fulfillment_status === 'cancelled' ||
+      o.sync_status === 'do_not_sync' ||
+      (Array.isArray(o.tags) && o.tags.some(t => BLOCKED_TAGS.has(t)))
     );
     if (quarantinedOrder) {
       console.warn(`[CUSTOMER-APP-GATEWAY] ⛔ QUARANTINE BLOCK — sub ${stripe_subscription_id} is retired (order ${quarantinedOrder.id}, status=${quarantinedOrder.data_quality_status}). Rejecting ingestion.`);
