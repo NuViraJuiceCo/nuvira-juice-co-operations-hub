@@ -87,12 +87,17 @@ export default function Orders() {
 
   const CANCELED_STATUSES = ["canceled", "cancelled", "refunded"];
   const INACTIVE_PAYMENT_STATUSES = ["refunded", "canceled", "cancelled"];
+  const EXCLUDED_TAGS = ["test_order", "archived", "excluded", "duplicate", "do_not_sync", "not_for_production", "internal_test_owner_override"];
+  const INACTIVE_FULFILLMENT_STATUSES = ["cancelled", "canceled", "completed", "archived"];
 
   const isActiveOrder = (o) => {
     if (CANCELED_STATUSES.includes(o.production_status)) return false;
     if (INACTIVE_PAYMENT_STATUSES.includes(o.payment_status)) return false;
-    if (o.do_not_recover === true) return false;
+    if (INACTIVE_FULFILLMENT_STATUSES.includes(o.fulfillment_status)) return false;
+    if (o.sync_status === "do_not_sync") return false;
     if (o.data_quality_status === "quarantined") return false;
+    if (o.do_not_recover === true) return false;
+    if (Array.isArray(o.tags) && o.tags.some(t => EXCLUDED_TAGS.includes(t))) return false;
     return true;
   };
 
@@ -166,15 +171,24 @@ export default function Orders() {
   };
 
   const handleArchive = async (order) => {
-    if (!window.confirm(`Archive order ${order.shopify_order_number}? This sets it to canceled and logs the action. It will NOT be hard-deleted.`)) return;
+    if (!window.confirm(`Archive order ${order.shopify_order_number}? This sets it to canceled/excluded and logs the action. It will NOT be hard-deleted.`)) return;
     setDeleting(order.id);
+    const now = new Date().toISOString();
+    const archiveData = {
+      production_status: 'canceled',
+      fulfillment_status: 'cancelled',
+      sync_status: 'do_not_sync',
+      data_quality_status: 'quarantined',
+      manual_override: true,
+      manual_override_at: now,
+      manual_override_by: 'admin-ui',
+      tags: [...new Set([...(order.tags || []), 'archived', 'excluded', 'do_not_sync'])],
+      internal_notes: (order.internal_notes ? order.internal_notes + '\n' : '') + `[Archived by admin on ${now}]`,
+    };
     try {
-      await base44.entities.ShopifyOrder.update(order.id, {
-        production_status: 'canceled',
-        internal_notes: (order.internal_notes ? order.internal_notes + '\n' : '') + `[Archived by admin on ${new Date().toISOString()}]`,
-      });
+      await base44.entities.ShopifyOrder.update(order.id, archiveData);
       await base44.entities.RepairAuditLog.create({
-        timestamp: new Date().toISOString(),
+        timestamp: now,
         executed_by: 'admin-ui',
         repair_function: 'cleanupOrphanedAndDuplicateRecords',
         action: 'cleanup',
@@ -182,24 +196,33 @@ export default function Orders() {
         reason: `Admin archived order ${order.shopify_order_number} from Orders UI`,
         changes: { order_id: order.id, order_number: order.shopify_order_number, previous_status: order.production_status, new_status: 'canceled' },
       });
-      setOrders(orders.map(o => o.id === order.id ? { ...o, production_status: 'canceled' } : o));
+      setOrders(orders.map(o => o.id === order.id ? { ...o, ...archiveData } : o));
     } finally {
       setDeleting(null);
     }
   };
 
   const handleBulkArchive = async () => {
-    if (!window.confirm(`Archive ${selected.size} order(s)? They will be set to canceled with an audit log entry. No hard deletes.`)) return;
+    if (!window.confirm(`Archive ${selected.size} order(s)? They will be set to canceled/excluded with an audit log entry. No hard deletes.`)) return;
     setDeleting(true);
+    const now = new Date().toISOString();
     try {
       const selectedOrders = orders.filter(o => selected.has(o.id));
       await Promise.all(selectedOrders.map(async (order) => {
-        await base44.entities.ShopifyOrder.update(order.id, {
+        const archiveData = {
           production_status: 'canceled',
-          internal_notes: (order.internal_notes ? order.internal_notes + '\n' : '') + `[Bulk archived by admin on ${new Date().toISOString()}]`,
-        });
+          fulfillment_status: 'cancelled',
+          sync_status: 'do_not_sync',
+          data_quality_status: 'quarantined',
+          manual_override: true,
+          manual_override_at: now,
+          manual_override_by: 'admin-ui',
+          tags: [...new Set([...(order.tags || []), 'archived', 'excluded', 'do_not_sync'])],
+          internal_notes: (order.internal_notes ? order.internal_notes + '\n' : '') + `[Bulk archived by admin on ${now}]`,
+        };
+        await base44.entities.ShopifyOrder.update(order.id, archiveData);
         await base44.entities.RepairAuditLog.create({
-          timestamp: new Date().toISOString(),
+          timestamp: now,
           executed_by: 'admin-ui',
           repair_function: 'cleanupOrphanedAndDuplicateRecords',
           action: 'cleanup',
@@ -208,7 +231,7 @@ export default function Orders() {
           changes: { order_id: order.id, order_number: order.shopify_order_number, previous_status: order.production_status, new_status: 'canceled' },
         });
       }));
-      setOrders(orders.map(o => selected.has(o.id) ? { ...o, production_status: 'canceled' } : o));
+      setOrders(orders.map(o => selected.has(o.id) ? { ...o, production_status: 'canceled', sync_status: 'do_not_sync', data_quality_status: 'quarantined' } : o));
       setSelected(new Set());
     } finally {
       setDeleting(false);
