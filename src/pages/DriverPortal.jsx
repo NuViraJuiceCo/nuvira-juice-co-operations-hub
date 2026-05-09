@@ -770,13 +770,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           matchBy: { internal_id: order.id },
         });
       }
-      if (routeData?.optimized_orders) {
-        const updated = routeData.optimized_orders.map(o =>
-          o.id === order.id ? { ...o, status: nextStage.key } : o
-        );
-        setRouteData({ ...routeData, optimized_orders: updated });
-      }
-      toast.success(`Marked ${nextStage.label}`);
+      toast.success(`✓ Marked ${nextStage.label}`);
+      await new Promise(resolve => setTimeout(resolve, 300)); // Brief pause for DB commit
+      loadQueue(); // Refresh task list after successful update
+      setRouteData(null); // Clear route data so it refreshes from latest task state
     } catch (err) {
       toast.error('Update failed: ' + (err.message || 'Unknown error'));
     } finally {
