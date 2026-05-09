@@ -479,6 +479,31 @@ Deno.serve(async (req) => {
         return Response.json({ status: 'rejected', reason: 'validation_failed', errors }, { status: 400 });
       }
 
+      // Resolve delivery/production dates from multiple possible field names
+      const resolvedDeliveryDate = orderData.assigned_delivery_date || orderData.selected_delivery_date || orderData.delivery_date || null;
+      const resolvedProductionDate = orderData.production_date || null;
+
+      // Build fulfillments array so production_date is available to FulfillmentTask auto-create
+      // and to recalculateProductionBatches. Items are decomposed items if provided, else line_items.
+      const resolvedFulfillmentItems = (orderData.fulfillment_items && orderData.fulfillment_items.length > 0)
+        ? orderData.fulfillment_items
+        : resolvedLineItems.map(i => ({ title: i.title || i.product_name, quantity: i.quantity, price: i.price || 0 }));
+
+      const incomingFulfillments = (resolvedDeliveryDate && resolvedProductionDate) ? [{
+        fulfillment_number: 1,
+        production_date: resolvedProductionDate,
+        delivery_date: resolvedDeliveryDate,
+        items: resolvedFulfillmentItems,
+        status: 'pending',
+        address_line1: orderData.address_line1 || '',
+        address_line2: orderData.address_line2 || '',
+        address_city: orderData.address_city || '',
+        address_state: orderData.address_state || '',
+        address_postal_code: orderData.address_postal_code || '',
+        address_country: orderData.address_country || 'US',
+        delivery_notes: orderData.delivery_notes || '',
+      }] : [];
+
       const incomingData = {
         shopify_order_number: orderData.order_number,
         customer_name: orderData.customer_name || '',
@@ -499,10 +524,18 @@ Deno.serve(async (req) => {
         order_type: 'one_time',
         delivery_notes: orderData.delivery_notes || '',
         customer_notes: orderData.customer_notes || '',
-        requested_delivery_date: orderData.requested_delivery_date || orderData.assigned_delivery_date || '',
-        selected_delivery_date: orderData.selected_delivery_date || orderData.assigned_delivery_date || null,
-        assigned_delivery_date: orderData.assigned_delivery_date || orderData.selected_delivery_date || null,
-        delivery_window_label: orderData.delivery_window_label || '5 PM – 8 PM',
+        requested_delivery_date: orderData.requested_delivery_date || resolvedDeliveryDate || '',
+        selected_delivery_date: orderData.selected_delivery_date || resolvedDeliveryDate || null,
+        assigned_delivery_date: resolvedDeliveryDate,
+        delivery_window_label: orderData.delivery_window_label || '5:00 PM – 8:00 PM',
+        // ── Phase 5 schedule fields ──────────────────────────────────────
+        production_date: resolvedProductionDate,
+        schedule_source: orderData.final_schedule_source || orderData.schedule_source || null,
+        schedule_reason: orderData.schedule_reason || null,
+        schedule_timezone: orderData.schedule_timezone || null,
+        cutoff_window_label: orderData.cutoff_window_label || null,
+        // ── Fulfillments array (ensures production_date available for auto-task) ──
+        ...(incomingFulfillments.length > 0 ? { fulfillments: incomingFulfillments } : {}),
         stripe_checkout_session_id: orderData.stripe_checkout_session_id || null,
         stripe_payment_intent_id: orderData.stripe_payment_intent_id || null,
         stripe_customer_id: orderData.stripe_customer_id || null,
