@@ -4,12 +4,11 @@
  * Handles customer.subscription_created events from Customer App.
  * Creates/dedupes Hub operational orders and 4 FulfillmentTasks per monthly cycle.
  *
- * NEW: Accepts explicit fulfillments[] array with 4 scheduled dates per monthly billing cycle.
- * Per-fulfillment quantities (NOT monthly totals).
- *
  * Auth:
  *   - External HTTP: Authorization: Bearer CUSTOMER_APP_SYNC_SECRET
- *   - Internal SDK: INTERNAL_FUNCTION_SECRET via _internalSecret field
+ *   - Internal SDK: long JWT token (>100 chars) with optional _internalSecret
+ *
+ * All 403/401 responses include a structured reason_code body for CA retry diagnostics.
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
@@ -31,37 +30,80 @@ Deno.serve(async (req) => {
     try {
       body = await req.json();
     } catch {
-      return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+      return Response.json({ error: 'Invalid JSON', reason_code: 'INVALID_JSON' }, { status: 400 });
     }
 
     const { event, _internalSecret } = body;
     const data = body.data || body;
     const customer_email = body.customer_email || data.customer_email;
+    const stripe_subscription_id = body.stripe_subscription_id || data.stripe_subscription_id;
 
-    console.log('[CUSTOMER-APP-GATEWAY] Event:', event);
-    console.log('[CUSTOMER-APP-GATEWAY] Customer Email:', customer_email);
-
-    // ───────────────────────────────────────────────────────────────────────────
-    // AUTH
-    // ───────────────────────────────────────────────────────────────────────────
+    // ── Sanitized diagnostic logging (no secrets) ──────────────────────────────
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-    const isSDKToken = token.length > 100;
+    const hasAuthorizationHeader = !!authHeader;
+    const tokenLength = token.length;
+    const isSDKToken = tokenLength > 100;
+    const isExternalBearer = !isSDKToken && token.length > 0;
+    const hasInternalSecret = !!_internalSecret;
 
+    console.log('[CUSTOMER-APP-GATEWAY] DIAGNOSTIC:', JSON.stringify({
+      event,
+      hasAuthorizationHeader,
+      tokenLength,
+      isSDKToken,
+      isExternalBearer,
+      hasInternalSecret,
+      customer_email: customer_email || null,
+      stripe_subscription_id: stripe_subscription_id || null,
+      hasData: !!body.data,
+      hasFulfillments: Array.isArray(data?.fulfillments),
+      fulfillmentCount: Array.isArray(data?.fulfillments) ? data.fulfillments.length : 0,
+      payloadShape: Object.keys(body).join(','),
+    }));
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // AUTH — structured 403 with reason_code for CA retry diagnostics
+    // ───────────────────────────────────────────────────────────────────────────
     let isAuthenticated = false;
+    let authResult = 'FAILED';
 
-    if (isSDKToken && _internalSecret === INTERNAL_SECRET) {
+    if (!hasAuthorizationHeader) {
+      authResult = 'MISSING_AUTH';
+    } else if (isSDKToken && _internalSecret === INTERNAL_SECRET) {
       isAuthenticated = true;
-      console.log('[CUSTOMER-APP-GATEWAY] ✅ AUTH: Internal call with secret');
+      authResult = 'INTERNAL_SECRET';
     } else if (isSDKToken) {
       isAuthenticated = true;
-      console.log('[CUSTOMER-APP-GATEWAY] ✅ AUTH: Internal SDK call');
+      authResult = 'INTERNAL_SDK';
     } else if (token === SYNC_SECRET) {
       isAuthenticated = true;
-      console.log('[CUSTOMER-APP-GATEWAY] ✅ AUTH: External HTTP with Bearer');
+      authResult = 'EXTERNAL_BEARER';
+    } else if (!isSDKToken && !isExternalBearer) {
+      authResult = 'MISSING_AUTH';
+    } else if (isExternalBearer && token !== SYNC_SECRET) {
+      authResult = 'INVALID_TOKEN';
     } else {
-      console.error('[CUSTOMER-APP-GATEWAY] ❌ AUTH FAILED');
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      authResult = 'INTERNAL_AUTH_FAILURE';
+    }
+
+    console.log('[CUSTOMER-APP-GATEWAY] AUTH RESULT:', authResult, isAuthenticated ? '✅' : '❌');
+
+    if (!isAuthenticated) {
+      const reason_code = authResult; // MISSING_AUTH | INVALID_TOKEN | INTERNAL_AUTH_FAILURE
+      console.error(`[CUSTOMER-APP-GATEWAY] ❌ AUTH FAILED — reason_code: ${reason_code} | tokenLength: ${tokenLength} | isSDKToken: ${isSDKToken} | isExternalBearer: ${isExternalBearer}`);
+      return Response.json({
+        status: 'error',
+        reason_code,
+        message: reason_code === 'MISSING_AUTH'
+          ? 'Authorization header is missing. Send: Authorization: Bearer <CUSTOMER_APP_SYNC_SECRET>'
+          : reason_code === 'INVALID_TOKEN'
+          ? 'Authorization token does not match the expected CUSTOMER_APP_SYNC_SECRET. Verify the secret is correct and not expired.'
+          : 'Authentication failed due to an internal error. Check token format and retry.',
+        event_received: event || null,
+        stripe_subscription_id: stripe_subscription_id || null,
+        hint: 'Use Authorization: Bearer <CUSTOMER_APP_SYNC_SECRET> for external HTTP calls.',
+      }, { status: 403 });
     }
 
     // ───────────────────────────────────────────────────────────────────────────
@@ -74,17 +116,20 @@ Deno.serve(async (req) => {
     // Validate required fields
     const missingFields = [];
     if (!customer_email) missingFields.push('customer_email');
-    if (!data.stripe_subscription_id) missingFields.push('stripe_subscription_id');
-    // first_delivery_date OR fulfillments[] required
+    if (!stripe_subscription_id) missingFields.push('stripe_subscription_id');
     const hasDeliveryDates = data.first_delivery_date || (Array.isArray(data.fulfillments) && data.fulfillments.length > 0);
     if (!hasDeliveryDates) missingFields.push('first_delivery_date or fulfillments[]');
 
     if (missingFields.length > 0) {
       console.error('[CUSTOMER-APP-GATEWAY] ❌ VALIDATION FAILED - Missing:', missingFields);
       return Response.json({
-        error: 'Missing required fields',
+        status: 'error',
+        reason_code: 'PAYLOAD_REJECTED',
+        message: `Missing required fields: ${missingFields.join(', ')}`,
         missing_fields: missingFields,
-        hint: 'Required: customer_email, stripe_subscription_id, (first_delivery_date OR fulfillments[] array). Optional: products, address_*, payment_status'
+        event_received: event,
+        stripe_subscription_id: stripe_subscription_id || null,
+        hint: 'Required: customer_email, stripe_subscription_id, (first_delivery_date OR fulfillments[])',
       }, { status: 400 });
     }
 
@@ -94,7 +139,9 @@ Deno.serve(async (req) => {
       console.warn('[CUSTOMER-APP-GATEWAY] ⚠ NOT YET PAID - payment_status:', paymentStatus || 'MISSING');
       return Response.json({
         status: 'acknowledged',
+        reason_code: 'NOT_YET_PAID',
         event,
+        stripe_subscription_id,
         note: `Not yet paid (payment_status=${paymentStatus || 'missing'})`,
       });
     }
@@ -102,19 +149,16 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
 
     // ───────────────────────────────────────────────────────────────────────────
-    // BUILD FULFILLMENTS ARRAY (4 per monthly cycle OR use explicit array)
+    // BUILD FULFILLMENTS ARRAY
     // ───────────────────────────────────────────────────────────────────────────
     let fulfillmentsToCreate = [];
 
     if (Array.isArray(data.fulfillments) && data.fulfillments.length > 0) {
-      // Customer App sent explicit fulfillments (e.g., 4 for monthly)
       fulfillmentsToCreate = data.fulfillments;
       console.log(`[CUSTOMER-APP-GATEWAY] Accepting ${fulfillmentsToCreate.length} explicit fulfillments from CA`);
     } else if (data.first_delivery_date) {
-      // Legacy: single fulfillment — construct 1 default
-      console.log(`[CUSTOMER-APP-GATEWAY] ⚠ Single fulfillment only (legacy) — consider sending all 4 via fulfillments[]`);
+      console.log(`[CUSTOMER-APP-GATEWAY] ⚠ Single fulfillment only (legacy)`);
 
-      // Get products for the fulfillment items
       let fulfillmentItems = Array.isArray(data.products) && data.products.length > 0
         ? data.products
         : [];
@@ -134,25 +178,35 @@ Deno.serve(async (req) => {
           } else {
             console.error('[CUSTOMER-APP-GATEWAY] ❌ Decomposition returned no products');
             return Response.json({
-              error: 'Could not decompose subscription plan',
-              plan_name: data.plan_name,
-              hint: 'Send fulfillments[] directly with product_name and quantity'
+              status: 'error',
+              reason_code: 'PAYLOAD_REJECTED',
+              message: 'Could not decompose subscription plan — no products returned.',
+              event_received: event,
+              stripe_subscription_id,
+              hint: 'Send fulfillments[] directly with product_name and quantity',
             }, { status: 400 });
           }
         } catch (decompErr) {
           console.error('[CUSTOMER-APP-GATEWAY] ❌ Decomposition error:', decompErr.message);
           return Response.json({
-            error: 'Plan decomposition failed',
-            detail: decompErr.message,
-            hint: 'Send fulfillments[] array directly'
+            status: 'error',
+            reason_code: 'PAYLOAD_REJECTED',
+            message: `Plan decomposition failed: ${decompErr.message}`,
+            event_received: event,
+            stripe_subscription_id,
+            hint: 'Send fulfillments[] array directly',
           }, { status: 400 });
         }
       }
 
       if (fulfillmentItems.length === 0) {
         return Response.json({
-          error: 'No products provided',
-          hint: 'Send fulfillments[] array with products, or provide plan_name for auto-decomposition'
+          status: 'error',
+          reason_code: 'PAYLOAD_REJECTED',
+          message: 'No products provided and plan decomposition not possible.',
+          event_received: event,
+          stripe_subscription_id,
+          hint: 'Send fulfillments[] array with products, or provide plan_name for auto-decomposition',
         }, { status: 400 });
       }
 
@@ -174,7 +228,6 @@ Deno.serve(async (req) => {
       }
 
       const itemsSummary = fulfillmentItems.map(i => `${i.quantity}x ${i.product_name}`).join(', ');
-
       fulfillmentsToCreate = [{
         fulfillment_number: 1,
         scheduled_date: data.first_delivery_date,
@@ -187,14 +240,17 @@ Deno.serve(async (req) => {
 
     if (fulfillmentsToCreate.length === 0) {
       return Response.json({
-        error: 'No fulfillments provided',
-        hint: 'Send fulfillments[] array with fulfillment_number, scheduled_date, production_date, products'
+        status: 'error',
+        reason_code: 'PAYLOAD_REJECTED',
+        message: 'No fulfillments could be constructed from the payload.',
+        event_received: event,
+        stripe_subscription_id,
+        hint: 'Send fulfillments[] array with fulfillment_number, scheduled_date, production_date, products',
       }, { status: 400 });
     }
 
     console.log(`[CUSTOMER-APP-GATEWAY] Processing ${fulfillmentsToCreate.length} fulfillments`);
 
-    // Build line_items for order (for historical compat — NOT per-fulfillment)
     const lineItems = fulfillmentsToCreate.flatMap(f =>
       f.products ? f.products.map(p => ({ title: p.product_name, quantity: p.quantity, price: 0 })) : []
     );
@@ -203,7 +259,7 @@ Deno.serve(async (req) => {
     // CREATE/DEDUPE OPERATIONAL ORDER
     // ───────────────────────────────────────────────────────────────────────────
     const existingOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({
-      stripe_subscription_id: data.stripe_subscription_id,
+      stripe_subscription_id,
     });
 
     const activeExisting = (existingOrders || []).filter(o =>
@@ -218,7 +274,6 @@ Deno.serve(async (req) => {
       operationalOrderId = activeExisting[0].id;
       console.log(`[CUSTOMER-APP-GATEWAY] Deduped: reusing order ${operationalOrderId}`);
 
-      // Patch fulfillments array with all 4 fulfillments
       const newFulfillments = fulfillmentsToCreate.map(f => ({
         fulfillment_number: f.fulfillment_number,
         production_date: f.production_date,
@@ -239,7 +294,6 @@ Deno.serve(async (req) => {
       if (lineItems.length > 0 && (!activeExisting[0].line_items || activeExisting[0].line_items.length === 0)) {
         patch.line_items = lineItems;
       }
-
       if (data.customer_app_subscription_id && !activeExisting[0].customer_app_subscription_id) {
         patch.customer_app_subscription_id = data.customer_app_subscription_id;
       }
@@ -249,7 +303,6 @@ Deno.serve(async (req) => {
         console.log(`[CUSTOMER-APP-GATEWAY] Patched order with ${fulfillmentsToCreate.length} fulfillments`);
       }
     } else {
-      // Create new operational order with all fulfillments
       const fulfillmentsArray = fulfillmentsToCreate.map(f => ({
         fulfillment_number: f.fulfillment_number,
         production_date: f.production_date,
@@ -266,8 +319,8 @@ Deno.serve(async (req) => {
       }));
 
       const createdOrder = await base44.asServiceRole.entities.ShopifyOrder.create({
-        shopify_order_id: `sub_operational_${data.stripe_subscription_id}`,
-        shopify_order_number: `#SUB-${data.stripe_subscription_id.slice(-10)}`,
+        shopify_order_id: `sub_operational_${stripe_subscription_id}`,
+        shopify_order_number: `#SUB-${stripe_subscription_id.slice(-10)}`,
         order_type: 'subscription',
         source_type: 'subscription_fulfillment',
         source_channel: 'subscription',
@@ -288,14 +341,14 @@ Deno.serve(async (req) => {
         address_postal_code: data.address_postal_code || '',
         address_country: data.address_country || 'US',
         delivery_notes: data.delivery_notes || '',
-        customer_notes: `Subscription: ${data.stripe_subscription_id} | Plan: ${data.plan_name || 'N/A'} | ${fulfillmentsToCreate.length} fulfillments`,
+        customer_notes: `Subscription: ${stripe_subscription_id} | Plan: ${data.plan_name || 'N/A'} | ${fulfillmentsToCreate.length} fulfillments`,
         line_items: lineItems,
         fulfillments: fulfillmentsArray,
         assigned_delivery_date: fulfillmentsToCreate[0]?.scheduled_date || null,
         delivery_window_label: data.delivery_window_label || '5 PM – 8 PM',
         total_price: 0,
         subtotal: 0,
-        stripe_subscription_id: data.stripe_subscription_id,
+        stripe_subscription_id,
         customer_app_subscription_id: data.customer_app_subscription_id || null,
         customer_order_date: new Date().toISOString(),
       });
@@ -305,7 +358,7 @@ Deno.serve(async (req) => {
     }
 
     // ───────────────────────────────────────────────────────────────────────────
-    // CREATE/DEDUPE FULFILLMENT TASKS (one per fulfillment)
+    // CREATE/DEDUPE FULFILLMENT TASKS
     // ───────────────────────────────────────────────────────────────────────────
     const createdTaskIds = [];
     const deDupedTaskIds = [];
@@ -315,27 +368,24 @@ Deno.serve(async (req) => {
       const schedDate = fulfillment.scheduled_date;
       const itemsSummary = (fulfillment.products || []).map(p => `${p.quantity}x ${p.product_name}`).join(', ');
 
-      // Dedupe key: stripe_subscription_id + customer_app_subscription_id + fulfillment_number + scheduled_date
       const existingTasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
-        stripe_subscription_id: data.stripe_subscription_id,
+        stripe_subscription_id,
         customer_app_subscription_id: data.customer_app_subscription_id,
       });
 
-      let matchingTask = (existingTasks || []).find(t =>
+      const matchingTask = (existingTasks || []).find(t =>
         t.fulfillment_number === fulfNum &&
         t.scheduled_date === schedDate &&
         !(t.notes && t.notes.includes('RETIRED'))
       );
 
       if (matchingTask) {
-        // Patch if blank items_summary
         if (!matchingTask.items_summary && itemsSummary) {
           await base44.asServiceRole.entities.FulfillmentTask.update(matchingTask.id, { items_summary: itemsSummary });
         }
         deDupedTaskIds.push(matchingTask.id);
         console.log(`[CUSTOMER-APP-GATEWAY] Deduped FT #${fulfNum}: ${matchingTask.id}`);
       } else {
-        // Create new task
         const newTask = await base44.asServiceRole.entities.FulfillmentTask.create({
           customer_name: data.customer_name || '',
           customer_email,
@@ -352,12 +402,12 @@ Deno.serve(async (req) => {
           items_summary: itemsSummary,
           order_id: operationalOrderId,
           source_type: 'subscription_fulfillment',
-          stripe_subscription_id: data.stripe_subscription_id,
+          stripe_subscription_id,
           customer_app_subscription_id: data.customer_app_subscription_id || null,
           payment_status: 'paid',
           fulfillment_number: fulfNum,
           plan_name: data.plan_name || null,
-          notes: `Subscription: ${data.stripe_subscription_id} | Fulfillment #${fulfNum}/${fulfillmentsToCreate.length}`,
+          notes: `Subscription: ${stripe_subscription_id} | Fulfillment #${fulfNum}/${fulfillmentsToCreate.length}`,
         });
 
         createdTaskIds.push(newTask.id);
@@ -376,12 +426,16 @@ Deno.serve(async (req) => {
       fulfillment_tasks_created: createdTaskIds,
       fulfillment_tasks_deduped: deDupedTaskIds,
       customer_email,
-      stripe_subscription_id: data.stripe_subscription_id,
+      stripe_subscription_id,
       note: `${fulfillmentsToCreate.length} fulfillments processed. Run recalculateProductionBatches to generate demand.`,
     }, { status: 200 });
 
   } catch (error) {
     console.error('[CUSTOMER-APP-GATEWAY] ERROR:', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({
+      status: 'error',
+      reason_code: 'INTERNAL_ERROR',
+      message: error.message,
+    }, { status: 500 });
   }
 });
