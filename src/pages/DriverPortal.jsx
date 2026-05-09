@@ -682,9 +682,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     setUpdatingId(order.id);
     try {
       // Prefer updateDriverDeliveryTask (updates FulfillmentTask + ShopifyOrder via operations source)
-      if (order.fulfillment_task_id) {
+      const taskId = order.fulfillment_task_id || order.id;
+      if (taskId) {
         const res = await base44.functions.invoke('updateDriverDeliveryTask', {
-          task_id: order.fulfillment_task_id,
+          task_id: taskId,
           action: 'mark_delivered',
           driver_email: user?.email,
           driver_name: user?.full_name || user?.email,
@@ -716,9 +717,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const handleMarkUnableToDeliver = async (order, reason, notes) => {
     setUpdatingId(order.id);
     try {
-      if (order.fulfillment_task_id) {
+      const taskId = order.fulfillment_task_id || order.id;
+      if (taskId) {
         const res = await base44.functions.invoke('updateDriverDeliveryTask', {
-          task_id: order.fulfillment_task_id,
+          task_id: taskId,
           action: 'mark_unable_to_deliver',
           driver_email: user?.email,
           failure_reason: reason,
@@ -759,10 +761,11 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const handleMarkStage = async (order, nextStage) => {
     setUpdatingId(order.id);
     try {
-      if (nextStage.key === 'out_for_delivery' && order.fulfillment_task_id) {
+      if (nextStage.key === 'out_for_delivery') {
         // Use updateDriverDeliveryTask for proper FulfillmentTask persistence
+        const taskId = order.fulfillment_task_id || order.id;
         const res = await base44.functions.invoke('updateDriverDeliveryTask', {
-          task_id: order.fulfillment_task_id,
+          task_id: taskId,
           action: 'mark_out_for_delivery',
           driver_email: user?.email,
           timestamp: new Date().toISOString(),
