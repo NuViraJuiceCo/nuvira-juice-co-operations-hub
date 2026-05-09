@@ -551,12 +551,91 @@ Deno.serve(async (req) => {
       console.log('[RECEIVE-CUSTOMER-EVENT] safeSyncOrderUpdate result:', { status: safeStatus, action, order_id });
 
       if (safeStatus === 'success') {
+        // ── CREATE FULFILLMENT TASK FOR ONE-TIME ORDERS ──────────────────────
+        // After ShopifyOrder is created, immediately create a FulfillmentTask so
+        // the delivery appears in Driver Portal. Prevents the gap seen in NV-MOYUAVYB.
+        let taskCreated = false;
+        if (order_id) {
+          try {
+            // Fetch the newly created order to get all schedule details
+            const createdOrder = await base44.asServiceRole.entities.ShopifyOrder.filter({ id: order_id });
+            const order = createdOrder?.[0];
+            if (order && order.order_type === 'one_time' && !order.stripe_subscription_id) {
+              // Resolve delivery date priority: assigned_delivery_date > selected_delivery_date > fulfillments[0].delivery_date
+              const scheduledDate = order.assigned_delivery_date ||
+                order.selected_delivery_date ||
+                (order.fulfillments?.[0]?.delivery_date) ||
+                null;
+              const productionDate = order.fulfillments?.[0]?.production_date || null;
+              const windowLabel = order.delivery_window_label || '5:00 PM – 8:00 PM';
+
+              // Only create FulfillmentTask if we have a valid delivery date and it's a valid day (Wed/Sat)
+              if (scheduledDate) {
+                const dow = new Date(scheduledDate + 'T00:00:00').getDay();
+                const isValidDeliveryDay = [3, 6].includes(dow); // Wed=3, Sat=6
+
+                // Guard: don't create for cancelled, refunded, or quarantined orders
+                const isExcluded = order.payment_status === 'refunded' ||
+                  order.production_status === 'canceled' ||
+                  order.production_status === 'cancelled' ||
+                  order.data_quality_status === 'quarantined' ||
+                  (Array.isArray(order.tags) && order.tags.includes('do_not_sync'));
+
+                if (isValidDeliveryDay && !isExcluded) {
+                  // Check for existing FulfillmentTask to avoid duplicates
+                  const existingTasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
+                    order_id: order_id,
+                  });
+                  if (!existingTasks || existingTasks.length === 0) {
+                    // Create the FulfillmentTask
+                    await base44.asServiceRole.entities.FulfillmentTask.create({
+                      customer_name: order.customer_name || '',
+                      customer_email: order.customer_email,
+                      phone: order.customer_phone || '',
+                      fulfillment_type: 'Delivery',
+                      status: 'Scheduled',
+                      scheduled_date: scheduledDate,
+                      delivery_address: [
+                        order.address_line1,
+                        order.address_line2,
+                        order.address_city,
+                        order.address_state,
+                        order.address_postal_code
+                      ].filter(Boolean).join(', ') || '',
+                      address_line1: order.address_line1 || '',
+                      address_city: order.address_city || '',
+                      address_state: order.address_state || '',
+                      address_postal_code: order.address_postal_code || '',
+                      time_window: windowLabel,
+                      delivery_window_label: windowLabel,
+                      items_summary: (order.fulfillments?.[0]?.items || [])
+                        .map(i => `${i.quantity}x ${i.title}`)
+                        .join(', ') || '',
+                      order_id: order_id,
+                      order_number: order.shopify_order_number,
+                      source_type: 'order_derived',
+                      production_date: productionDate,
+                      notes: `One-time order auto-fulfillment task created from ${order.source_type || 'stripe'} checkout`,
+                    });
+                    taskCreated = true;
+                    console.log(`[RECEIVE-CUSTOMER-EVENT] Created FulfillmentTask for one-time order ${order.shopify_order_number}`);
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.warn(`[RECEIVE-CUSTOMER-EVENT] FulfillmentTask creation failed (non-critical): ${err.message}`);
+            // Don't fail the order creation if task creation fails — order is already in DB
+          }
+        }
+
         return Response.json({
           status: 'success',
           action: action || 'created',
           hub_order_id: order_id,
           order_id,
           order_number: orderData.order_number,
+          fulfillment_task_created: taskCreated,
         }, { status: 200 });
       } else if (safeStatus === 'skipped') {
         // Dedupe — order already exists, find its hub_order_id
