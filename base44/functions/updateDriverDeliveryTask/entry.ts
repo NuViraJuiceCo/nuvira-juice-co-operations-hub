@@ -48,17 +48,12 @@ function buildAuditNote(driver_email, driver_name, action, previousStatus, newSt
 
 Deno.serve(async (req) => {
   try {
-    // ── AUTH ──────────────────────────────────────────────────────────────────
-    const authHeader = req.headers.get('Authorization') || '';
-    if (!authHeader.startsWith('Bearer ')) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    if (!SYNC_SECRET || token !== SYNC_SECRET) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    
+    if (!user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const body = await req.json();
 
     const {
