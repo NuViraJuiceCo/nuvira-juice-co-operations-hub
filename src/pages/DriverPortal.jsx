@@ -681,34 +681,22 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   const handleMarkDelivered = async (order, proofPhotoUrl, dropLocation) => {
     setUpdatingId(order.id);
     try {
-      // Prefer updateDriverDeliveryTask (updates FulfillmentTask + ShopifyOrder via operations source)
-      const taskId = order.fulfillment_task_id || order.id;
-      if (taskId) {
-        const res = await base44.functions.invoke('updateDriverDeliveryTask', {
-          task_id: taskId,
-          action: 'mark_delivered',
-          driver_email: user?.email,
-          driver_name: user?.full_name || user?.email,
-          photo_url: proofPhotoUrl,
-          timestamp: new Date().toISOString(),
-        });
-        if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Task update failed');
-      } else {
-        // Fallback: use receiveDriverStatusUpdate for orders without a task_id
-        await base44.functions.invoke('receiveDriverStatusUpdate', {
-          order_id: order.id,
-          order_number: order.order_number,
-          driver_email: user?.email,
-          action: 'delivered',
-          delivery_photo_url: proofPhotoUrl,
-          delivery_drop_location: dropLocation,
-        });
-      }
-      toast.success('Delivery confirmed & customer notified');
+      // Call backend to handle delivery confirmation
+      const res = await base44.functions.invoke('recordDriverDelivery', {
+        task_id: order.id,
+        order_id: order.id,
+        driver_email: user?.email,
+        driver_name: user?.full_name || user?.email,
+        photo_url: proofPhotoUrl,
+        drop_location: dropLocation,
+        timestamp: new Date().toISOString(),
+      });
+      if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Delivery confirmation failed');
+      toast.success('Delivery confirmed');
       loadQueue();
       setRouteData(null);
     } catch (err) {
-      toast.error('Update failed: ' + (err.message || 'Unknown error'));
+      toast.error('Delivery confirmation failed: ' + (err.message || 'Unknown error'));
     } finally {
       setUpdatingId(null);
     }
