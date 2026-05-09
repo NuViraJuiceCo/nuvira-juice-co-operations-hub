@@ -113,6 +113,43 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'acknowledged', event, note: 'Event acknowledged' });
     }
 
+    // ── Phase 5: Schedule validation helpers ────────────────────────────────
+    const VALID_PROD_DAYS = new Set([2, 5]); // Tue, Fri
+    const VALID_DELIV_DAYS = new Set([3, 6]); // Wed, Sat
+    const WIN_WED = '5:00 PM – 8:00 PM';
+    const WIN_SAT = '12:00 PM – 3:00 PM';
+
+    function p5GetDow(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m - 1, d).getDay();
+    }
+    function p5ValidateFulfillments(fulfillments) {
+      const errors = [];
+      // Only validate if payload explicitly signals central_engine scheduling
+      // (legacy CA payloads without final_schedule_source are allowed through for backward compat)
+      const isCentralEngine = data.final_schedule_source === 'central_engine';
+      if (!isCentralEngine) return errors; // skip validation for non-central-engine payloads
+
+      fulfillments.forEach((f, idx) => {
+        const fn = f.fulfillment_number || idx + 1;
+        if (f.production_date && !VALID_PROD_DAYS.has(p5GetDow(f.production_date))) {
+          errors.push(`Fulfillment #${fn}: production_date ${f.production_date} is not Tue or Fri`);
+        }
+        const deliv = f.scheduled_date || f.delivery_date;
+        if (deliv && !VALID_DELIV_DAYS.has(p5GetDow(deliv))) {
+          errors.push(`Fulfillment #${fn}: delivery_date ${deliv} is not Wed or Sat`);
+        }
+        if (deliv && f.delivery_window_label) {
+          const dow = p5GetDow(deliv);
+          const expectedWin = dow === 3 ? WIN_WED : dow === 6 ? WIN_SAT : null;
+          if (expectedWin && f.delivery_window_label !== expectedWin) {
+            errors.push(`Fulfillment #${fn}: delivery_window "${f.delivery_window_label}" should be "${expectedWin}" for ${deliv}`);
+          }
+        }
+      });
+      return errors;
+    }
+
     // Validate required fields
     const missingFields = [];
     if (!customer_email) missingFields.push('customer_email');
@@ -249,6 +286,23 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
+    // ── Phase 5: Validate schedule before processing (central_engine payloads only) ──
+    if (fulfillmentsToCreate.length > 0) {
+      const scheduleErrors = p5ValidateFulfillments(fulfillmentsToCreate);
+      if (scheduleErrors.length > 0) {
+        console.error('[CUSTOMER-APP-GATEWAY] ❌ SCHEDULE VALIDATION FAILED:', scheduleErrors);
+        return Response.json({
+          status: 'rejected',
+          reason_code: 'INVALID_SCHEDULE',
+          message: 'Fulfillment schedule does not comply with NuVira production rules (Tue/Fri production, Wed/Sat delivery).',
+          schedule_errors: scheduleErrors,
+          event_received: event,
+          stripe_subscription_id,
+          hint: 'Production days: Tuesday, Friday. Delivery days: Wednesday (5–8 PM), Saturday (12–3 PM).',
+        }, { status: 422 });
+      }
+    }
+
     console.log(`[CUSTOMER-APP-GATEWAY] Processing ${fulfillmentsToCreate.length} fulfillments`);
 
     const lineItems = fulfillmentsToCreate.flatMap(f =>
@@ -355,6 +409,12 @@ Deno.serve(async (req) => {
         delivery_notes: data.delivery_notes || '',
       }));
 
+      // ── Phase 5: Derive first delivery window from day-of-week ──
+      const firstSchedDate = fulfillmentsToCreate[0]?.scheduled_date || null;
+      const firstSchedDow = firstSchedDate ? p5GetDow(firstSchedDate) : null;
+      const orderDeliveryWindow = data.delivery_window_label ||
+        (firstSchedDow === 3 ? WIN_WED : firstSchedDow === 6 ? WIN_SAT : WIN_WED);
+
       const createdOrder = await base44.asServiceRole.entities.ShopifyOrder.create({
         shopify_order_id: `sub_operational_${stripe_subscription_id}`,
         shopify_order_number: `#SUB-${stripe_subscription_id.slice(-10)}`,
@@ -381,8 +441,11 @@ Deno.serve(async (req) => {
         customer_notes: `Subscription: ${stripe_subscription_id} | Plan: ${data.plan_name || 'N/A'} | ${fulfillmentsToCreate.length} fulfillments`,
         line_items: lineItems,
         fulfillments: fulfillmentsArray,
-        assigned_delivery_date: fulfillmentsToCreate[0]?.scheduled_date || null,
-        delivery_window_label: data.delivery_window_label || '5 PM – 8 PM',
+        assigned_delivery_date: firstSchedDate,
+        delivery_window_label: orderDeliveryWindow,
+        // ── Phase 5 schedule fields ──
+        schedule_source: data.final_schedule_source || null,
+        schedule_reason: data.schedule_reason || null,
         total_price: 0,
         subtotal: 0,
         stripe_subscription_id,
@@ -423,6 +486,11 @@ Deno.serve(async (req) => {
         deDupedTaskIds.push(matchingTask.id);
         console.log(`[CUSTOMER-APP-GATEWAY] Deduped FT #${fulfNum}: ${matchingTask.id}`);
       } else {
+        // ── Phase 5: Derive delivery window from day-of-week if not explicitly provided ──
+        const schedDow = schedDate ? p5GetDow(schedDate) : null;
+        const p5Window = fulfillment.delivery_window_label ||
+          (schedDow === 3 ? WIN_WED : schedDow === 6 ? WIN_SAT : data.delivery_window_label || WIN_WED);
+
         const newTask = await base44.asServiceRole.entities.FulfillmentTask.create({
           customer_name: data.customer_name || '',
           customer_email,
@@ -434,8 +502,8 @@ Deno.serve(async (req) => {
           address_city: data.address_city || '',
           address_state: data.address_state || '',
           address_postal_code: data.address_postal_code || '',
-          time_window: data.delivery_window_label || '5 PM – 8 PM',
-          delivery_window_label: data.delivery_window_label || '5 PM – 8 PM',
+          time_window: p5Window,
+          delivery_window_label: p5Window,
           items_summary: itemsSummary,
           order_id: operationalOrderId,
           source_type: 'subscription_fulfillment',
@@ -444,6 +512,8 @@ Deno.serve(async (req) => {
           payment_status: 'paid',
           fulfillment_number: fulfNum,
           plan_name: data.plan_name || null,
+          production_date: fulfillment.production_date || null,
+          schedule_source: data.final_schedule_source || null,
           notes: `Subscription: ${stripe_subscription_id} | Fulfillment #${fulfNum}/${fulfillmentsToCreate.length}`,
         });
 

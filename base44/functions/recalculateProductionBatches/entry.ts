@@ -15,6 +15,15 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const PRODUCTION_DAYS = [2, 5]; // Tue=2, Fri=5 — NuVira production days ONLY (no Saturday)
 
+// ─── Phase 5: Validate production date day-of-week before creating/updating batches ──
+// Only Tue and Fri are valid. If a planMap entry has an invalid production date, skip it.
+function isValidNuViraProductionDate(dateStr) {
+  if (!dateStr) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow === 2 || dow === 5; // Tue=2, Fri=5
+}
+
 const FIRST_PRODUCTION_DATE = '2026-05-01'; // First production date (May 1st)
 const FIRST_DELIVERY_DATE = '2026-05-02'; // Deliveries start May 2nd
 
@@ -876,6 +885,13 @@ Deno.serve(async (req) => {
 
     for (const [key, plan] of Object.entries(planMap)) {
       if (plan.units <= 0) continue;
+
+      // ── Phase 5 Guard: Skip batches with invalid production dates ───────────
+      if (!isValidNuViraProductionDate(plan.productionDate)) {
+        console.warn(`[RECALC] ⚠ Phase 5 guard: skipping batch for invalid production date ${plan.productionDate} (${plan.productName}) — not Tue or Fri`);
+        results.skipped++;
+        continue;
+      }
 
       const existing = existingBatchMap[key];
 
