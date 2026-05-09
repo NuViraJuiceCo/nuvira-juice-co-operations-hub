@@ -262,6 +262,26 @@ Deno.serve(async (req) => {
       stripe_subscription_id,
     });
 
+    // QUARANTINE GUARD: If ANY order for this sub_id is refunded/quarantined/excluded,
+    // block all further ingestion — this subscription has been administratively retired.
+    const quarantinedOrder = (existingOrders || []).find(o =>
+      o.data_quality_status === 'quarantined' ||
+      o.payment_status === 'refunded' ||
+      (Array.isArray(o.tags) && (o.tags.includes('excluded') || o.tags.includes('refunded') || o.tags.includes('do_not_sync')))
+    );
+    if (quarantinedOrder) {
+      console.warn(`[CUSTOMER-APP-GATEWAY] ⛔ QUARANTINE BLOCK — sub ${stripe_subscription_id} is retired (order ${quarantinedOrder.id}, status=${quarantinedOrder.data_quality_status}). Rejecting ingestion.`);
+      return Response.json({
+        status: 'rejected',
+        reason_code: 'SUBSCRIPTION_QUARANTINED',
+        message: `Subscription ${stripe_subscription_id} has been administratively retired and cannot be re-ingested.`,
+        event_received: event,
+        stripe_subscription_id,
+        existing_order_id: quarantinedOrder.id,
+        existing_order_status: quarantinedOrder.data_quality_status,
+      }, { status: 409 });
+    }
+
     const activeExisting = (existingOrders || []).filter(o =>
       o.data_quality_status !== 'quarantined' &&
       o.order_type === 'subscription' &&
