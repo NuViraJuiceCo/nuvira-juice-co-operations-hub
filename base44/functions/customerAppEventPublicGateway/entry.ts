@@ -522,6 +522,39 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ───────────────────────────────────────────────────────────────────────────
+    // AUTO-GENERATE PRODUCTION BATCH DEMAND (non-blocking, idempotent)
+    // Only fires when new tasks were actually created (not on pure dedupes)
+    // ───────────────────────────────────────────────────────────────────────────
+    let batchDemandResult = null;
+    if (createdTaskIds.length > 0 && operationalOrderId) {
+      try {
+        // Collect all production dates from the fulfillments
+        const productionDates = fulfillmentsToCreate
+          .map(f => f.production_date)
+          .filter(Boolean);
+
+        if (productionDates.length > 0) {
+          const batchRes = await base44.asServiceRole.functions.invoke('triggerBatchDemandForDates', {
+            _internalSecret: INTERNAL_SECRET,
+            production_dates: productionDates,
+            order_id: operationalOrderId,
+            order_number: `#SUB-${stripe_subscription_id.slice(-10)}`,
+            customer_email,
+            customer_name: data.customer_name || '',
+            fulfillments: fulfillmentsToCreate.map(f => ({
+              production_date: f.production_date,
+              items: (f.products || []).map(p => ({ title: p.product_name, quantity: p.quantity })),
+            })),
+          });
+          batchDemandResult = batchRes?.data || null;
+          console.log(`[CUSTOMER-APP-GATEWAY] Batch demand: created=${batchDemandResult?.created} updated=${batchDemandResult?.updated} deduped=${batchDemandResult?.deduped}`);
+        }
+      } catch (batchErr) {
+        console.error(`[CUSTOMER-APP-GATEWAY] ⚠ OPERATIONAL WARNING: Batch demand generation failed (non-critical): ${batchErr.message}`);
+      }
+    }
+
     console.log('[CUSTOMER-APP-GATEWAY] ════════════════════════════════════════');
 
     return Response.json({
@@ -534,7 +567,8 @@ Deno.serve(async (req) => {
       fulfillment_tasks_deduped: deDupedTaskIds,
       customer_email,
       stripe_subscription_id,
-      note: `${fulfillmentsToCreate.length} fulfillments processed. Run recalculateProductionBatches to generate demand.`,
+      batch_demand: batchDemandResult,
+      note: `${fulfillmentsToCreate.length} fulfillments processed. Batch demand auto-generated.`,
     }, { status: 200 });
 
   } catch (error) {

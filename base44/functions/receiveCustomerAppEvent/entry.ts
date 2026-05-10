@@ -652,6 +652,29 @@ Deno.serve(async (req) => {
                     });
                     taskCreated = true;
                     console.log(`[RECEIVE-CUSTOMER-EVENT] Created FulfillmentTask for one-time order ${order.shopify_order_number}`);
+
+                    // ── AUTO-GENERATE PRODUCTION BATCH DEMAND (non-blocking, idempotent) ──
+                    if (productionDate) {
+                      try {
+                        const internalSecretVal = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+                        const batchRes = await base44.asServiceRole.functions.invoke('triggerBatchDemandForDates', {
+                          _internalSecret: internalSecretVal,
+                          production_dates: [productionDate],
+                          order_id: order_id,
+                          order_number: order.shopify_order_number || '',
+                          customer_email: order.customer_email || '',
+                          customer_name: order.customer_name || '',
+                          fulfillments: [{
+                            production_date: productionDate,
+                            items: (order.fulfillments?.[0]?.items || order.line_items || [])
+                              .map(i => ({ title: i.title || i.product_name, quantity: i.quantity })),
+                          }],
+                        });
+                        console.log(`[RECEIVE-CUSTOMER-EVENT] Batch demand for ${order.shopify_order_number}: created=${batchRes?.data?.created} updated=${batchRes?.data?.updated}`);
+                      } catch (batchErr) {
+                        console.error(`[RECEIVE-CUSTOMER-EVENT] ⚠ OPERATIONAL WARNING: Batch demand failed (non-critical): ${batchErr.message}`);
+                      }
+                    }
                   }
                 }
               }
