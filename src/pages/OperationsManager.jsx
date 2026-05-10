@@ -496,16 +496,16 @@ export default function OperationsManager() {
 
           {/* Stripe Sync Health & Repair */}
           <TabsContent value="stripe" className="space-y-4">
-            <div className="flex gap-2 flex-wrap">
-              <Button onClick={fetchStripeSyncHealth} variant="outline" className="gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Button onClick={fetchStripeSyncHealth} variant="outline" className="gap-2 w-full">
                 <RefreshCw className="h-4 w-4" />
                 Refresh Health
               </Button>
-              <Button onClick={runAutoDetectIssues} variant="outline" className="gap-2">
+              <Button onClick={runAutoDetectIssues} variant="outline" className="gap-2 w-full">
                 <AlertCircle className="h-4 w-4" />
                 Detect Issues
               </Button>
-              <Button onClick={runAutoReconcile} variant="outline" className="gap-2">
+              <Button onClick={runAutoReconcile} variant="outline" className="gap-2 w-full">
                 <CheckCircle2 className="h-4 w-4" />
                 Reconcile
               </Button>
@@ -583,9 +583,9 @@ export default function OperationsManager() {
 
           {/* System Safety */}
           <TabsContent value="safety" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">Verifies all order write protections are active and no legacy paths are live.</p>
-              <Button onClick={runSafetyHealthCheck} disabled={safetyLoading} className="gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <p className="text-sm text-muted-foreground flex-1">Verifies all order write protections are active and no legacy paths are live.</p>
+              <Button onClick={runSafetyHealthCheck} disabled={safetyLoading} className="gap-2 w-full sm:w-auto">
                 <ShieldCheck className={`h-4 w-4 ${safetyLoading ? 'animate-pulse' : ''}`} />
                 {safetyLoading ? 'Checking...' : 'Run Health Check'}
               </Button>

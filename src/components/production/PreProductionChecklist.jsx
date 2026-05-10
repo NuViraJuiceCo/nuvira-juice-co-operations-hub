@@ -38,7 +38,7 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
     try {
       const [sanitationLogs, dailyChecklists, temperatureLogs, ccpLogs] = await Promise.all([
         base44.entities.SanitationLog?.list('-log_date', 50).catch(() => []),
-        base44.entities.DailyChecklist?.list('-created_date', 20).catch(() => []),
+        base44.entities.DailyChecklist?.list('-checklist_date', 20).catch(() => []),
         base44.entities.TemperatureLog?.list('-log_date', 50).catch(() => []),
         base44.entities.CCPLog?.list('-log_date', 50).catch(() => []),
       ]);
