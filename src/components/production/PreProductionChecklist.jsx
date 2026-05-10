@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { CheckCircle2, AlertTriangle, X, ClipboardCheck, ExternalLink, Clock } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, X, ClipboardCheck, ExternalLink, Clock, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/lib/AuthContext';
 
 /**
  * PreProductionChecklist
@@ -13,14 +14,17 @@ import { useNavigate } from 'react-router-dom';
  *
  * Props:
  *   batch       — ProductionBatch record being started
- *   onConfirm   — callback when admin confirms (proceed)
+ *   onConfirm   — callback when admin confirms (proceed, overrideInfo?)
  *   onCancel    — callback when admin cancels
  */
 export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [checks, setChecks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [showOverrideInput, setShowOverrideInput] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
   const prodDate = batch?.production_date || today;
@@ -39,11 +43,11 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
         base44.entities.CCPLog?.list('-log_date', 50).catch(() => []),
       ]);
 
+      // SanitationLog uses log_date; DailyChecklist uses checklist_date (canonical field name)
       const hasSanitation = (sanitationLogs || []).some(l => l.log_date === prodDate || l.log_date === today);
-      const hasDailyChecklist = (dailyChecklists || []).some(l => {
-        const date = l.created_date?.split('T')[0] || '';
-        return date === today || date === prodDate;
-      });
+      const hasDailyChecklist = (dailyChecklists || []).some(l =>
+        l.checklist_date === prodDate || l.checklist_date === today
+      );
       const hasTemperature = (temperatureLogs || []).some(l => l.log_date === prodDate || l.log_date === today);
       const hasCCP = (ccpLogs || []).some(l => l.log_date === prodDate || l.log_date === today);
 
@@ -97,9 +101,15 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
   const missingRequired = checks.filter(c => c.required && !c.complete);
   const allRequiredMet = missingRequired.length === 0;
 
-  const handleConfirm = async () => {
+  const handleConfirm = async (isOverride = false) => {
     setConfirming(true);
-    await onConfirm();
+    const overrideInfo = isOverride ? {
+      overridden_by: user?.email || 'unknown',
+      overridden_at: new Date().toISOString(),
+      override_reason: overrideReason || 'No reason provided',
+      missing_checks: missingRequired.map(c => c.label),
+    } : null;
+    await onConfirm(overrideInfo);
     setConfirming(false);
   };
 
@@ -179,25 +189,55 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
           )}
         </div>
 
+        {/* Override reason input */}
+        {showOverrideInput && !allRequiredMet && (
+          <div className="px-5 pb-3">
+            <p className="text-xs font-semibold text-amber-800 mb-1 flex items-center gap-1">
+              <ShieldAlert className="w-3 h-3" /> Override Reason <span className="text-red-500">*</span>
+            </p>
+            <textarea
+              value={overrideReason}
+              onChange={e => setOverrideReason(e.target.value)}
+              rows={2}
+              placeholder="e.g. Sanitation completed verbally, log will be entered after batch starts..."
+              className="w-full text-xs border border-amber-300 rounded-lg px-3 py-2 bg-amber-50 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Recorded by {user?.email} at {new Date().toLocaleTimeString()}
+            </p>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="px-5 pb-5 flex gap-2">
           <Button variant="outline" onClick={onCancel} className="flex-1" size="sm">
             Cancel
           </Button>
-          {!allRequiredMet && (
+          {!allRequiredMet && !showOverrideInput && (
             <Button
               variant="outline"
-              onClick={handleConfirm}
+              onClick={() => setShowOverrideInput(true)}
               disabled={confirming || loading}
               className="flex-1 border-amber-300 text-amber-700 hover:bg-amber-50"
               size="sm"
             >
-              {confirming ? 'Starting...' : 'Override & Start'}
+              Override & Start
+            </Button>
+          )}
+          {!allRequiredMet && showOverrideInput && (
+            <Button
+              variant="outline"
+              onClick={() => handleConfirm(true)}
+              disabled={confirming || loading || !overrideReason.trim()}
+              className="flex-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+              size="sm"
+            >
+              {confirming ? 'Starting...' : 'Confirm Override'}
             </Button>
           )}
           {allRequiredMet && (
             <Button
-              onClick={handleConfirm}
+              onClick={() => handleConfirm(false)}
               disabled={confirming || loading}
               className="flex-1 bg-green-600 hover:bg-green-700 text-white"
               size="sm"

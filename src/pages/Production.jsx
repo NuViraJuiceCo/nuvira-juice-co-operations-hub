@@ -113,8 +113,26 @@ export default function Production() {
     setPreCheckBatch(batch);
   };
 
-  const handleChecklistConfirm = () => {
+  const handleChecklistConfirm = async (overrideInfo) => {
     if (preCheckBatch) {
+      // If override was used, record it on the batch audit trail
+      if (overrideInfo) {
+        try {
+          const existing = Array.isArray(preCheckBatch.audit_trail) ? preCheckBatch.audit_trail : [];
+          await base44.entities.ProductionBatch.update(preCheckBatch.id, {
+            audit_trail: [...existing, {
+              timestamp: overrideInfo.overridden_at,
+              action: 'PreProductionChecklistOverride',
+              performed_by: overrideInfo.overridden_by,
+              reason: overrideInfo.override_reason,
+              before: { missing_checks: overrideInfo.missing_checks },
+              after: { status: 'started_with_override' },
+            }],
+          });
+        } catch (e) {
+          console.warn('Override audit trail save failed (non-critical):', e.message);
+        }
+      }
       setProcessingMode('start');
       setProcessingBatch(preCheckBatch);
       setPreCheckBatch(null);

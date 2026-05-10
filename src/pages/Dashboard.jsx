@@ -65,9 +65,11 @@ export default function Dashboard() {
   const inProduction = paidOrders.filter((o) => o.production_status === "in_production").length;
   const toFulfill = paidOrders.filter((o) => !["fulfilled", "canceled", "refunded"].includes(o.production_status)).length;
   const lowStock = batches.filter((b) => b.status === "ready_for_production" || b.status === "planned").length;
-  // Net revenue: sum of paid orders only (refunded/cancelled already excluded above)
+  // Gross sales: sum of paid orders (fully refunded already excluded by activeOrders filter)
   const grossRevenue = paidOrders.reduce((sum, o) => sum + (o.total_price || 0), 0);
-  const revenue = grossRevenue;
+  // Subtract any partial refund amounts recorded on individual orders
+  const partialRefunds = paidOrders.reduce((sum, o) => sum + (o.refund_amount || 0), 0);
+  const revenue = grossRevenue - partialRefunds;
 
   const handleRefresh = async () => {
     const [orderData, batchData, inventoryData, reviewQueue] = await Promise.all([

@@ -4,12 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Download, Filter, AlertCircle, CheckCircle2, Printer, BookOpen } from 'lucide-react';
+import { Download, Filter, AlertCircle, CheckCircle2, Printer, BookOpen, ClipboardList } from 'lucide-react';
 import AdminGuide from '@/components/shared/AdminGuide';
 import UnifiedComplianceForm from '@/components/compliance/UnifiedComplianceForm';
 import PrintableLogSheet from '@/components/compliance/PrintableLogSheet';
 import MonthlyBinderExport from '@/components/compliance/MonthlyBinderExport';
 import BatchLogsGrouped from '@/components/compliance/BatchLogsGrouped';
+import ProductionAuditPacket from '@/components/compliance/ProductionAuditPacket';
 import { useAuth } from '@/lib/AuthContext';
 import moment from 'moment';
 
@@ -20,8 +21,15 @@ export default function ComplianceLogs() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [printingLog, setPrintingLog] = useState(null);
   const [showMonthlyExport, setShowMonthlyExport] = useState(false);
-  const [activeTab, setActiveTab] = useState('batch');
+  const [auditPacketDate, setAuditPacketDate] = useState(null);
+  const [activeTab, setActiveTab] = useState('audit');
   const { user } = useAuth();
+
+  // Fetch recent production batches for the audit tab date picker
+  const { data: recentBatches = [] } = useQuery({
+    queryKey: ['production_batches_dates'],
+    queryFn: () => base44.entities.ProductionBatch?.list('-production_date', 60).catch(() => []),
+  });
 
   // Fetch all batch compliance logs (used by the grouped batch tab)
   const { data: batchLogs = [], isLoading: batchLoading } = useQuery({
@@ -121,9 +129,13 @@ export default function ComplianceLogs() {
           <p className="text-muted-foreground mt-1">Temperature, pH, CCP, Sanitation, Batch & Corrective Actions</p>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
+          <Button variant="outline" onClick={() => setAuditPacketDate(moment().format('YYYY-MM-DD'))} className="gap-2">
+            <ClipboardList className="w-4 h-4" />
+            Today's Audit Packet
+          </Button>
           <Button variant="outline" onClick={() => setShowMonthlyExport(true)} className="gap-2">
             <BookOpen className="w-4 h-4" />
-            Export Monthly Binder
+            Monthly Binder
           </Button>
         </div>
       </div>
@@ -132,15 +144,16 @@ export default function ComplianceLogs() {
       <UnifiedComplianceForm />
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b">
+      <div className="flex gap-1 border-b overflow-x-auto scrollbar-none">
         {[
+          { key: 'audit', label: '🗂️ Audit Packets' },
           { key: 'batch', label: '📦 Batch Logs' },
           { key: 'other', label: '📋 Other Logs' },
         ].map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`shrink-0 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -150,6 +163,79 @@ export default function ComplianceLogs() {
           </button>
         ))}
       </div>
+
+      {/* ── AUDIT PACKETS TAB ── */}
+      {activeTab === 'audit' && (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-xl p-4">
+            <ClipboardList className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-foreground">Production Date Audit Packets</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Select a production date to view and print a complete audit packet — including receiving log, 
+                daily checklist, temperature logs, batch records, corrective actions, and admin sign-off.
+              </p>
+            </div>
+          </div>
+
+          {/* Date picker + quick access to recent production dates */}
+          <div className="space-y-3">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="flex-1 min-w-[160px]">
+                <label className="text-sm font-medium block mb-1">Select Production Date</label>
+                <Input
+                  type="date"
+                  defaultValue={moment().format('YYYY-MM-DD')}
+                  onChange={e => setAuditPacketDate(e.target.value || null)}
+                  className="w-full"
+                />
+              </div>
+              <Button
+                onClick={() => {
+                  const el = document.querySelector('input[type=date]');
+                  setAuditPacketDate(el?.value || moment().format('YYYY-MM-DD'));
+                }}
+                className="gap-2"
+              >
+                <ClipboardList className="w-4 h-4" />
+                Open Audit Packet
+              </Button>
+            </div>
+
+            {/* Recent production dates as quick-access cards */}
+            {recentBatches.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Recent Production Dates</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {[...new Set(recentBatches.map(b => b.production_date))].slice(0, 12).map(date => {
+                    const batchesOnDate = recentBatches.filter(b => b.production_date === date);
+                    const allVerified = batchesOnDate.every(b => b.status === 'verified_logged');
+                    const hasActive = batchesOnDate.some(b => ['planned', 'ready_for_production', 'in_production', 'completed_pending_verification'].includes(b.status));
+                    return (
+                      <button
+                        key={date}
+                        onClick={() => setAuditPacketDate(date)}
+                        className="text-left bg-card border border-border rounded-xl p-3 hover:bg-muted/30 transition-colors"
+                      >
+                        <p className="text-xs font-bold text-foreground">{moment(date).format('ddd, MMM D')}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{batchesOnDate.length} batch{batchesOnDate.length !== 1 ? 'es' : ''}</p>
+                        <div className="mt-1.5">
+                          {allVerified
+                            ? <span className="text-[10px] font-semibold text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> All Verified</span>
+                            : hasActive
+                            ? <span className="text-[10px] font-semibold text-amber-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> In Progress</span>
+                            : <span className="text-[10px] text-muted-foreground">View Packet</span>
+                          }
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── BATCH LOGS TAB ── */}
       {activeTab === 'batch' && (
@@ -259,6 +345,12 @@ export default function ComplianceLogs() {
       )}
       {showMonthlyExport && (
         <MonthlyBinderExport user={user} onClose={() => setShowMonthlyExport(false)} />
+      )}
+      {auditPacketDate && (
+        <ProductionAuditPacket
+          productionDate={auditPacketDate}
+          onClose={() => setAuditPacketDate(null)}
+        />
       )}
     </div>
   );
