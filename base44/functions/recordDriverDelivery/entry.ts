@@ -45,22 +45,33 @@ Deno.serve(async (req) => {
 
     console.log(`[RECORD-DELIVERY] Task ${task_id} marked delivered by ${driver_email || user.email}`);
 
-    // Sync to ShopifyOrder if linked
+    // Sync delivery completion directly to linked ShopifyOrder (operations-safe fields only)
     if (task.order_id) {
       try {
-        await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
-          incomingData: {
-            fulfillment_status: 'fulfilled',
-            delivered_at: ts,
-            delivered_by: driver_name || driver_email || user.email,
-            delivery_photo_url: photo_url || null,
-            internal_notes: `[DELIVERY | ${ts}] driver: ${driver_email || user.email}`,
-          },
-          source: 'operations',
-          matchBy: { internal_id: task.order_id },
-        });
+        // Fetch order to check terminal guards before writing
+        const orders = await base44.asServiceRole.entities.ShopifyOrder.filter({ id: task.order_id });
+        const order = orders?.[0];
+        if (order) {
+          const isTerminal = order.payment_status === 'refunded' ||
+            order.production_status === 'canceled' || order.production_status === 'cancelled' ||
+            order.sync_status === 'do_not_sync' ||
+            (Array.isArray(order.tags) && order.tags.includes('excluded'));
+          if (isTerminal) {
+            console.warn(`[RECORD-DELIVERY] Order ${task.order_id} is terminal — skipping ShopifyOrder sync`);
+          } else {
+            // Only write delivery-outcome fields — never touch Stripe, payment, address, line_items
+            await base44.asServiceRole.entities.ShopifyOrder.update(task.order_id, {
+              fulfillment_status: 'fulfilled',
+              delivered_at: ts,
+              delivered_by: driver_name || driver_email || user.email,
+              delivery_photo_url: photo_url || null,
+              internal_notes: `[DELIVERY | ${ts}] driver: ${driver_email || user.email}${drop_location ? ` | drop: ${drop_location}` : ''}`,
+            });
+            console.log(`[RECORD-DELIVERY] ShopifyOrder ${task.order_id} delivery sync successful`);
+          }
+        }
       } catch (syncErr) {
-        console.warn(`[RECORD-DELIVERY] Order sync failed (non-fatal): ${syncErr.message}`);
+        console.error(`[RECORD-DELIVERY] ShopifyOrder sync failed: ${syncErr.message}`);
       }
     }
 

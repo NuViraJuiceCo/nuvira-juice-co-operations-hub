@@ -199,7 +199,8 @@ Deno.serve(async (req) => {
     // without requiring user authentication. Validate via INTERNAL_FUNCTION_SECRET.
     const providedSecret = body._internalSecret;
     const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
-    const isInternalCall = providedSecret && internalSecret && providedSecret === internalSecret && body.source === 'rebuild_subscriptions';
+    const TRUSTED_INTERNAL_SOURCES = new Set(['rebuild_subscriptions', 'operations', 'manual_recovery']);
+    const isInternalCall = providedSecret && internalSecret && providedSecret === internalSecret && TRUSTED_INTERNAL_SOURCES.has(body.source);
     
     if (!isInternalCall) {
       // External/public call — require valid user auth

@@ -181,17 +181,29 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const syncRes = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
-          incomingData: orderUpdate,
-          source: 'operations',
-          matchBy: { internal_id: orderId },
-        });
-        orderSyncResult = syncRes?.data || 'accepted';
-        console.log(`[UPDATE-DRIVER-TASK] Order ${orderId} synced: ${JSON.stringify(orderSyncResult)}`);
+        // Fetch order to enforce terminal guards before writing
+        const linkedOrders = await base44.asServiceRole.entities.ShopifyOrder.filter({ id: orderId });
+        const linkedOrder = linkedOrders?.[0];
+        if (!linkedOrder) {
+          console.warn(`[UPDATE-DRIVER-TASK] Order ${orderId} not found — skipping ShopifyOrder sync`);
+          orderSyncResult = { status: 'skipped', reason: 'order_not_found' };
+        } else {
+          const isTerminal = linkedOrder.payment_status === 'refunded' ||
+            linkedOrder.production_status === 'canceled' || linkedOrder.production_status === 'cancelled' ||
+            linkedOrder.sync_status === 'do_not_sync' ||
+            (Array.isArray(linkedOrder.tags) && linkedOrder.tags.includes('excluded'));
+          if (isTerminal) {
+            console.warn(`[UPDATE-DRIVER-TASK] Order ${orderId} is terminal — skipping ShopifyOrder sync`);
+            orderSyncResult = { status: 'skipped', reason: 'terminal_order' };
+          } else {
+            await base44.asServiceRole.entities.ShopifyOrder.update(orderId, orderUpdate);
+            orderSyncResult = { status: 'success' };
+            console.log(`[UPDATE-DRIVER-TASK] ShopifyOrder ${orderId} sync successful: ${JSON.stringify(orderUpdate)}`);
+          }
+        }
       } catch (syncErr) {
-        // Non-fatal — task is already updated; log and continue
-        console.warn(`[UPDATE-DRIVER-TASK] Order sync failed (non-fatal): ${syncErr.message}`);
-        orderSyncResult = { status: 'skipped', reason: syncErr.message };
+        console.error(`[UPDATE-DRIVER-TASK] ShopifyOrder sync FAILED: ${syncErr.message}`);
+        orderSyncResult = { status: 'failed', reason: syncErr.message };
       }
     }
 
