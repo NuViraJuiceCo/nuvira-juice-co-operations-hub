@@ -2,8 +2,17 @@ import { ShoppingCart, TrendingUp } from "lucide-react";
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function ActiveOrderStatusWidget({ orders }) {
-  // Only count PAID orders to exclude abandoned/pending checkouts
-  const paidOrders = orders.filter(o => o.payment_status === "paid");
+  // Only count genuinely active paid orders — exclude quarantined, cancelled, test, archived
+  const EXCLUDED_TAGS = new Set(['archived', 'excluded', 'do_not_sync', 'not_for_production', 'test_order', 'refunded']);
+  const paidOrders = orders.filter(o =>
+    o.payment_status === "paid" &&
+    o.data_quality_status !== "quarantined" &&
+    o.production_status !== "canceled" &&
+    o.production_status !== "cancelled" &&
+    o.fulfillment_status !== "cancelled" &&
+    o.sync_status !== "do_not_sync" &&
+    !(Array.isArray(o.tags) && o.tags.some(t => EXCLUDED_TAGS.has(t)))
+  );
   
   const statusCounts = {
     New: paidOrders.filter(o => o.production_status === "new").length,
