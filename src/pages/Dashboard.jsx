@@ -50,13 +50,24 @@ export default function Dashboard() {
     );
   }
 
-  // Only count PAID orders to exclude abandoned/pending checkouts
-  const paidOrders = orders.filter((o) => o.payment_status === "paid");
-  const newOrders = paidOrders.filter((o) => o.production_status === "new").length;
+  // Exclude test/quarantined/do_not_sync/refunded/cancelled records from all counts
+  const EXCLUDED_TAGS = new Set(['refunded', 'excluded', 'do_not_sync', 'internal_test_owner_override', 'customer_confusion_duplicate_subscription']);
+  const activeOrders = orders.filter(o =>
+    o.payment_status !== 'refunded' &&
+    o.production_status !== 'canceled' &&
+    o.production_status !== 'cancelled' &&
+    o.data_quality_status !== 'quarantined' &&
+    o.sync_status !== 'do_not_sync' &&
+    !(Array.isArray(o.tags) && o.tags.some(t => EXCLUDED_TAGS.has(t)))
+  );
+  const paidOrders = activeOrders.filter((o) => o.payment_status === "paid");
+  const newOrders = paidOrders.filter((o) => o.production_status === "new" || o.production_status === "awaiting_production").length;
   const inProduction = paidOrders.filter((o) => o.production_status === "in_production").length;
   const toFulfill = paidOrders.filter((o) => !["fulfilled", "canceled", "refunded"].includes(o.production_status)).length;
   const lowStock = batches.filter((b) => b.status === "ready_for_production" || b.status === "planned").length;
-  const revenue = paidOrders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+  // Net revenue: sum of paid orders only (refunded/cancelled already excluded above)
+  const grossRevenue = paidOrders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+  const revenue = grossRevenue;
 
   const handleRefresh = async () => {
     const [orderData, batchData, inventoryData, reviewQueue] = await Promise.all([
@@ -103,7 +114,7 @@ export default function Dashboard() {
         <StatCard label="In Production" value={inProduction} icon={Factory} variant="info" />
         <StatCard label="To Fulfill" value={toFulfill} icon={Truck} variant={toFulfill > 0 ? "warning" : "default"} />
         <StatCard label="Low Stock" value={lowStock} icon={AlertTriangle} variant={lowStock > 0 ? "danger" : "default"} />
-        <StatCard label="Revenue" value={`$${revenue.toFixed(0)}`} icon={DollarSign} variant="success" />
+        <StatCard label="Net Revenue" value={`$${revenue.toFixed(0)}`} icon={DollarSign} variant="success" subtitle="Paid · excl. refunds &amp; cancelled" />
         <StatCard label="Exceptions" value={exceptions} icon={AlertCircle} variant={exceptions > 0 ? "warning" : "default"} />
       </div>
 

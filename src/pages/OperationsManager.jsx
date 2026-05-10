@@ -154,20 +154,20 @@ export default function OperationsManager() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-start">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
           <div>
-            <h1 className="text-4xl font-bold text-foreground">Operations Manager</h1>
-            <p className="text-muted-foreground mt-2">24/7 monitoring of orders, inventory, production, and sync health</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Operations Manager</h1>
+            <p className="text-sm text-muted-foreground mt-1">24/7 monitoring of orders, inventory, production, and sync health</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               onClick={runFullSync}
               disabled={syncing}
-              size="lg"
-              className="gap-2"
+              size="sm"
+              className="gap-2 flex-1 sm:flex-none"
             >
               <CloudDownload className={`w-4 h-4 ${syncing ? 'animate-pulse' : ''}`} />
               {syncing ? 'Syncing...' : 'Full Sync'}
@@ -176,8 +176,8 @@ export default function OperationsManager() {
               onClick={fetchBriefing}
               disabled={loading}
               variant="outline"
-              size="lg"
-              className="gap-2"
+              size="sm"
+              className="gap-2 flex-1 sm:flex-none"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -275,7 +275,7 @@ export default function OperationsManager() {
 
         {/* Quick Stats */}
         {briefing?.summary && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Orders</CardTitle>
@@ -316,13 +316,13 @@ export default function OperationsManager() {
         )}
 
         <Tabs defaultValue="alerts" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="alerts">Alerts & Actions</TabsTrigger>
-            <TabsTrigger value="orders">Order Health</TabsTrigger>
-            <TabsTrigger value="inventory">Inventory</TabsTrigger>
-            <TabsTrigger value="stripe">Stripe Sync</TabsTrigger>
-            <TabsTrigger value="safety">System Safety</TabsTrigger>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
+          <TabsList className="flex flex-wrap h-auto gap-1 p-1 w-full">
+            <TabsTrigger value="alerts" className="flex-1 min-w-[80px] text-xs sm:text-sm">Alerts</TabsTrigger>
+            <TabsTrigger value="orders" className="flex-1 min-w-[80px] text-xs sm:text-sm">Orders</TabsTrigger>
+            <TabsTrigger value="inventory" className="flex-1 min-w-[80px] text-xs sm:text-sm">Inventory</TabsTrigger>
+            <TabsTrigger value="stripe" className="flex-1 min-w-[80px] text-xs sm:text-sm">Stripe</TabsTrigger>
+            <TabsTrigger value="safety" className="flex-1 min-w-[80px] text-xs sm:text-sm">Safety</TabsTrigger>
+            <TabsTrigger value="summary" className="flex-1 min-w-[80px] text-xs sm:text-sm">Summary</TabsTrigger>
           </TabsList>
 
           {/* Alerts & Action Items */}

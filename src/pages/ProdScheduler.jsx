@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { AlertTriangle, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Plus, LayoutList, CalendarDays, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StatusBadge from "../components/shared/StatusBadge";
 import BatchCreateForm from "../components/production/BatchCreateForm";
@@ -15,6 +15,7 @@ export default function ProdScheduler() {
   const [weekStart, setWeekStart] = useState(moment().startOf("isoWeek"));
   const [selected, setSelected] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [viewMode, setViewMode] = useState("list"); // "calendar" | "list"
 
   const handleSaveCreate = async () => {
     const data = await base44.entities.ProductionBatch.list("production_date", 100);
@@ -87,18 +88,47 @@ export default function ProdScheduler() {
     return missing.length > 0 ? [{ batch: b, missing }] : [];
   });
 
+  // Upcoming 4 weeks of batches for list view
+  const next28Days = Array.from({ length: 28 }, (_, i) => moment().add(i, "days").format("YYYY-MM-DD"));
+  const upcomingBatches = batches
+    .filter(b => next28Days.includes(b.production_date) || b.production_date >= moment().format("YYYY-MM-DD"))
+    .sort((a, b) => a.production_date.localeCompare(b.production_date));
+
+  // Group upcoming by date for list view
+  const listGrouped = {};
+  upcomingBatches.forEach(b => {
+    if (!listGrouped[b.production_date]) listGrouped[b.production_date] = [];
+    listGrouped[b.production_date].push(b);
+  });
+  const listDates = Object.keys(listGrouped).sort();
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Production Scheduler</h1>
-          <p className="text-muted-foreground mt-1">Weekly view · {weekStart.format("MMMM D")} – {weekStart.clone().add(6, "days").format("D, YYYY")}</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {viewMode === "calendar" ? `Weekly view · ${weekStart.format("MMMM D")} – ${weekStart.clone().add(6, "days").format("D, YYYY")}` : "Upcoming production schedule"}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setWeekStart(weekStart.clone().subtract(1, "week"))}><ChevronLeft className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" onClick={() => setWeekStart(moment().startOf("isoWeek"))}>Today</Button>
-          <Button variant="outline" size="icon" onClick={() => setWeekStart(weekStart.clone().add(1, "week"))}><ChevronRight className="h-4 w-4" /></Button>
-          <Button onClick={() => setIsCreating(true)} className="gap-2"><Plus className="h-4 w-4" /> Add Batch</Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View toggle */}
+          <div className="flex border border-border rounded-lg overflow-hidden">
+            <button onClick={() => setViewMode("list")} className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}>
+              <LayoutList className="h-3.5 w-3.5" /> List
+            </button>
+            <button onClick={() => setViewMode("calendar")} className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1 transition-colors ${viewMode === "calendar" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}>
+              <CalendarDays className="h-3.5 w-3.5" /> Calendar
+            </button>
+          </div>
+          {viewMode === "calendar" && (
+            <>
+              <Button variant="outline" size="icon" onClick={() => setWeekStart(weekStart.clone().subtract(1, "week"))}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button variant="outline" size="sm" onClick={() => setWeekStart(moment().startOf("isoWeek"))}>Today</Button>
+              <Button variant="outline" size="icon" onClick={() => setWeekStart(weekStart.clone().add(1, "week"))}><ChevronRight className="h-4 w-4" /></Button>
+            </>
+          )}
+          <Button onClick={() => setIsCreating(true)} className="gap-2 text-sm"><Plus className="h-4 w-4" /> Add Batch</Button>
         </div>
       </div>
 
@@ -113,52 +143,112 @@ export default function ProdScheduler() {
         </div>
       )}
 
-      {/* Week Grid */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-border">
-          {weekDays.map(day => (
-            <div key={day.format()} className={`px-2 py-3 text-center border-r border-border last:border-0 ${day.format("YYYY-MM-DD") === today ? "bg-primary/5" : "bg-muted/20"}`}>
-              <p className="text-xs font-medium text-muted-foreground uppercase">{day.format("ddd")}</p>
-              <p className={`text-sm font-bold mt-0.5 ${day.format("YYYY-MM-DD") === today ? "text-primary" : "text-foreground"}`}>{day.format("D")}</p>
+      {/* ── LIST VIEW (default / mobile-friendly) ── */}
+      {viewMode === "list" && (
+        <div className="space-y-4">
+          {listDates.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground text-sm">No upcoming batches scheduled.</div>
+          ) : (
+            listDates.map(dateStr => {
+              const day = moment(dateStr);
+              const isToday = dateStr === today;
+              const isProdDay = [2, 5].includes(day.day()); // Tue=2, Fri=5
+              const isDelivDay = [3, 6].includes(day.day()); // Wed=3, Sat=6
+              return (
+                <div key={dateStr} className={`bg-card border rounded-xl overflow-hidden ${isToday ? "border-primary shadow-md" : "border-border"}`}>
+                  <div className={`px-4 py-2.5 flex items-center justify-between ${isToday ? "bg-primary/8" : "bg-muted/30"}`}>
+                    <div className="flex items-center gap-2">
+                      <p className={`font-bold text-sm ${isToday ? "text-primary" : "text-foreground"}`}>
+                        {isToday ? "🟢 Today — " : ""}{day.format("dddd, MMMM D")}
+                      </p>
+                      {isProdDay && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Production Day</span>}
+                      {isDelivDay && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Delivery Day</span>}
+                    </div>
+                    <span className="text-xs text-muted-foreground">{listGrouped[dateStr].length} batch{listGrouped[dateStr].length !== 1 ? "es" : ""}</span>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {listGrouped[dateStr].map(batch => {
+                      const hasAlert = checkInventory(batch).length > 0;
+                      const orderQty = getQuantityFromOrders(batch);
+                      return (
+                        <button key={batch.id} onClick={() => setSelected(selected?.id === batch.id ? null : batch)}
+                          className={`w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-muted/30 transition-colors ${selected?.id === batch.id ? "bg-primary/5" : ""}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-foreground truncate">{batch.product_name}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {batch.batch_id} · {batch.planned_units} planned {orderQty > 0 && `· ${orderQty} from orders`}
+                            </p>
+                          </div>
+                          {hasAlert && <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />}
+                          <StatusBadge status={batch.status} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ── CALENDAR VIEW (desktop-friendly) ── */}
+      {viewMode === "calendar" && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden overflow-x-auto">
+          <div className="min-w-[560px]">
+            <div className="grid grid-cols-7 border-b border-border">
+              {weekDays.map(day => (
+                <div key={day.format()} className={`px-2 py-3 text-center border-r border-border last:border-0 ${day.format("YYYY-MM-DD") === today ? "bg-primary/5" : "bg-muted/20"}`}>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">{day.format("ddd")}</p>
+                  <p className={`text-sm font-bold mt-0.5 ${day.format("YYYY-MM-DD") === today ? "text-primary" : "text-foreground"}`}>{day.format("D")}</p>
+                  {[2, 5].includes(day.day()) && <p className="text-[9px] text-amber-600 font-semibold mt-0.5">PROD</p>}
+                  {[3, 6].includes(day.day()) && <p className="text-[9px] text-blue-600 font-semibold mt-0.5">DELIV</p>}
+                </div>
+              ))}
             </div>
-          ))}
+            <div className="grid grid-cols-7 min-h-[240px]">
+              {weekDays.map(day => {
+                const dateStr = day.format("YYYY-MM-DD");
+                const dayBatches = batches.filter(b => b.production_date === dateStr);
+                return (
+                  <div key={dateStr} className="border-r border-border last:border-0 p-1.5 space-y-1.5 min-h-[180px]">
+                    {dayBatches.map(batch => {
+                      const hasAlert = checkInventory(batch).length > 0;
+                      const orderQty = getQuantityFromOrders(batch);
+                      return (
+                        <button key={batch.id} onClick={() => setSelected(selected?.id === batch.id ? null : batch)}
+                          className={`w-full text-left rounded-lg p-2 text-xs border transition-all ${hasAlert ? "bg-red-50 border-red-200 hover:bg-red-100" : "bg-amber-50 border-amber-200 hover:bg-amber-100"}`}>
+                          <p className={`font-semibold truncate ${hasAlert ? "text-red-800" : "text-amber-900"}`}>{batch.product_name}</p>
+                          <p className={hasAlert ? "text-red-600" : "text-amber-700"}>{batch.planned_units} planned {orderQty > 0 && `· ${orderQty}`} {hasAlert && "⚠️"}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-7 min-h-[240px]">
-          {weekDays.map(day => {
-            const dateStr = day.format("YYYY-MM-DD");
-            const dayBatches = batches.filter(b => b.production_date === dateStr);
-            return (
-              <div key={dateStr} className="border-r border-border last:border-0 p-1.5 space-y-1.5 min-h-[180px]">
-                {dayBatches.map(batch => {
-                   const hasAlert = checkInventory(batch).length > 0;
-                   const orderQty = getQuantityFromOrders(batch);
-                   return (
-                     <button key={batch.id} onClick={() => setSelected(selected?.id === batch.id ? null : batch)}
-                       className={`w-full text-left rounded-lg p-2 text-xs border transition-all ${hasAlert ? "bg-red-50 border-red-200 hover:bg-red-100" : "bg-amber-50 border-amber-200 hover:bg-amber-100"}`}>
-                       <p className={`font-semibold truncate ${hasAlert ? "text-red-800" : "text-amber-900"}`}>{batch.product_name}</p>
-                       <p className={hasAlert ? "text-red-600" : "text-amber-700"}>{batch.planned_units} planned {orderQty > 0 && `· ${orderQty} orders`} {hasAlert && "⚠️"}</p>
-                     </button>
-                   );
-                 })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       {/* Detail Panel */}
       {selected && (
-        <div className="bg-card border border-border rounded-xl p-5">
+        <div className="bg-card border border-primary/30 rounded-xl p-4 sm:p-5 shadow-sm">
           <div className="flex items-start justify-between mb-4">
             <div>
               <h3 className="font-semibold text-foreground">{selected.product_name}</h3>
               <p className="text-sm text-muted-foreground">{selected.batch_id} · {moment(selected.production_date).format("MMMM D, YYYY")}</p>
             </div>
-            <StatusBadge status={selected.status} />
+            <div className="flex items-center gap-2">
+              <StatusBadge status={selected.status} />
+              <button onClick={() => setSelected(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div><p className="text-muted-foreground">Planned Units</p><p className="font-medium">{selected.planned_units}</p></div>
-            <div><p className="text-muted-foreground">Assigned To</p><p className="font-medium">{selected.assigned_to || "—"}</p></div>
+            <div><p className="text-muted-foreground text-xs">Planned Units</p><p className="font-medium">{selected.planned_units}</p></div>
+            <div><p className="text-muted-foreground text-xs">Assigned To</p><p className="font-medium">{selected.assigned_to || "—"}</p></div>
           </div>
           {recipes.find(r => r.product_name === selected.product_name)?.ingredients && (
             <div className="mt-4">
@@ -180,26 +270,29 @@ export default function ProdScheduler() {
         </div>
       )}
 
-      {/* All batches list */}
-      <div>
-        <h2 className="font-semibold text-foreground mb-3">All Scheduled Batches</h2>
-        <div className="space-y-2">
-          {batches.filter(batch => getOrdersForBatch(batch).length > 0).map(batch => {
-            const alerts = checkInventory(batch);
-            return (
-              <div key={batch.id} className="bg-card border border-border rounded-xl px-5 py-3.5 flex items-center gap-4">
-                <div className="flex-1">
-                  <p className="font-medium text-sm text-foreground">{batch.product_name}</p>
-                  <p className="text-xs text-muted-foreground">{batch.batch_id} · {moment(batch.production_date).format("MMM D, YYYY")}</p>
-                </div>
-                <p className="text-sm text-muted-foreground">{batch.planned_units} units</p>
-                {alerts.length > 0 && <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />}
-                <StatusBadge status={batch.status} />
-              </div>
-            );
-          })}
+      {/* All batches list — only show if any have linked orders */}
+      {batches.filter(batch => getOrdersForBatch(batch).length > 0).length > 0 && (
+        <div>
+          <h2 className="font-semibold text-foreground mb-3 text-sm sm:text-base">Batches with Linked Orders</h2>
+          <div className="space-y-2">
+            {batches.filter(batch => getOrdersForBatch(batch).length > 0).map(batch => {
+              const alerts = checkInventory(batch);
+              return (
+                <button key={batch.id} onClick={() => setSelected(selected?.id === batch.id ? null : batch)}
+                  className="w-full text-left bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm text-foreground truncate">{batch.product_name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{batch.batch_id} · {moment(batch.production_date).format("MMM D, YYYY")}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground shrink-0">{batch.planned_units} units</p>
+                  {alerts.length > 0 && <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />}
+                  <StatusBadge status={batch.status} />
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {isCreating && (
         <BatchCreateForm

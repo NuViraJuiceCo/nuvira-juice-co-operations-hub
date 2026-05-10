@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import AdminGuide from "../components/shared/AdminGuide";
+import PreProductionChecklist from "../components/production/PreProductionChecklist";
 
 import BatchProcessForm from "../components/production/BatchProcessForm";
 import BatchVerifyForm from "../components/production/BatchVerifyForm";
@@ -14,7 +15,7 @@ import PullToRefresh from "../components/shared/PullToRefresh";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import SelectMobile from "../components/SelectMobile";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Play, CheckSquare, FileCheck } from "lucide-react";
+import { RefreshCw, Play, CheckSquare, FileCheck, ClipboardCheck } from "lucide-react";
 import _ from "lodash";
 import moment from "moment";
 
@@ -31,6 +32,7 @@ export default function Production() {
   const [processingBatch, setProcessingBatch] = useState(null);
   const [processingMode, setProcessingMode] = useState('edit');
   const [verifyingBatch, setVerifyingBatch] = useState(null);
+  const [preCheckBatch, setPreCheckBatch] = useState(null); // batch waiting for pre-production checklist
   const [lastCalc, setLastCalc] = useState(null);
   const [ingredientData, setIngredientData] = useState({}); // date -> dateData
   const [ingredientLoading, setIngredientLoading] = useState(false);
@@ -104,6 +106,19 @@ export default function Production() {
   const handleEditBatch = (batch) => {
     setProcessingMode('edit');
     setProcessingBatch(batch);
+  };
+
+  // Show pre-production checklist gate before starting a batch
+  const handleStartBatch = (batch) => {
+    setPreCheckBatch(batch);
+  };
+
+  const handleChecklistConfirm = () => {
+    if (preCheckBatch) {
+      setProcessingMode('start');
+      setProcessingBatch(preCheckBatch);
+      setPreCheckBatch(null);
+    }
   };
 
 
@@ -278,6 +293,20 @@ export default function Production() {
               {/* Today & Upcoming Tab */}
               {tab === "today" && (
                 <>
+                  {/* Pre-production reminder banner for today's batches */}
+                  {grouped[today] && grouped[today].some(b => b.status === 'planned' || b.status === 'ready_for_production') && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex items-start gap-2.5">
+                      <ClipboardCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-amber-800">Production Day Reminders</p>
+                        <p className="text-[11px] text-amber-700 mt-0.5">
+                          Before starting today's batches: confirm sanitation log, daily checklist, and temperature log are completed.
+                          Click <strong>Start</strong> on any batch to see the pre-production checklist.
+                        </p>
+                      </div>
+                      <a href="/compliance" className="shrink-0 text-[10px] font-semibold text-amber-700 underline whitespace-nowrap">Open Logs →</a>
+                    </div>
+                  )}
                   {sortedDates.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground">
                       <p className="text-lg font-medium mb-2">No upcoming production scheduled</p>
@@ -296,7 +325,7 @@ export default function Production() {
                                 onEdit={handleEditBatch}
                                 onDelete={handleDelete}
                                 onToggleLock={handleToggleLock}
-                                onStart={(batch) => { setProcessingMode('start'); setProcessingBatch(batch); }}
+                                onStart={handleStartBatch}
                               />
                           <IngredientPlanningPanel
                             dateData={ingredientData[date]}
@@ -339,7 +368,7 @@ export default function Production() {
                           </div>
                         </div>
                         <Button
-                         onClick={() => { setProcessingMode('start'); setProcessingBatch(batch); }}
+                         onClick={() => handleStartBatch(batch)}
                          size="sm"
                          className="gap-2 w-full"
                         >
@@ -416,6 +445,14 @@ export default function Production() {
       </PullToRefresh>
 
 
+
+      {preCheckBatch && (
+        <PreProductionChecklist
+          batch={preCheckBatch}
+          onConfirm={handleChecklistConfirm}
+          onCancel={() => setPreCheckBatch(null)}
+        />
+      )}
 
       {processingBatch && (
         <BatchProcessForm
