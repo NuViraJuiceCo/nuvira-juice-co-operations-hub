@@ -1,0 +1,52 @@
+{
+  "name": "Zone3Waitlist",
+  "type": "object",
+  "properties": {
+    "customer_name": {
+      "type": "string"
+    },
+    "customer_email": {
+      "type": "string"
+    },
+    "customer_phone": {
+      "type": "string"
+    },
+    "delivery_address": {
+      "type": "string"
+    },
+    "zone_name": {
+      "type": "string"
+    },
+    "estimated_distance_miles": {
+      "type": "number"
+    },
+    "original_request_id": {
+      "type": "string",
+      "description": "DeliveryApprovalRequest ID"
+    },
+    "denial_reason": {
+      "type": "string"
+    },
+    "customer_message": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "contacted",
+        "converted",
+        "removed"
+      ],
+      "default": "active"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "customer_name",
+    "customer_email",
+    "original_request_id"
+  ]
+}

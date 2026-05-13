@@ -39,6 +39,7 @@ import StripeRepair from './pages/StripeRepair';
 import OrderReviewQueue from './pages/OrderReviewQueue';
 import Alerts from './pages/Alerts';
 import LiveOrderMonitor from './pages/LiveOrderMonitor';
+import DeliveryRouteReviews from './pages/DeliveryRouteReviews';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -95,6 +96,7 @@ const AuthenticatedApp = () => {
         <Route path="/order-review-queue" element={<PageTransition><OrderReviewQueue /></PageTransition>} />
         <Route path="/alerts" element={<PageTransition><Alerts /></PageTransition>} />
         <Route path="/live-monitor" element={<PageTransition><LiveOrderMonitor /></PageTransition>} />
+        <Route path="/delivery-route-reviews" element={<PageTransition><DeliveryRouteReviews /></PageTransition>} />
 
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />

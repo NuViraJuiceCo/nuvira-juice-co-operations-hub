@@ -1,0 +1,175 @@
+{
+  "name": "DeliveryApprovalRequest",
+  "type": "object",
+  "properties": {
+    "request_number": {
+      "type": "string",
+      "description": "Human-readable request ID e.g. ZR3-2026-001"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending_review",
+        "approved",
+        "denied",
+        "expired",
+        "captured"
+      ],
+      "default": "pending_review",
+      "description": "Current review status"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "customer_email": {
+      "type": "string"
+    },
+    "customer_phone": {
+      "type": "string"
+    },
+    "delivery_address": {
+      "type": "string"
+    },
+    "address_line1": {
+      "type": "string"
+    },
+    "address_line2": {
+      "type": "string"
+    },
+    "address_city": {
+      "type": "string"
+    },
+    "address_state": {
+      "type": "string"
+    },
+    "address_postal_code": {
+      "type": "string"
+    },
+    "zone_name": {
+      "type": "string",
+      "description": "e.g. Zone 3 Extended"
+    },
+    "zone_type": {
+      "type": "string",
+      "description": "e.g. extended, manual_review"
+    },
+    "zone_key": {
+      "type": "string"
+    },
+    "estimated_distance_miles": {
+      "type": "number"
+    },
+    "estimated_drive_time_minutes": {
+      "type": "number"
+    },
+    "estimated_delivery_fee": {
+      "type": "number"
+    },
+    "approved_delivery_fee": {
+      "type": "number",
+      "description": "Fee selected by admin at approval"
+    },
+    "cart_subtotal": {
+      "type": "number"
+    },
+    "cart_items": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "Line items snapshot"
+    },
+    "requested_delivery_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "stripe_payment_intent_id": {
+      "type": "string"
+    },
+    "amount_authorized": {
+      "type": "number",
+      "description": "Amount in dollars authorized on hold"
+    },
+    "amount_capturable": {
+      "type": "number"
+    },
+    "stripe_capture_id": {
+      "type": "string"
+    },
+    "authorization_expires_at": {
+      "type": "string",
+      "description": "ISO timestamp when auth expires (typically 7 days)"
+    },
+    "customer_acknowledged_hold": {
+      "type": "boolean",
+      "default": false
+    },
+    "customer_app_user_id": {
+      "type": "string"
+    },
+    "created_hub_order_id": {
+      "type": "string",
+      "description": "ShopifyOrder ID created after capture"
+    },
+    "created_waitlist_id": {
+      "type": "string",
+      "description": "Waitlist record ID created after denial"
+    },
+    "admin_notes": {
+      "type": "string"
+    },
+    "denial_reason": {
+      "type": "string"
+    },
+    "denial_customer_message": {
+      "type": "string"
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "approved_at": {
+      "type": "string"
+    },
+    "denied_by": {
+      "type": "string"
+    },
+    "denied_at": {
+      "type": "string"
+    },
+    "audit_trail": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "performed_by": {
+            "type": "string"
+          },
+          "prior_status": {
+            "type": "string"
+          },
+          "new_status": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "stripe_result": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "customer_name",
+    "customer_email",
+    "stripe_payment_intent_id",
+    "status"
+  ]
+}

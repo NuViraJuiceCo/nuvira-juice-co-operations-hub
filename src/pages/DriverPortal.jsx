@@ -287,6 +287,41 @@ function InlineBagReturn({ ret, user, onVerifyComplete }) {
   );
 }
 
+// ─── Zone Badge ─────────────────────────────────────────────────────────────
+
+function ZoneBadge({ order }) {
+  const zoneKey = order.delivery_zone_key || (
+    Array.isArray(order.tags)
+      ? order.tags.find(t => t?.startsWith('zone'))
+      : null
+  );
+  if (!zoneKey) return null;
+
+  const isZone3 = zoneKey === 'zone3' || zoneKey === 'zone_zone3' || (order.delivery_zone_type === 'extended' && order.approval_request_id);
+  const isZone2 = zoneKey === 'zone2' || zoneKey === 'zone_zone2';
+
+  if (isZone3) {
+    return (
+      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 flex items-center gap-0.5 whitespace-nowrap">
+        ✓ Route Review
+        {order.distance_miles && <span className="ml-0.5 opacity-80">· {order.distance_miles}mi</span>}
+      </span>
+    );
+  }
+  if (isZone2) {
+    return (
+      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">
+        Zone 2 · Extended
+      </span>
+    );
+  }
+  return (
+    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap">
+      Core
+    </span>
+  );
+}
+
 // ─── Stop Card ──────────────────────────────────────────────────────────────
 
 const DROP_LOCATIONS = [
@@ -365,6 +400,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isDelivered ? 'bg-green-100 text-green-700' : isUnableToDeliver ? 'bg-red-100 text-red-700' : 'bg-primary/10 text-primary'}`}>
               {isDelivered ? 'Delivered ✓' : isUnableToDeliver ? 'Unable to Deliver' : (order.status || 'Scheduled')}
             </span>
+            <ZoneBadge order={order} />
           </div>
           <p className="text-xs font-medium text-foreground mt-0.5">{order.customer_name || order.customer_email}</p>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">{order.delivery_address || order.address || '(address missing)'}</p>
