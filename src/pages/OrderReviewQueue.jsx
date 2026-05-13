@@ -10,6 +10,7 @@ export default function OrderReviewQueue() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
   const [selectedItem, setSelectedItem] = useState(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -36,6 +37,10 @@ export default function OrderReviewQueue() {
 
   const filtered = queue.filter(item => {
     if (filter === "all") return true;
+    if (filter === "active") {
+      // Active = not archived/ignored
+      return item.status !== 'archived' && item.status !== 'ignored';
+    }
     return item.status === filter;
   });
 
@@ -46,6 +51,17 @@ export default function OrderReviewQueue() {
       resolved_at: new Date().toISOString(),
     });
     setQueue(queue.map(q => q.id === itemId ? { ...q, status: 'resolved', resolved_action: action } : q));
+    setSelectedItem(null);
+  };
+
+  const handleArchive = async (itemId, reason = 'admin_cleanup') => {
+    await base44.entities.OrderReviewQueue.update(itemId, {
+      status: 'archived',
+      queue_visibility_status: 'archived',
+      archived_at: new Date().toISOString(),
+      archived_reason: reason,
+    });
+    setQueue(queue.map(q => q.id === itemId ? { ...q, status: 'archived', queue_visibility_status: 'archived' } : q));
     setSelectedItem(null);
   };
 
@@ -120,6 +136,12 @@ export default function OrderReviewQueue() {
 
       <div className="flex gap-2 flex-wrap">
         <Button
+          variant={filter === "active" ? "default" : "outline"}
+          onClick={() => setFilter("active")}
+        >
+          Active ({queue.filter(q => q.status !== 'archived' && q.status !== 'ignored').length})
+        </Button>
+        <Button
           variant={filter === "pending" ? "default" : "outline"}
           onClick={() => setFilter("pending")}
         >
@@ -130,6 +152,12 @@ export default function OrderReviewQueue() {
           onClick={() => setFilter("resolved")}
         >
           Resolved ({queue.filter(q => q.status === "resolved").length})
+        </Button>
+        <Button
+          variant={filter === "archived" ? "default" : "outline"}
+          onClick={() => setFilter("archived")}
+        >
+          Archived ({queue.filter(q => q.status === "archived").length})
         </Button>
         <Button
           variant={filter === "all" ? "default" : "outline"}
@@ -184,7 +212,7 @@ export default function OrderReviewQueue() {
                 </div>
               </div>
 
-              {selectedItem?.id === item.id && item.status === 'pending' && (
+              {selectedItem?.id === item.id && (
                 <div className="mt-4 pt-4 border-t space-y-3">
                   <div className="text-sm">
                     <p className="font-semibold mb-2">Incoming Payload:</p>
@@ -192,29 +220,47 @@ export default function OrderReviewQueue() {
                       {JSON.stringify(item.incoming_payload, null, 2)}
                     </pre>
                   </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleResolve(item.id, 'manually_reviewed_and_rejected')}
-                    >
-                      Reject
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleResolve(item.id, 'approved_for_merge')}
-                    >
-                      Approve & Merge
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleResolve(item.id, 'escalated_to_admin')}
-                    >
-                      Escalate
-                    </Button>
+                  <div className="flex gap-2 justify-end flex-wrap">
+                    {item.status === 'pending' && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResolve(item.id, 'manually_reviewed_and_rejected')}
+                        >
+                          Reject
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResolve(item.id, 'approved_for_merge')}
+                        >
+                          Approve & Merge
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResolve(item.id, 'escalated_to_admin')}
+                        >
+                          Escalate
+                        </Button>
+                      </>
+                    )}
+                    {item.status !== 'archived' && item.status !== 'ignored' && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleArchive(item.id, 'admin_cleanup')}
+                      >
+                        Archive (No-Op Cleanup)
+                      </Button>
+                    )}
                   </div>
+                  {(item.status === 'archived' || item.status === 'ignored') && (
+                    <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
+                      <strong>Archived:</strong> {item.archived_reason} — Only queue visibility affected. No orders/subscriptions modified.
+                    </div>
+                  )}
                 </div>
               )}
             </div>

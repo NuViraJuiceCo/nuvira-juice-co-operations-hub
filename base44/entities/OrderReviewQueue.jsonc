@@ -87,10 +87,12 @@
         "pending",
         "reviewed",
         "resolved",
-        "escalated"
+        "escalated",
+        "archived",
+        "ignored"
       ],
       "default": "pending",
-      "description": "Status of this review queue item"
+      "description": "Status of this review queue item. archived/ignored are non-operational cleanup states."
     },
     "resolved_action": {
       "type": "string",
@@ -120,6 +122,29 @@
     "last_seen_at": {
       "type": "string",
       "description": "ISO timestamp of most recent occurrence"
+    },
+    "queue_visibility_status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "archived",
+        "ignored",
+        "historical_noise"
+      ],
+      "default": "active",
+      "description": "Controls queue view visibility. Does NOT trigger operational workflows. Only affects admin UI display."
+    },
+    "archived_at": {
+      "type": "string",
+      "description": "ISO timestamp when archived/ignored"
+    },
+    "archived_by": {
+      "type": "string",
+      "description": "User who archived/ignored this item"
+    },
+    "archived_reason": {
+      "type": "string",
+      "description": "Reason for archiving (e.g., duplicate, stale, historical_noise, test_data)"
     }
   },
   "required": [
