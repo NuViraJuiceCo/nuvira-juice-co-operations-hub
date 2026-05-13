@@ -171,6 +171,33 @@ async function logSync(base44, params) {
 
 async function quarantine(base44, params) {
   try {
+    // Build idempotency key: source + incident_type + customer + order identifier
+    const orderIdent = params.existing_order_id || 
+                       params.incoming_payload?.stripe_subscription_id || 
+                       params.incoming_payload?.stripe_checkout_session_id || 
+                       params.incoming_payload?.shopify_order_number ||
+                       'unknown';
+    const idempotencyKey = `${params.incoming_source}::${params.incident_type}::${params.customer_email || 'no-email'}::${orderIdent}`;
+    
+    // Check if this exact issue already exists in pending status
+    const existing = await base44.asServiceRole.entities.OrderReviewQueue.filter({
+      idempotency_key: idempotencyKey,
+      status: 'pending',
+    });
+    
+    if (existing && existing.length > 0) {
+      // Update occurrence count instead of creating duplicate
+      const entry = existing[0];
+      await base44.asServiceRole.entities.OrderReviewQueue.update(entry.id, {
+        occurrence_count: (entry.occurrence_count || 1) + 1,
+        last_seen_at: new Date().toISOString(),
+        issue_description: params.issue_description, // Keep latest description
+      });
+      console.log(`[SAFE-SYNC] Duplicate quarantine blocked for idempotency_key: ${idempotencyKey}. Updated occurrence_count to ${(entry.occurrence_count || 1) + 1}.`);
+      return;
+    }
+    
+    // New issue - create entry
     await base44.asServiceRole.entities.OrderReviewQueue.create({
       incident_type: params.incident_type,
       customer_email: params.customer_email || null,
@@ -183,6 +210,10 @@ async function quarantine(base44, params) {
       issue_description: params.issue_description,
       recommended_action: params.recommended_action || 'manual_review',
       status: 'pending',
+      idempotency_key: idempotencyKey,
+      occurrence_count: 1,
+      first_seen_at: new Date().toISOString(),
+      last_seen_at: new Date().toISOString(),
     });
   } catch (err) {
     console.error('[SAFE-SYNC] Quarantine failed:', err.message);
@@ -374,39 +405,16 @@ Deno.serve(async (req) => {
       const incomingScore = getCompletenessScore(incomingData);
       const minScore = source === 'rebuild_subscriptions' ? 6 : 5; // Subscriptions need more data
       if (incomingScore < minScore) {
-        // DEDUP CHECK: Only create one queue entry per unique order/reason
-        // Key: customer_email + stripe_subscription_id + incident reason
-        const existingQueue = await base44.asServiceRole.entities.OrderReviewQueue.filter({
-          incoming_source: source,
+        // Quarantine function now handles deduplication via idempotency_key automatically
+        await quarantine(base44, {
           incident_type: 'low_quality_new_order',
-          customer_email: incomingData.customer_email,
-          status: 'pending',
+          customer_email: incomingData.customer_email || null,
+          customer_name: incomingData.customer_name || null,
+          incoming_payload: incomingData,
+          incoming_source: source,
+          issue_description: `New order rejected — score ${incomingScore}/${minScore}. Missing: ${!incomingData.customer_name ? 'customer_name ' : ''}${!incomingData.address_line1 ? 'address_line1' : ''}`,
+          recommended_action: 'manual_review',
         });
-        
-        // Check if THIS EXACT ORDER already has a pending review
-        const isDuplicate = existingQueue && existingQueue.length > 0 && 
-          existingQueue.some(q => 
-            q.incoming_payload?.stripe_subscription_id === incomingData.stripe_subscription_id ||
-            q.incoming_payload?.stripe_checkout_session_id === incomingData.stripe_checkout_session_id ||
-            q.incoming_payload?.shopify_order_number === incomingData.shopify_order_number
-          );
-        
-        if (!isDuplicate) {
-          // First time seeing this order - create ONE queue entry
-          await quarantine(base44, {
-            incident_type: 'low_quality_new_order',
-            customer_email: incomingData.customer_email || null,
-            customer_name: incomingData.customer_name || null,
-            incoming_payload: incomingData,
-            incoming_source: source,
-            issue_description: `New order rejected — score ${incomingScore}/${minScore}. Missing: ${!incomingData.customer_name ? 'customer_name ' : ''}${!incomingData.address_line1 ? 'address_line1' : ''}`,
-            recommended_action: 'manual_review',
-          });
-          console.log(`[SAFE-SYNC] Created queue entry for ${incomingData.customer_email} (${incomingData.stripe_subscription_id || incomingData.shopify_order_number})`);
-        } else {
-          // Already queued - skip to prevent explosion
-          console.log(`[SAFE-SYNC] DEDUP: Skipped duplicate queue entry for ${incomingData.customer_email}`);
-        }
         return Response.json({ status: 'rejected', reason: `low_quality_new_order_score_${incomingScore}_below_${minScore}` });
       }
     }

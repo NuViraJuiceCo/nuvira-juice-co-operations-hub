@@ -15,7 +15,8 @@
         "zero_total_with_items",
         "missing_customer_info",
         "overwrite_rejection",
-        "source_conflict"
+        "source_conflict",
+        "low_quality_new_order"
       ],
       "description": "Category of review issue"
     },
@@ -55,7 +56,9 @@
         "stripe_webhook",
         "customer_app",
         "manual_recovery",
-        "scheduled_sync"
+        "scheduled_sync",
+        "rebuild_subscriptions",
+        "operations"
       ],
       "description": "Source of incoming data"
     },
@@ -100,6 +103,23 @@
     "resolved_by": {
       "type": "string",
       "description": "User who resolved this item"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Deterministic key: source+incident_type+customer_email+stripe_subscription_id/order_id. Prevents duplicate alerts."
+    },
+    "occurrence_count": {
+      "type": "number",
+      "default": 1,
+      "description": "Number of times this same issue has been detected. Updated instead of creating new entry."
+    },
+    "first_seen_at": {
+      "type": "string",
+      "description": "ISO timestamp of first occurrence"
+    },
+    "last_seen_at": {
+      "type": "string",
+      "description": "ISO timestamp of most recent occurrence"
     }
   },
   "required": [
