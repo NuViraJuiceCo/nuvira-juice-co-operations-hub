@@ -135,22 +135,29 @@ Deno.serve(async (req) => {
       archiveReason = 'Test/fake customer data';
     }
 
-    // Batch archive
+    // Batch archive with rate limit protection
     let archivedCount = 0;
-    for (let i = 0; i < candidates.length; i += 10) {
-      const batch = candidates.slice(i, i + 10);
-      await Promise.all(
-        batch.map(item =>
-          base44.asServiceRole.entities.OrderReviewQueue.update(item.id, {
-            status: 'archived',
-            queue_visibility_status: 'archived',
-            archived_at: archiveAt,
-            archived_by: user.email,
-            archived_reason: archiveReason,
-          })
-        )
-      );
-      archivedCount += batch.length;
+    for (let i = 0; i < candidates.length; i += 5) {
+      const batch = candidates.slice(i, i + 5);
+      try {
+        await Promise.all(
+          batch.map(item =>
+            base44.asServiceRole.entities.OrderReviewQueue.update(item.id, {
+              status: 'archived',
+              queue_visibility_status: 'archived',
+              archived_at: archiveAt,
+              archived_by: user.email,
+              archived_reason: archiveReason,
+            })
+          )
+        );
+        archivedCount += batch.length;
+      } catch (batchErr) {
+        console.warn(`[BULK-ARCHIVE] Batch ${i}-${i+5} failed, continuing...`, batchErr.message);
+        // Continue with next batch even if this one fails
+      }
+      // Small delay between batches to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     // Audit log
