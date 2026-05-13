@@ -139,14 +139,25 @@ export default function OrderReviewQueue() {
       <div className="flex gap-2 flex-wrap">
         <Button
           onClick={async () => {
-            if (!confirm(`Archive all ${queue.filter(q => q.status === 'pending').length} pending items? This clears the historical noise so you can focus on new incoming items.`)) return;
-            const res = await base44.functions.invoke('archiveAllPendingQueueItems', {});
-            if (res.data?.success) {
-              alert(`✓ Archived ${res.data.archived_count} items`);
-              load();
+            const pending = queue.filter(q => q.status === 'pending').length;
+            if (pending === 0) {
+              alert('No pending items to clear.');
+              return;
+            }
+            if (!confirm(`Archive all ${pending} pending items? This clears the historical noise so you can focus on new incoming items.`)) return;
+            try {
+              const res = await base44.functions.invoke('archiveAllPendingQueueItems', {});
+              if (res.data?.success) {
+                alert(`✓ Archived ${res.data.archived_count} items. Refreshing...`);
+                await load();
+              } else {
+                alert(`Error: ${res.data?.message || 'Unknown error'}`);
+              }
+            } catch (err) {
+              alert(`Failed to clear: ${err.message}`);
             }
           }}
-          disabled={loading || queue.filter(q => q.status === 'pending').length === 0}
+          disabled={loading}
           variant="destructive"
           size="sm"
         >
