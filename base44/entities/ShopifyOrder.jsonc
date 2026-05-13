@@ -458,6 +458,61 @@
           }
         }
       }
+    },
+    "delivery_zone_key": {
+      "type": "string",
+      "description": "Zone key e.g. zone1, zone2, zone3"
+    },
+    "delivery_zone_name": {
+      "type": "string",
+      "description": "Human-readable zone name e.g. Zone 1 Core, Zone 2 Extended, Zone 3 Route Review"
+    },
+    "delivery_zone_type": {
+      "type": "string",
+      "description": "Zone type: core, extended, manual_review"
+    },
+    "delivery_fee": {
+      "type": "number",
+      "description": "Delivery fee charged for this order"
+    },
+    "minimum_order": {
+      "type": "number",
+      "description": "Minimum order value for this zone"
+    },
+    "distance_miles": {
+      "type": "number",
+      "description": "Estimated distance from depot in miles"
+    },
+    "drive_time_minutes": {
+      "type": "number",
+      "description": "Estimated drive time in minutes"
+    },
+    "approval_request_id": {
+      "type": "string",
+      "description": "DeliveryApprovalRequest ID if Zone 3 approved route review"
+    },
+    "approval_status": {
+      "type": "string",
+      "enum": [
+        "not_required",
+        "approved",
+        "pending"
+      ],
+      "default": "not_required",
+      "description": "Zone 3 approval status"
+    },
+    "approved_delivery_fee": {
+      "type": "number",
+      "description": "Admin-approved delivery fee for Zone 3 orders"
+    },
+    "route_review_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "True if this order required a Zone 3 route review before capture"
+    },
+    "origin_address": {
+      "type": "string",
+      "description": "Depot/origin address used for distance calculation"
     }
   },
   "required": [

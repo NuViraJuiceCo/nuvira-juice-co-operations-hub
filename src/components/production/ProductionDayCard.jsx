@@ -12,14 +12,26 @@ function SourceBreakdown({ sources }) {
   // Match both 'subscription' and 'subscription_fulfillment' source types
   const subs = sources.filter(s => s.source_type === 'subscription' || s.source_type === 'subscription_fulfillment');
 
+  // Zone badge helper for source rows
+  const ZoneTag = ({ source }) => {
+    const zone = source.delivery_zone_key || source.zone_key;
+    if (!zone) return null;
+    const isZ3 = zone === 'zone3' || zone === 'zone_zone3';
+    const isZ2 = zone === 'zone2' || zone === 'zone_zone2';
+    if (isZ3) return <span className="ml-1 text-[9px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">Z3✓</span>;
+    if (isZ2) return <span className="ml-1 text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">Z2</span>;
+    return null;
+  };
+
   return (
     <div className="mt-3 pt-3 border-t border-border space-y-2">
       {direct.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-foreground/80 mb-1">Direct orders ({direct.reduce((s, x) => s + x.quantity, 0)} units)</p>
           {direct.map((s, i) => (
-            <p key={i} className="text-xs text-foreground/70 pl-2">
+            <p key={i} className="text-xs text-foreground/70 pl-2 flex items-center gap-1 flex-wrap">
               · {s.order_number} — {s.customer_name || s.customer_email} × {s.quantity}
+              <ZoneTag source={s} />
             </p>
           ))}
         </div>
@@ -47,9 +59,10 @@ function SourceBreakdown({ sources }) {
               ? ` — Fulfillment #${s.fulfillment_number}`
               : (s.fulfillment_index && s.fulfillment_total ? ` (${s.fulfillment_index}/${s.fulfillment_total})` : '');
             return (
-              <p key={i} className="text-xs text-foreground/70 pl-2">
+              <p key={i} className="text-xs text-foreground/70 pl-2 flex items-center gap-1 flex-wrap">
                 · <span className="font-medium text-blue-700">{s.customer_name || s.customer_email}</span>
                 {' '}— {s.order_number}{fulfillmentLabel} × {s.quantity}
+                <ZoneTag source={s} />
               </p>
             );
           })}
