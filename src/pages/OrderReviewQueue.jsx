@@ -12,12 +12,14 @@ export default function OrderReviewQueue() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
+  const load = async () => {
+    setLoading(true);
+    const allItems = await base44.entities.OrderReviewQueue.list("-created_date", 500);
+    setQueue(allItems);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    async function load() {
-      const allItems = await base44.entities.OrderReviewQueue.list("-created_date", 500);
-      setQueue(allItems);
-      setLoading(false);
-    }
     load();
   }, []);
 
@@ -135,6 +137,21 @@ export default function OrderReviewQueue() {
       )}
 
       <div className="flex gap-2 flex-wrap">
+        <Button
+          onClick={async () => {
+            if (!confirm(`Archive all ${queue.filter(q => q.status === 'pending').length} pending items? This clears the historical noise so you can focus on new incoming items.`)) return;
+            const res = await base44.functions.invoke('archiveAllPendingQueueItems', {});
+            if (res.data?.success) {
+              alert(`✓ Archived ${res.data.archived_count} items`);
+              load();
+            }
+          }}
+          disabled={loading || queue.filter(q => q.status === 'pending').length === 0}
+          variant="destructive"
+          size="sm"
+        >
+          Clear All Pending ({queue.filter(q => q.status === 'pending').length})
+        </Button>
         <Button
           variant={filter === "active" ? "default" : "outline"}
           onClick={() => setFilter("active")}
