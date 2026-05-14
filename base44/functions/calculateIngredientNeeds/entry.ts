@@ -15,10 +15,11 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { date_from, date_to, order_ids } = body;
 
-    // 1. Fetch all active recipes and bundles in parallel
-    const [recipes, bundles] = await Promise.all([
+    // 1. Fetch all active recipes, bundles, and manual batches in parallel
+    const [recipes, bundles, manualBatches] = await Promise.all([
       base44.asServiceRole.entities.Recipe.list(),
       base44.asServiceRole.entities.Bundle.list(),
+      base44.asServiceRole.entities.ManualProductionBatch.list(),
     ]);
 
     if (!recipes || recipes.length === 0) {
@@ -48,23 +49,13 @@ Deno.serve(async (req) => {
       orders = orders.filter(o => order_ids.includes(o.id));
     } else {
       orders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500);
-      if (date_from || date_to) {
-        orders = orders.filter(o => {
-          // Try all possible delivery date fields, fall back to created_date
-          const orderDate = new Date(o.requested_delivery_date || o.assigned_delivery_date || o.created_date);
-          const from = date_from ? new Date(date_from) : null;
-          const to = date_to ? new Date(date_to + 'T23:59:59') : null;
-          if (from && orderDate < from) return false;
-          if (to && orderDate > to) return false;
-          return true;
-        });
-      }
     }
 
-    // ── Multi-guard production filter (matches Fulfillment page isOrderProduction) ──
+    // ── Multi-guard production filter ─────────────────────────────────────────
+    // Note: subscriptions with fulfillment_status=fulfilled may still have FUTURE
+    // pending fulfillments — never exclude them on fulfillment_status alone.
     const isProductionVisible = (o) => {
       if (!o) return false;
-      // Tag-based exclusions
       const tags = o.tags || [];
       if (tags.includes('refunded') || tags.includes('excluded') || tags.includes('do_not_sync') || tags.includes('not_for_production')) {
         console.log(`[CALC] Excluding ${o.shopify_order_number} — excluded tag`);
@@ -74,22 +65,20 @@ Deno.serve(async (req) => {
         console.log(`[CALC] Excluding ${o.shopify_order_number} — sync_status=do_not_sync`);
         return false;
       }
-      // Fulfillment status cancelled
-      if (o.fulfillment_status === 'cancelled' || o.fulfillment_status === 'canceled') {
-        console.log(`[CALC] Excluding ${o.shopify_order_number} — fulfillment_status=cancelled`);
+      // Only exclude cancelled fulfillment_status for NON-subscription one-time orders
+      const isSubscription = o.order_type === 'subscription' || o.source_channel === 'subscription';
+      if (!isSubscription && (o.fulfillment_status === 'cancelled' || o.fulfillment_status === 'canceled')) {
+        console.log(`[CALC] Excluding ${o.shopify_order_number} — fulfillment_status=cancelled (one-time)`);
         return false;
       }
-      // Dead production statuses
       if (['fulfilled', 'canceled', 'refunded', 'excluded'].includes(o.production_status)) {
         console.log(`[CALC] Excluding ${o.shopify_order_number} — production_status=${o.production_status}`);
         return false;
       }
-      // Quarantined data quality
       if (o.data_quality_status === 'quarantined') {
         console.log(`[CALC] Excluding ${o.shopify_order_number} — data_quality_status=quarantined`);
         return false;
       }
-      // Must be paid
       if (o.payment_status !== 'paid') {
         console.log(`[CALC] Excluding ${o.shopify_order_number} — payment_status=${o.payment_status}`);
         return false;
@@ -97,14 +86,55 @@ Deno.serve(async (req) => {
       return true;
     };
 
-    const activeOrders = orders.filter(isProductionVisible);
-    console.log(`[CALC] Production-visible orders: ${activeOrders.length} of ${orders.length} total`);
+    let activeOrders = orders.filter(isProductionVisible);
 
-    if (activeOrders.length === 0) {
+    // ── Date range filter ─────────────────────────────────────────────────────
+    // For multi-delivery subscriptions, check if any fulfillment falls in range.
+    // For one-time orders, check delivery date fields.
+    if (date_from || date_to) {
+      const from = date_from ? new Date(date_from) : null;
+      const to = date_to ? new Date(date_to + 'T23:59:59') : null;
+      activeOrders = activeOrders.filter(o => {
+        const isSubscription = o.order_type === 'subscription' || o.source_channel === 'subscription';
+        if (isSubscription && o.fulfillments && o.fulfillments.length > 0) {
+          // Include if any pending fulfillment falls in the date range
+          return o.fulfillments.some(f => {
+            if (f.status === 'delivered') return false;
+            const fDate = new Date(f.delivery_date || f.production_date);
+            if (from && fDate < from) return false;
+            if (to && fDate > to) return false;
+            return true;
+          });
+        }
+        // One-time: check canonical delivery date fields
+        const orderDate = new Date(o.assigned_delivery_date || o.requested_delivery_date || o.selected_delivery_date || o.created_date);
+        if (from && orderDate < from) return false;
+        if (to && orderDate > to) return false;
+        return true;
+      });
+    }
+
+    console.log(`[CALC] Production-visible orders after date filter: ${activeOrders.length}`);
+
+    // Filter active manual batches (optionally by production/use date)
+    const activeManualBatches = (manualBatches || []).filter(b => {
+      if (!b || b.status === 'cancelled' || b.status === 'draft' || b.status === 'produced') return false;
+      if (date_from || date_to) {
+        const bDate = new Date(b.production_date || b.use_date);
+        const from = date_from ? new Date(date_from) : null;
+        const to = date_to ? new Date(date_to + 'T23:59:59') : null;
+        if (from && bDate < from) return false;
+        if (to && bDate > to) return false;
+      }
+      return true;
+    });
+
+    if (activeOrders.length === 0 && activeManualBatches.length === 0) {
       return Response.json({
-        summary: { total_orders: 0, matched_orders: 0, unmatched_items: [] },
+        summary: { total_orders: 0, matched_orders: 0, unmatched_items: [], manual_batch_count: 0 },
         ingredient_needs: [],
-        orders_included: []
+        orders_included: [],
+        manual_batches_included: []
       });
     }
 
@@ -203,6 +233,31 @@ Deno.serve(async (req) => {
       if (orderMatched) matchedOrders++;
     }
 
+    // 3b. Accumulate manual batch ingredient needs
+    for (const batch of activeManualBatches) {
+      for (const item of (batch.items || [])) {
+        const productKey = (item.product_name || '').toLowerCase().trim();
+        const qty = item.quantity || 1;
+        const recipe = recipeMap[productKey];
+        if (!recipe) {
+          unmatchedItems.add(item.product_name);
+          continue;
+        }
+        const yieldFactor = recipe.yield_factor || 1.05;
+        bottleCounts[recipe.product_name] = (bottleCounts[recipe.product_name] || 0) + qty;
+        for (const ing of (recipe.ingredients || [])) {
+          const ingName = ing.ingredient_name;
+          const ingQtyOz = (ing.quantity_oz || 0) * qty * yieldFactor;
+          const ingQtyG = ingQtyOz * OZ_TO_G;
+          if (!ingredientTotals[ingName]) {
+            ingredientTotals[ingName] = { quantity_oz: 0, quantity_g: 0, unit: ing.unit || 'oz' };
+          }
+          ingredientTotals[ingName].quantity_oz += ingQtyOz;
+          ingredientTotals[ingName].quantity_g += ingQtyG;
+        }
+      }
+    }
+
     // 4. Fetch current inventory to compare
     const inventory = await base44.asServiceRole.entities.InventoryItem.list();
     const inventoryMap = {};
@@ -286,6 +341,7 @@ Deno.serve(async (req) => {
     return Response.json({
       summary: {
         total_orders: activeOrders.length,
+        manual_batch_count: activeManualBatches.length,
         matched_orders: matchedOrders,
         unmatched_items: Array.from(unmatchedItems),
         bottle_counts: bottleCounts,
@@ -297,8 +353,17 @@ Deno.serve(async (req) => {
       orders_included: activeOrders.map(o => ({
         id: o.id,
         order_number: o.shopify_order_number,
-        delivery_date: o.requested_delivery_date || o.assigned_delivery_date,
-        status: o.production_status
+        delivery_date: o.assigned_delivery_date || o.requested_delivery_date,
+        production_status: o.production_status,
+        source: 'customer_order'
+      })),
+      manual_batches_included: activeManualBatches.map(b => ({
+        id: b.id,
+        title: b.title,
+        purpose: b.purpose,
+        production_date: b.production_date,
+        items: b.items,
+        source: 'manual_internal_batch'
       }))
     });
 

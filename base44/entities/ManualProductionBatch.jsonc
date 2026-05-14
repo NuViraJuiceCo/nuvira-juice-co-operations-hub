@@ -1,0 +1,62 @@
+{
+  "name": "ManualProductionBatch",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Descriptive title e.g. Brand Influencer Sampling"
+    },
+    "purpose": {
+      "type": "string",
+      "description": "Why this batch is being produced (internal use)"
+    },
+    "production_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Scheduled production date"
+    },
+    "use_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date items will be used or distributed"
+    },
+    "items": {
+      "type": "array",
+      "description": "Products to produce",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "included_in_planning",
+        "produced",
+        "cancelled"
+      ],
+      "default": "active"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string",
+      "default": "manual_internal_batch"
+    }
+  },
+  "required": [
+    "title",
+    "production_date",
+    "items"
+  ]
+}

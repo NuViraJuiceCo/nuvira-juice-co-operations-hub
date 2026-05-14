@@ -131,13 +131,17 @@ export default function IngredientNeedsResultFixed({ result }) {
     setExpandedIngredients(newSet);
   };
 
-  if (!result?.ingredient_needs?.length) {
+  const hasResults = result?.ingredient_needs?.length > 0;
+  const manualBatches = result?.manual_batches_included || [];
+  const totalBottles = Object.values(result?.summary?.bottle_counts || {}).reduce((a, b) => a + b, 0);
+
+  if (!hasResults) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
         <p className="text-sm text-amber-700 font-medium">
-          {result?.summary?.total_orders === 0 
-            ? 'No orders found for the selected range.'
-            : 'No ingredients needed (all orders fulfilled or no recipe matches).'}
+          {(result?.summary?.total_orders === 0 && result?.summary?.manual_batch_count === 0)
+            ? 'No orders or manual batches found for the selected range.'
+            : 'No ingredients needed (all matched or no recipe found).'}
         </p>
       </div>
     );
@@ -147,29 +151,42 @@ export default function IngredientNeedsResultFixed({ result }) {
     <div className="space-y-8">
       {/* Summary section */}
       <div className="bg-card border border-border rounded-xl p-6">
-        <h2 className="text-lg font-bold text-foreground mb-4">Summary</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Total Orders</p>
+        <h2 className="text-lg font-bold text-foreground mb-4">Production Run Summary</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+          <div className="bg-primary/5 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground font-medium">Customer Orders</p>
             <p className="text-2xl font-bold text-foreground mt-1">{result.summary.total_orders}</p>
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">Matched Orders</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{result.summary.matched_orders}</p>
+          <div className="bg-purple-50 border border-purple-100 rounded-lg p-3">
+            <p className="text-xs text-purple-700 font-medium">Manual Batches</p>
+            <p className="text-2xl font-bold text-purple-800 mt-1">{result.summary.manual_batch_count ?? manualBatches.length}</p>
           </div>
-          {Object.keys(result.summary.bottle_counts || {}).length > 0 && (
-            <div className="sm:col-span-2">
-              <p className="text-xs text-muted-foreground font-medium mb-2">Products</p>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(result.summary.bottle_counts).map(([prod, qty]) => (
-                  <span key={prod} className="inline-block px-2.5 py-1 bg-primary/10 text-primary rounded text-xs font-semibold">
-                    {qty}× {prod}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="bg-muted/40 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground font-medium">Total Bottles</p>
+            <p className="text-2xl font-bold text-foreground mt-1">{totalBottles}</p>
+          </div>
+          <div className="bg-muted/40 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground font-medium">Date Range</p>
+            <p className="text-sm font-semibold text-foreground mt-1">
+              {result.summary.date_from ? `${result.summary.date_from} → ${result.summary.date_to || '…'}` : 'All Active'}
+            </p>
+          </div>
         </div>
+
+        {/* Product totals */}
+        {Object.keys(result.summary.bottle_counts || {}).length > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground font-medium mb-2">Combined Products (orders + manual)</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(result.summary.bottle_counts).map(([prod, qty]) => (
+                <span key={prod} className="inline-block px-2.5 py-1 bg-primary/10 text-primary rounded text-xs font-semibold">
+                  {qty}× {prod}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {result.summary.unmatched_items?.length > 0 && (
           <div className="mt-4 pt-4 border-t border-border">
             <p className="text-xs font-semibold text-amber-700 mb-2">⚠ Unmatched Items (no recipe):</p>
@@ -183,6 +200,37 @@ export default function IngredientNeedsResultFixed({ result }) {
           </div>
         )}
       </div>
+
+      {/* Manual batches section — clearly separated */}
+      {manualBatches.length > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-5">
+          <h3 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            Manual Internal Batches ({manualBatches.length})
+          </h3>
+          <p className="text-xs text-purple-700 mb-3">These are internal production needs. Not customer orders. Not routed to drivers or Stripe.</p>
+          <div className="space-y-2">
+            {manualBatches.map(b => (
+              <div key={b.id} className="bg-white border border-purple-100 rounded-lg px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-sm text-purple-900">{b.title}</p>
+                    {b.purpose && <p className="text-xs text-purple-700 mt-0.5">{b.purpose}</p>}
+                  </div>
+                  <span className="text-xs text-purple-600 font-medium shrink-0">{b.production_date}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {(b.items || []).map((item, i) => (
+                    <span key={i} className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-medium">
+                      {item.quantity}× {item.product_name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Ingredients list */}
       <div className="space-y-0">
@@ -199,20 +247,15 @@ export default function IngredientNeedsResultFixed({ result }) {
 
       {/* Orders included */}
       {result.orders_included?.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6">
-          <h3 className="font-semibold text-foreground mb-3">Orders Included ({result.orders_included.length})</h3>
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h3 className="font-semibold text-foreground mb-3">Customer Orders Included ({result.orders_included.length})</h3>
           <div className="space-y-2">
-            {result.orders_included.slice(0, 5).map((order) => (
+            {result.orders_included.map((order) => (
               <div key={order.id} className="flex justify-between text-sm">
                 <span className="font-medium text-foreground">{order.order_number}</span>
-                <span className="text-muted-foreground">{order.delivery_date}</span>
+                <span className="text-muted-foreground">{order.delivery_date} · {order.production_status}</span>
               </div>
             ))}
-            {result.orders_included.length > 5 && (
-              <p className="text-xs text-muted-foreground pt-2 border-t border-border">
-                ... and {result.orders_included.length - 5} more orders
-              </p>
-            )}
           </div>
         </div>
       )}
