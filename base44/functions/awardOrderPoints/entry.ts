@@ -14,6 +14,16 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const payload = await req.json();
 
+    // Allow entity automation (internal secret) or admin users only
+    const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+    const isAutomation = payload.event?.type !== undefined; // entity automation payload
+    const isInternalCall = payload._internalSecret && internalSecret && payload._internalSecret === internalSecret;
+    if (!isAutomation && !isInternalCall) {
+      const user = await base44.auth.me();
+      if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      if (user.role !== 'admin') return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+    }
+
     // Support both automation payload and manual admin call
     const orderData = payload.data || payload.order;
     const orderId = payload.event?.entity_id || payload.order_id;

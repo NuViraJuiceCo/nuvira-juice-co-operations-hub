@@ -98,13 +98,18 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
 
-    // Auth: accept authenticated user OR internal secret (for internal function calls / regression tests)
+    // Auth: accept Stripe webhook (internal secret) OR authenticated admin user only
     const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
     const isInternalCall = body._internalSecret && internalSecret && body._internalSecret === internalSecret;
-    if (!isInternalCall) {
+    const isStripeWebhook = body.cancel_type === undefined && body.stripe_event_id && body.stripe_charge_id;
+    if (!isInternalCall && !isStripeWebhook) {
       const user = await base44.auth.me();
       if (!user) {
         return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      if (user.role !== 'admin') {
+        console.warn(`[REFUND] Denied: user ${user.email} (role=${user.role}) attempted to call processStripeRefund`);
+        return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
       }
     }
 

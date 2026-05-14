@@ -6,7 +6,16 @@ const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
+
+    // Allow internal system calls via secret, otherwise require admin
+    const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
     const payload = await req.json();
+    const isInternalCall = payload._internalSecret && internalSecret && payload._internalSecret === internalSecret;
+    if (!isInternalCall) {
+      const user = await base44.auth.me();
+      if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      if (user.role !== 'admin') return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+    }
 
     const order = payload.data;
     if (!order || !order.customer_email) {

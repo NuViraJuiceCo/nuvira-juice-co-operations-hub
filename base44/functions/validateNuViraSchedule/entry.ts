@@ -264,9 +264,20 @@ function calculateScheduleFromPaidAt(paidAtISO, fulfillmentCount = 1) {
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me().catch(() => null);
-    if (user !== null && user?.role !== 'admin') {
-      return Response.json({ error: 'Admin access required' }, { status: 403 });
+
+    // Allow internal system calls via secret, otherwise require admin
+    const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+    let isInternalCall = false;
+    if (req.method === 'POST') {
+      try {
+        const body = await req.clone().json();
+        isInternalCall = body._internalSecret && internalSecret && body._internalSecret === internalSecret;
+      } catch (_) {}
+    }
+    if (!isInternalCall) {
+      const user = await base44.auth.me();
+      if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      if (user.role !== 'admin') return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
     let body = {};
