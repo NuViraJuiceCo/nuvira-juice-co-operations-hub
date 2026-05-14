@@ -48,5 +48,44 @@
     "customer_name",
     "customer_email",
     "original_request_id"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "data.customer_email": "{{user.email}}",
+          "data.original_request_id": {
+            "$exists": true
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "data.customer_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
 }
