@@ -80,19 +80,50 @@
   ],
   "rls": {
     "create": {
+      "created_by": "{{user.email}}",
       "user_condition": {
-        "role": "admin"
+        "role": {
+          "$in": [
+            "admin",
+            "sales_staff",
+            "sales_manager"
+          ]
+        }
       }
     },
     "read": {
-      "user_condition": {
-        "role": "admin"
-      }
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "sales_manager"
+              ]
+            }
+          }
+        }
+      ]
     },
     "update": {
-      "user_condition": {
-        "role": "admin"
-      }
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": {
+              "$in": [
+                "admin",
+                "sales_manager"
+              ]
+            }
+          }
+        }
+      ]
     },
     "delete": {
       "user_condition": {
