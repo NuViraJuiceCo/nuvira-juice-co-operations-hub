@@ -263,12 +263,13 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
-    // Load all active orders, fulfillment tasks, bundles, and batches
-    const [allOrders, allFulfillmentTasks, allBundles, allBatches] = await Promise.all([
+    // Load all active orders, fulfillment tasks, bundles, batches, and manual batches
+    const [allOrders, allFulfillmentTasks, allBundles, allBatches, allManualBatches] = await Promise.all([
       base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500),
       base44.asServiceRole.entities.FulfillmentTask.list('-created_date', 500),
       base44.asServiceRole.entities.Bundle.list('-updated_date', 100),
       base44.asServiceRole.entities.ProductionBatch.list('-production_date', 500),
+      base44.asServiceRole.entities.ManualProductionBatch.list('-production_date', 200),
     ]);
 
     const today = new Date();
@@ -827,6 +828,65 @@ Deno.serve(async (req) => {
             }
           }
         }
+      }
+    }
+
+    // ─── MERGE MANUAL PRODUCTION BATCHES INTO planMap ─────────────────────────
+    // Manual batches are internal production needs (not customer orders).
+    // They must appear on production cards with source_type='manual_internal_batch'.
+    // Only include statuses that represent real production demand.
+    const MANUAL_ACTIVE_STATUSES = new Set(['active', 'included_in_planning']);
+    const activeManualBatches = allManualBatches.filter(b => MANUAL_ACTIVE_STATUSES.has(b.status));
+    console.log(`[RECALC] ManualProductionBatch: ${activeManualBatches.length} active of ${allManualBatches.length} total`);
+
+    for (const batch of activeManualBatches) {
+      const productionDate = batch.production_date;
+      if (!productionDate) continue;
+
+      // Skip past dates — production has already happened or is not actionable
+      const prodDateObj = new Date(productionDate + 'T00:00:00');
+      if (prodDateObj < today) continue;
+
+      // Phase 5 guard: only valid NuVira production days (Tue=2, Fri=5)
+      // Manual batches may be on any date — if it's not a valid prod day, still include
+      // (admin explicitly scheduled it, so we respect their date choice)
+
+      for (const item of (batch.items || [])) {
+        const rawName = (item.product_name || '').trim();
+        if (!rawName) continue;
+        const qty = Number(item.quantity) || 0;
+        if (qty <= 0) continue;
+
+        const productName = normalizeProductName(rawName);
+        const key = `${productionDate}__${productName}`;
+
+        // Don't override locked customer batches — add to them instead
+        // Locked keys are customer-only locks; manual demand still counts on top
+
+        if (!planMap[key]) {
+          planMap[key] = { productionDate, productName, units: 0, sources: [] };
+        }
+
+        // Dedup guard: skip if this exact manual batch item is already in sources
+        const alreadyAdded = planMap[key].sources.some(
+          s => s.source_type === 'manual_internal_batch' && s.order_id === batch.id && s.source_item === productName
+        );
+        if (alreadyAdded) continue;
+
+        planMap[key].units += qty;
+        planMap[key].sources.push({
+          order_id: batch.id,
+          order_number: `INTERNAL-${batch.id.slice(-6)}`,
+          customer_email: '',
+          customer_name: batch.title,
+          quantity: qty,
+          source_type: 'manual_internal_batch',
+          source_item: productName,
+          manual_batch_title: batch.title,
+          manual_batch_purpose: batch.purpose || '',
+        });
+
+        console.log(`[RECALC] Manual batch "${batch.title}" → ${qty}× ${productName} on ${productionDate}`);
       }
     }
 

@@ -11,6 +11,7 @@ function SourceBreakdown({ sources }) {
   const bundles = sources.filter(s => s.source_type === 'bundle');
   // Match both 'subscription' and 'subscription_fulfillment' source types
   const subs = sources.filter(s => s.source_type === 'subscription' || s.source_type === 'subscription_fulfillment');
+  const manualBatches = sources.filter(s => s.source_type === 'manual_internal_batch');
 
   // Zone badge helper for source rows
   const ZoneTag = ({ source }) => {
@@ -66,6 +67,22 @@ function SourceBreakdown({ sources }) {
               </p>
             );
           })}
+        </div>
+      )}
+      {manualBatches.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-foreground/80 mb-1">
+            <span className="inline-flex items-center gap-1">
+              <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">INTERNAL</span>
+              Internal Batches ({manualBatches.reduce((s, x) => s + x.quantity, 0)} units)
+            </span>
+          </p>
+          {manualBatches.map((s, i) => (
+            <p key={i} className="text-xs text-purple-700 pl-2">
+              · {s.manual_batch_title || s.customer_name} × {s.quantity}
+              {s.manual_batch_purpose && <span className="text-purple-500 ml-1">({s.manual_batch_purpose})</span>}
+            </p>
+          ))}
         </div>
       )}
     </div>
