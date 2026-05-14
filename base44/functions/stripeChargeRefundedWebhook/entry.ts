@@ -76,9 +76,10 @@ Deno.serve(async (req) => {
         const charge = event.data.object;
         console.log(`[STRIPE-CHARGE-REFUNDED] Processing refund for charge ${charge.id}`);
 
-        // Route to processStripeRefund
+        // Route to processStripeRefund — pass internal secret so the auth guard allows this system call
         const base44 = createClientFromRequest(req);
         const result = await base44.asServiceRole.functions.invoke('processStripeRefund', {
+          _internalSecret: Deno.env.get('INTERNAL_FUNCTION_SECRET'),
           stripe_charge_id: charge.id,
           stripe_payment_intent_id: charge.payment_intent,
           stripe_refund_id: charge.refunds?.data?.[0]?.id,

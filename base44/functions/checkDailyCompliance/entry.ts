@@ -4,14 +4,20 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
 
-    // Allow scheduled automation (internal secret) or admin users
+    // Allow scheduled automation (no body / platform-sent), internal secret, or admin users
     const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
     let isInternalCall = false;
+    let isScheduledAutomation = false;
     try {
       const body = await req.clone().json();
       isInternalCall = body._internalSecret && internalSecret && body._internalSecret === internalSecret;
-    } catch (_) {}
-    if (!isInternalCall) {
+      // Scheduled automations may pass _scheduled: true via function_args
+      isScheduledAutomation = body._scheduled === true;
+    } catch (_) {
+      // No body = likely a scheduled automation call with no payload
+      isScheduledAutomation = true;
+    }
+    if (!isInternalCall && !isScheduledAutomation) {
       const user = await base44.auth.me();
       if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
       if (user.role !== 'admin') return Response.json({ error: 'Forbidden: Admin access required' }, { status: 403 });

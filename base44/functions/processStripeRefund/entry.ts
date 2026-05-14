@@ -98,11 +98,12 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const body = await req.json();
 
-    // Auth: accept Stripe webhook (internal secret) OR authenticated admin user only
+    // Auth: accept valid INTERNAL_FUNCTION_SECRET OR authenticated admin user.
+    // NOTE: Real Stripe webhooks arrive via stripeChargeRefundedWebhook (signature-verified).
+    // This function is only called from: admin UI, internal automation, or that verified webhook handler.
     const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
     const isInternalCall = body._internalSecret && internalSecret && body._internalSecret === internalSecret;
-    const isStripeWebhook = body.cancel_type === undefined && body.stripe_event_id && body.stripe_charge_id;
-    if (!isInternalCall && !isStripeWebhook) {
+    if (!isInternalCall) {
       const user = await base44.auth.me();
       if (!user) {
         return Response.json({ error: 'Unauthorized' }, { status: 401 });
