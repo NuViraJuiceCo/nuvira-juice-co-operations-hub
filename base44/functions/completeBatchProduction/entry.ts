@@ -9,6 +9,12 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Authorization: only admin, production_manager, or operations_staff can complete batches
+    const allowedRoles = ['admin', 'production_manager', 'operations_staff'];
+    if (!allowedRoles.includes(user.role)) {
+      return Response.json({ error: 'Forbidden: Production completion requires admin/production_manager/operations_staff role' }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       batch_id,

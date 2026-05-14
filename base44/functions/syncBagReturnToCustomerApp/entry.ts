@@ -8,8 +8,13 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    // Allow admin, operations_staff, or internal secret (service-role automation)
+    const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+    const body = await req.json().catch(() => ({}));
+    const isInternalCall = body._internalSecret && internalSecret && body._internalSecret === internalSecret;
+    
+    if (!isInternalCall && (!user || user.role !== 'admin')) {
+      return Response.json({ error: 'Admin access or internal secret required — bag return sync is restricted' }, { status: 403 });
     }
 
     let payload;

@@ -16,6 +16,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Authorization: only assigned driver, admin, or operations staff can record delivery
     const body = await req.json();
     const { task_id, driver_email, driver_name, photo_url, drop_location, timestamp } = body;
 
@@ -23,14 +24,23 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'task_id required' }, { status: 400 });
     }
 
-    const ts = timestamp || new Date().toISOString();
-
-    // Fetch task
+    // Fetch task to validate authorization
     const tasks = await base44.asServiceRole.entities.FulfillmentTask.filter({ id: task_id });
     const task = tasks?.[0];
 
     if (!task) {
       return Response.json({ error: `FulfillmentTask not found: ${task_id}` }, { status: 404 });
+    }
+
+    // Validate caller is authorized: assigned driver, admin, or operations role
+    const isAssignedDriver = task.assigned_driver && (
+      task.assigned_driver.toLowerCase() === user.email.toLowerCase() ||
+      (driver_email && driver_email.toLowerCase() === user.email.toLowerCase())
+    );
+    const isOperations = user.role === 'admin' || user.role === 'operations_staff' || user.role === 'production_manager';
+    
+    if (!isAssignedDriver && !isOperations) {
+      return Response.json({ error: 'Forbidden: Only assigned driver or operations staff can record delivery' }, { status: 403 });
     }
 
     // Update FulfillmentTask

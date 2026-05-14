@@ -4,7 +4,11 @@ import { jsPDF } from 'npm:jspdf@4.0.0';
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   const user = await base44.auth.me();
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  
+  // Admin-only: sensitive operational and financial reporting
+  if (!user || user.role !== 'admin') {
+    return Response.json({ error: 'Admin access required — weekly reports are admin-only' }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const { start_date, end_date, recipient_email, report_types = ['financial', 'operational'] } = body;
