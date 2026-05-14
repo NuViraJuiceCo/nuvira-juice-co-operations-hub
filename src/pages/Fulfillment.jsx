@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { getTodayDateString } from "@/lib/timezoneUtils";
 import AdminGuide from "../components/shared/AdminGuide";
-import { Trash2, Edit2 } from "lucide-react";
+import { Trash2, Edit2, Package } from "lucide-react";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import SelectMobile from "../components/SelectMobile";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import moment from "moment";
 export default function Fulfillment() {
   const [tasks, setTasks] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [manualBatches, setManualBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState(new Set());
@@ -29,7 +30,7 @@ export default function Fulfillment() {
   const [editDriver, setEditDriver] = useState("");
   const [savingDriver, setSavingDriver] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [view, setView] = useState("orders"); // "orders" | "tasks"
+  const [view, setView] = useState("orders"); // "orders" | "tasks" | "internal"
 
   // Multi-guard exclusion: never show stale/canceled/refunded orders even if canonical fields are wrong
   const isOrderProduction = (o) => {
@@ -45,22 +46,26 @@ export default function Fulfillment() {
   };
 
   const handleRefresh = async () => {
-    const [taskData, orderData] = await Promise.all([
+    const [taskData, orderData, batchData] = await Promise.all([
       base44.entities.FulfillmentTask.list("-scheduled_date", 100),
       base44.entities.ShopifyOrder.filter({ payment_status: "paid" }, "-created_date", 200),
+      base44.entities.ManualProductionBatch.list("-production_date", 100),
     ]);
     setTasks(taskData || []);
     setOrders((orderData || []).filter(isOrderProduction));
+    setManualBatches((batchData || []).filter(b => b.status !== 'cancelled'));
   };
 
   useEffect(() => {
     async function load() {
-      const [taskData, orderData] = await Promise.all([
+      const [taskData, orderData, batchData] = await Promise.all([
         base44.entities.FulfillmentTask.list("-scheduled_date", 100),
         base44.entities.ShopifyOrder.filter({ payment_status: "paid" }, "-created_date", 200),
+        base44.entities.ManualProductionBatch.list("-production_date", 100),
       ]);
       setTasks(taskData || []);
       setOrders((orderData || []).filter(isOrderProduction));
+      setManualBatches((batchData || []).filter(b => b.status !== 'cancelled'));
       setLoading(false);
     }
     load();
@@ -159,7 +164,7 @@ export default function Fulfillment() {
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
 
         {/* View Toggle */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setView("orders")}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${view === "orders" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}
@@ -171,6 +176,12 @@ export default function Fulfillment() {
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${view === "tasks" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}
           >
             Fulfillment Tasks ({tasks.length})
+          </button>
+          <button
+            onClick={() => setView("internal")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${view === "internal" ? "bg-purple-700 text-white" : "bg-purple-100 text-purple-800"}`}
+          >
+            Internal Batches ({manualBatches.length})
           </button>
         </div>
 
@@ -224,6 +235,51 @@ export default function Fulfillment() {
                       <span key={i}>{item.quantity}× {item.title}{i < order.line_items.length - 1 ? ', ' : ''}</span>
                     ))}
                   </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Internal Batches View */}
+        {view === "internal" && (
+          <div className="space-y-3">
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-xs text-purple-800">
+              <Package className="h-3.5 w-3.5 inline mr-1" />
+              <strong>Internal production only.</strong> These batches do not have customer orders, Stripe charges, driver routing, or customer notifications. Manage them in Production Planning → Manual Batches.
+            </div>
+            {manualBatches.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">No active internal batches.</div>
+            ) : (
+              manualBatches.map(b => (
+                <div key={b.id} className="bg-card border border-purple-200 rounded-xl p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">INTERNAL</span>
+                        <p className="font-semibold text-foreground">{b.title}</p>
+                      </div>
+                      {b.purpose && <p className="text-xs text-muted-foreground mt-0.5">{b.purpose}</p>}
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
+                      b.status === 'active' ? 'bg-green-100 text-green-800' :
+                      b.status === 'produced' ? 'bg-blue-100 text-blue-800' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>{(b.status || '').replace(/_/g, ' ').toUpperCase()}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span><span className="font-medium text-foreground">Production:</span> {b.production_date}</span>
+                    {b.use_date && <span><span className="font-medium text-foreground">Use/Deliver:</span> {b.use_date}</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(b.items || []).map((item, i) => (
+                      <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
+                        {item.quantity}× {item.product_name}
+                      </span>
+                    ))}
+                  </div>
+                  {b.notes && <p className="text-xs text-muted-foreground italic">{b.notes}</p>}
+                  <p className="text-[10px] text-muted-foreground">No driver routing · No customer notification · No payment</p>
                 </div>
               ))
             )}

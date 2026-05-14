@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Calculator, BookOpen, RefreshCw, Calendar, Package } from "lucide-react";
+import { Calculator, BookOpen, RefreshCw, Calendar, Package, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AdminGuide from "../components/shared/AdminGuide";
@@ -8,10 +8,12 @@ import IngredientNeedsResultFixed from "../components/production/IngredientNeeds
 import YieldManager from "../components/production/YieldManager";
 import RecipeManager from "../components/production/RecipeManager";
 import PreOrderBatchPlanner from "../components/production/PreOrderBatchPlanner";
+import ManualBatchManager from "../components/production/ManualBatchManager";
 
 const TABS = [
   { id: "preorders", label: "Pre-Orders", icon: Package },
   { id: "planner", label: "Production Planner", icon: Calculator },
+  { id: "manual", label: "Manual Batches", icon: ClipboardList },
   { id: "recipes", label: "Recipes", icon: BookOpen },
   { id: "yields", label: "Ingredient Yields", icon: Package }
 ];
@@ -180,6 +182,9 @@ export default function ProductionPlanning() {
           )}
         </div>
       )}
+
+      {/* Manual Batches Tab */}
+      {activeTab === "manual" && <ManualBatchManager />}
 
       {/* Recipes Tab */}
       {activeTab === "recipes" && <RecipeManager />}
