@@ -193,11 +193,20 @@ export default function DeliveryRouteReviews() {
 }
 
 function WaitlistSection({ waitlist, onRefresh }) {
+  const [updating, setUpdating] = useState(null);
+
   const statusColors = {
     active: 'bg-green-100 text-green-800',
     contacted: 'bg-blue-100 text-blue-800',
     converted: 'bg-purple-100 text-purple-800',
     removed: 'bg-gray-100 text-gray-700',
+  };
+
+  const handleStatusChange = async (entry, newStatus) => {
+    setUpdating(entry.id);
+    await base44.entities.Zone3Waitlist.update(entry.id, { status: newStatus });
+    setUpdating(null);
+    onRefresh();
   };
 
   if (waitlist.length === 0) {
@@ -227,7 +236,42 @@ function WaitlistSection({ waitlist, onRefresh }) {
           {entry.denial_reason && (
             <p className="text-xs text-muted-foreground mt-1.5"><span className="font-medium">Denied: </span>{entry.denial_reason}</p>
           )}
+          {entry.notes && (
+            <p className="text-xs text-muted-foreground mt-1"><span className="font-medium">Notes: </span>{entry.notes}</p>
+          )}
           <p className="text-[10px] text-muted-foreground mt-1">Added {moment(entry.created_date).format('MMM D, YYYY')}</p>
+          {entry.status !== 'removed' && (
+            <div className="flex gap-2 mt-3 flex-wrap">
+              {entry.status !== 'contacted' && (
+                <Button size="sm" variant="outline" disabled={updating === entry.id} onClick={() => handleStatusChange(entry, 'contacted')}
+                  className="text-xs h-7 px-2.5 text-blue-700 border-blue-200 hover:bg-blue-50">
+                  Mark Contacted
+                </Button>
+              )}
+              {entry.status !== 'converted' && (
+                <Button size="sm" variant="outline" disabled={updating === entry.id} onClick={() => handleStatusChange(entry, 'converted')}
+                  className="text-xs h-7 px-2.5 text-purple-700 border-purple-200 hover:bg-purple-50">
+                  Mark Converted
+                </Button>
+              )}
+              {entry.status !== 'active' && (
+                <Button size="sm" variant="outline" disabled={updating === entry.id} onClick={() => handleStatusChange(entry, 'active')}
+                  className="text-xs h-7 px-2.5">
+                  Reset to Active
+                </Button>
+              )}
+              <Button size="sm" variant="outline" disabled={updating === entry.id} onClick={() => handleStatusChange(entry, 'removed')}
+                className="text-xs h-7 px-2.5 text-red-600 border-red-200 hover:bg-red-50">
+                Remove
+              </Button>
+            </div>
+          )}
+          {entry.status === 'removed' && (
+            <Button size="sm" variant="outline" disabled={updating === entry.id} onClick={() => handleStatusChange(entry, 'active')}
+              className="text-xs h-7 px-2.5 mt-3">
+              Restore
+            </Button>
+          )}
         </div>
       ))}
     </div>
