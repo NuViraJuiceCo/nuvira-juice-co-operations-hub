@@ -624,25 +624,34 @@ Deno.serve(async (req) => {
         // line_items = customer-facing product identity (immutable after order placed)
         // fulfillments.items = internal production decomposition (safe to update)
         const fulfillmentItems = buildFulfillmentItemsMap(order, 1, bundleMap, bundleFullData);
+        // For address: prefer existing fulfillment address over order top-level if that's blank
+        // This prevents recalculate from overwriting fulfillment address with empty strings
+        // when the order parent fields are blank but FulfillmentTask has the real address.
+        const existingF0Addr = order.fulfillments?.[0];
+        const resolvedAddr1 = order.address_line1 || existingF0Addr?.address_line1 || '';
+        const resolvedAddr2 = order.address_line2 || existingF0Addr?.address_line2 || '';
+        const resolvedCity  = order.address_city  || existingF0Addr?.address_city  || '';
+        const resolvedState = order.address_state || existingF0Addr?.address_state || '';
+        const resolvedZip   = order.address_postal_code || existingF0Addr?.address_postal_code || '';
+        const resolvedCountry = order.address_country || existingF0Addr?.address_country || 'US';
+
         order.fulfillments = [{
           fulfillment_number: 1,
           production_date: productionDate,
           delivery_date: (() => {
             const d = new Date(productionDate + 'T00:00:00');
-            const dayOfWeek = d.getDay();
-            // Fri (5) → Sat (6): +1 day; Tue (2) → Wed (3): +1 day
             const daysToAdd = 1;
             d.setDate(d.getDate() + daysToAdd);
             return d.toISOString().split('T')[0];
           })(),
           items: fulfillmentItems[0] || [],
           status: 'pending',
-          address_line1: order.address_line1 || '',
-          address_line2: order.address_line2 || '',
-          address_city: order.address_city || '',
-          address_state: order.address_state || '',
-          address_postal_code: order.address_postal_code || '',
-          address_country: order.address_country || 'US',
+          address_line1: resolvedAddr1,
+          address_line2: resolvedAddr2,
+          address_city: resolvedCity,
+          address_state: resolvedState,
+          address_postal_code: resolvedZip,
+          address_country: resolvedCountry,
           delivery_notes: order.delivery_notes || '',
         }];
         // DO NOT update order.line_items — preserve original customer-facing product

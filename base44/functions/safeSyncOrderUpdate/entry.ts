@@ -595,10 +595,29 @@ Deno.serve(async (req) => {
            incomingData[field] = existingVal;
          }
        }
-       // Never downgrade production_status
+         // Never downgrade production_status
        const meaningfulStatuses = ['awaiting_production', 'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery', 'fulfilled', 'canceled', 'refunded'];
        if (incomingData.production_status === 'new' && meaningfulStatuses.includes(existingOrder.production_status)) {
          incomingData.production_status = existingOrder.production_status;
+       }
+
+       // ADDRESS BLANK-OVERWRITE PROTECTION:
+       // If existing order has complete address data and incoming has blank address fields,
+       // preserve the existing address. Only allow overwrite when incoming is also complete.
+       const existingAddrComplete = !!(existingOrder.address_line1 && existingOrder.address_city && existingOrder.address_state);
+       const incomingAddrPresent = !!(incomingData.address_line1 !== undefined || incomingData.address_city !== undefined);
+       if (existingAddrComplete && incomingAddrPresent) {
+         const incomingAddrComplete = !!(incomingData.address_line1 && incomingData.address_city && incomingData.address_state);
+         if (!incomingAddrComplete) {
+           // Incoming has blank/empty address — preserve existing complete address
+           console.log(`[SAFE-SYNC] Address blank-overwrite protection: preserving existing complete address on ${existingOrder.shopify_order_number} (incoming address incomplete from ${source})`);
+           incomingData.address_line1 = existingOrder.address_line1;
+           incomingData.address_line2 = existingOrder.address_line2 || incomingData.address_line2;
+           incomingData.address_city = existingOrder.address_city;
+           incomingData.address_state = existingOrder.address_state;
+           incomingData.address_postal_code = existingOrder.address_postal_code || incomingData.address_postal_code;
+           incomingData.address_country = existingOrder.address_country || incomingData.address_country;
+         }
        }
      }
 

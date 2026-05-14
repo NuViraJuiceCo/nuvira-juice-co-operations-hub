@@ -17,6 +17,7 @@ import {
 import StatusBadge from "../components/shared/StatusBadge";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import moment from "moment";
+import { resolveDeliveryAddress } from "@/lib/resolveDeliveryAddress";
 
 export default function Fulfillment() {
   const [tasks, setTasks] = useState([]);
@@ -224,12 +225,17 @@ export default function Fulfillment() {
                       ))}
                     </div>
                   )}
-                  {order.address_line1 && (
-                    <p className="text-xs text-muted-foreground">{order.address_line1}, {order.address_city}, {order.address_state} {order.address_postal_code}</p>
-                  )}
-                  {!order.address_line1 && order.fulfillment_method === 'delivery' && order.fulfillment_mode !== 'multi_delivery' && (
-                    <p className="text-xs text-red-500 font-semibold">⚠ Missing delivery address</p>
-                  )}
+                  {(() => {
+                    const matchingTask = tasks.find(t => t.order_id === order.id);
+                    const addr = resolveDeliveryAddress(order, matchingTask);
+                    if (addr.isComplete) {
+                      return <p className="text-xs text-muted-foreground">{addr.formatted}</p>;
+                    }
+                    if (order.fulfillment_method === 'delivery' && order.fulfillment_mode !== 'multi_delivery') {
+                      return <p className="text-xs text-red-500 font-semibold">⚠ Missing delivery address</p>;
+                    }
+                    return null;
+                  })()}
                   <div className="text-xs text-muted-foreground">
                     {(order.line_items || []).map((item, i) => (
                       <span key={i}>{item.quantity}× {item.title}{i < order.line_items.length - 1 ? ', ' : ''}</span>
