@@ -124,6 +124,64 @@ Deno.serve(async (req) => {
     console.log('[RECEIVE-ORDER] safeSyncOrderUpdate result:', { status: safeStatus, action, order_id });
 
     if (safeStatus === 'success') {
+      // If a new order was created, write address snapshot back and create FulfillmentTask
+      if (action === 'created' && order_id) {
+        const hasAddress = !!(body.address_line1 && body.address_city);
+        const fullAddressStr = [body.address_line1, body.address_line2, body.address_city, body.address_state, body.address_postal_code]
+          .filter(Boolean).join(', ');
+
+        const postCreateTasks = [];
+
+        // Atomic address snapshot write-back to ShopifyOrder
+        if (hasAddress) {
+          postCreateTasks.push(
+            base44.asServiceRole.entities.ShopifyOrder.update(order_id, {
+              address_line1: body.address_line1 || '',
+              address_line2: body.address_line2 || '',
+              address_city: body.address_city || '',
+              address_state: body.address_state || '',
+              address_postal_code: body.address_postal_code || '',
+              address_country: body.address_country || 'US',
+              delivery_address: fullAddressStr,
+              address_last_synced_from: 'receive_order_from_customer_app',
+              address_last_synced_at: new Date().toISOString(),
+            }).catch(err => console.warn('[RECEIVE-ORDER] Address snapshot write-back failed:', err.message))
+          );
+        }
+
+        // Create FulfillmentTask if delivery date is present
+        const deliveryDate = body.selected_delivery_date || body.requested_delivery_date || body.assigned_delivery_date;
+        if (deliveryDate && (body.fulfillment_method || 'delivery') === 'delivery') {
+          const itemsSummary = (body.line_items || []).map(i => `${i.quantity}x ${i.title}`).join(', ');
+          postCreateTasks.push(
+            base44.asServiceRole.entities.FulfillmentTask.create({
+              customer_name: body.customer_name || body.customer_email,
+              customer_email: body.customer_email || '',
+              customer_phone: body.customer_phone || '',
+              fulfillment_type: 'Delivery',
+              time_window: body.delivery_window_label || '5 PM – 8 PM',
+              delivery_window_label: body.delivery_window_label || '5 PM – 8 PM',
+              status: 'Scheduled',
+              scheduled_date: deliveryDate,
+              address: fullAddressStr,
+              address_line1: body.address_line1 || '',
+              address_line2: body.address_line2 || '',
+              address_city: body.address_city || '',
+              address_state: body.address_state || '',
+              address_postal_code: body.address_postal_code || '',
+              delivery_address: fullAddressStr,
+              items_summary: itemsSummary,
+              order_id: order_id,
+              order_number: body.order_number,
+              source_type: 'order_derived',
+              notes: `One-time order auto-fulfillment task created from customer_app checkout`,
+            }).catch(err => console.warn('[RECEIVE-ORDER] FulfillmentTask creation failed:', err.message))
+          );
+        }
+
+        await Promise.all(postCreateTasks);
+      }
+
       return Response.json({
         status: 'success',
         action: action || 'created',

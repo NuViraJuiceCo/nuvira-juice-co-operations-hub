@@ -31,23 +31,36 @@ export default function Fulfillment() {
   const [saveError, setSaveError] = useState("");
   const [view, setView] = useState("orders"); // "orders" | "tasks"
 
+  // Multi-guard exclusion: never show stale/canceled/refunded orders even if canonical fields are wrong
+  const isOrderProduction = (o) => {
+    if (!o) return false;
+    const tags = o.tags || [];
+    if (tags.includes('refunded') || tags.includes('excluded') || tags.includes('do_not_sync') || tags.includes('not_for_production')) return false;
+    if (o.sync_status === 'do_not_sync') return false;
+    if (o.fulfillment_status === 'cancelled' || o.fulfillment_status === 'canceled') return false;
+    const deadStatuses = ['fulfilled', 'canceled', 'refunded', 'canceled', 'excluded'];
+    if (deadStatuses.includes(o.production_status)) return false;
+    if (o.data_quality_status === 'quarantined') return false;
+    return true;
+  };
+
   const handleRefresh = async () => {
     const [taskData, orderData] = await Promise.all([
       base44.entities.FulfillmentTask.list("-scheduled_date", 100),
-      base44.entities.ShopifyOrder.filter({ payment_status: "paid" }, "-created_date", 100),
+      base44.entities.ShopifyOrder.filter({ payment_status: "paid" }, "-created_date", 200),
     ]);
     setTasks(taskData || []);
-    setOrders((orderData || []).filter(o => !["fulfilled", "canceled", "refunded"].includes(o.production_status)));
+    setOrders((orderData || []).filter(isOrderProduction));
   };
 
   useEffect(() => {
     async function load() {
       const [taskData, orderData] = await Promise.all([
         base44.entities.FulfillmentTask.list("-scheduled_date", 100),
-        base44.entities.ShopifyOrder.filter({ payment_status: "paid" }, "-created_date", 100),
+        base44.entities.ShopifyOrder.filter({ payment_status: "paid" }, "-created_date", 200),
       ]);
       setTasks(taskData || []);
-      setOrders((orderData || []).filter(o => !["fulfilled", "canceled", "refunded"].includes(o.production_status)));
+      setOrders((orderData || []).filter(isOrderProduction));
       setLoading(false);
     }
     load();

@@ -317,23 +317,65 @@ Deno.serve(async (req) => {
     if (safeStatus === 'success' && action === 'created' && order_id) {
       const creationTasks = [];
 
+      // ── ADDRESS SNAPSHOT ─────────────────────────────────────────────────────
+      // Normalize address once and write back to ShopifyOrder top-level fields
+      // to guarantee ShopifyOrder and FulfillmentTask are always consistent.
+      const normalizedAddress = {
+        address_line1: address_line1 || '',
+        address_line2: address_line2 || '',
+        address_city: address_city || '',
+        address_state: address_state || '',
+        address_postal_code: address_postal_code || '',
+        address_country: address_country || 'US',
+      };
+      const fullAddressStr = [address_line1, address_line2, address_city, address_state, address_postal_code]
+        .filter(Boolean).join(', ');
+      const hasAddress = !!(address_line1 && address_city);
+
+      // Backfill ShopifyOrder address fields atomically after creation
+      if (hasAddress) {
+        creationTasks.push(
+          base44.asServiceRole.entities.ShopifyOrder.update(order_id, {
+            ...normalizedAddress,
+            delivery_address: fullAddressStr,
+            address_last_synced_from: 'customer_app_ingest',
+            address_last_synced_at: new Date().toISOString(),
+          }).then(() => {
+            console.log(`[INGEST] Address snapshot written to ShopifyOrder ${order_id}`);
+          })
+        );
+      } else {
+        console.warn(`[INGEST] Order ${order_number} created with missing address (line1="${address_line1}" city="${address_city}") — not a delivery-blocking issue if pickup`);
+      }
+
       if (resolvedDeliveryDate) {
         const itemsSummary = line_items.map(i => `${i.quantity}x ${i.title}`).join(', ');
-        const fullAddress = [address_line1, address_line2, address_city, address_state, address_postal_code]
-          .filter(Boolean).join(', ');
 
         creationTasks.push(
           base44.asServiceRole.entities.FulfillmentTask.create({
             customer_name: customer_name || customer_email,
-            fulfillment_type: 'Delivery',
-            time_window: '17:00 - 20:00',
+            customer_email: customer_email || '',
+            customer_phone: customer_phone || '',
+            fulfillment_type: fulfillment_method === 'pickup' ? 'Pickup' : 'Delivery',
+            time_window: delivery_window_label || '5 PM – 8 PM',
+            delivery_window_label: delivery_window_label || '5 PM – 8 PM',
             status: 'Scheduled',
             scheduled_date: resolvedDeliveryDate,
-            address: fullAddress,
+            // Write both legacy address field and normalized fields
+            address: fullAddressStr,
+            address_line1: normalizedAddress.address_line1,
+            address_line2: normalizedAddress.address_line2,
+            address_city: normalizedAddress.address_city,
+            address_state: normalizedAddress.address_state,
+            address_postal_code: normalizedAddress.address_postal_code,
+            delivery_address: fullAddressStr,
             items_summary: itemsSummary,
             order_id: order_id,
+            order_number: order_number,
+            source_type: 'order_derived',
+            notes: `One-time order auto-fulfillment task created from ${stripe_checkout_session_id ? 'stripe_checkout' : 'stripe_payment_intent'} checkout`,
           }).then(ft => {
-            console.log(`[INGEST] Created FulfillmentTask ${ft.id} for ${order_number} on ${resolvedDeliveryDate}`);
+            console.log(`[INGEST] Created FulfillmentTask ${ft.id} for ${order_number} on ${resolvedDeliveryDate} — address: "${fullAddressStr}"`);
             return ft;
           })
         );
