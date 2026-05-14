@@ -25,29 +25,38 @@ Deno.serve(async (req) => {
 
     const now = new Date().toISOString();
 
-    // Batch archive with rate limit protection (batches of 3)
+    // Archive one at a time with generous delay to avoid rate limits
     let archivedCount = 0;
-    for (let i = 0; i < pending.length; i += 3) {
-      const batch = pending.slice(i, i + 3);
+    for (let i = 0; i < pending.length; i++) {
       try {
-        await Promise.all(
-          batch.map(item =>
-            base44.asServiceRole.entities.OrderReviewQueue.update(item.id, {
-              status: 'archived',
-              queue_visibility_status: 'archived',
-              archived_at: now,
-              archived_by: user.email,
-              archived_reason: 'Bulk cleanup - historical pending items',
-            })
-          )
-        );
-        archivedCount += batch.length;
-        console.log(`[ARCHIVE-PENDING] Archived batch ${Math.floor(i/3)+1}/${Math.ceil(count/3)}`);
+        await base44.asServiceRole.entities.OrderReviewQueue.update(pending[i].id, {
+          status: 'archived',
+          queue_visibility_status: 'archived',
+          archived_at: now,
+          archived_by: user.email,
+          archived_reason: 'Bulk cleanup - historical pending items',
+        });
+        archivedCount++;
+        if (i % 10 === 0) console.log(`[ARCHIVE-PENDING] Progress: ${archivedCount}/${count}`);
       } catch (err) {
-        console.warn(`[ARCHIVE-PENDING] Batch error at ${i}:`, err.message);
+        console.warn(`[ARCHIVE-PENDING] Error at item ${i}:`, err.message);
+        // On rate limit, wait longer then retry once
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          await base44.asServiceRole.entities.OrderReviewQueue.update(pending[i].id, {
+            status: 'archived',
+            queue_visibility_status: 'archived',
+            archived_at: now,
+            archived_by: user.email,
+            archived_reason: 'Bulk cleanup - historical pending items',
+          });
+          archivedCount++;
+        } catch (retryErr) {
+          console.warn(`[ARCHIVE-PENDING] Retry failed at item ${i}:`, retryErr.message);
+        }
       }
-      // Delay to prevent rate limiting
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // 500ms between each update to stay well within rate limits
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     // Log to audit trail
