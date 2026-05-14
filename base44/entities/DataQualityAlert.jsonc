@@ -86,5 +86,46 @@
     "alert_type",
     "severity",
     "issue_description"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "operations_staff"
+          ]
+        }
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "data.resolved_by": "{{user.email}}"
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "data.resolved_by": "{{user.email}}"
+        }
+      ]
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
 }
