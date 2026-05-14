@@ -142,8 +142,15 @@ Deno.serve(async (req) => {
     const ingredientTotals = {}; // { ingredient_name: { quantity_oz, quantity_g, unit } }
     const unmatchedItems = new Set();
     const bottleCounts = {}; // { product_name: total_bottles }
+    const bottleCountsBySource = {}; // { product_name: { customer: N, manual: N } }
     const bundleCounts = {}; // { bundle_name: total_bundles }
     let matchedOrders = 0;
+
+    const addBottle = (productName, qty, source) => {
+      bottleCounts[productName] = (bottleCounts[productName] || 0) + qty;
+      if (!bottleCountsBySource[productName]) bottleCountsBySource[productName] = { customer: 0, manual: 0 };
+      bottleCountsBySource[productName][source] = (bottleCountsBySource[productName][source] || 0) + qty;
+    };
 
     for (const order of activeOrders) {
       if (!order.line_items || order.line_items.length === 0) continue;
@@ -154,9 +161,9 @@ Deno.serve(async (req) => {
         const qty = item.quantity || 1;
 
         // Helper: accumulate ingredients for a single recipe + bottle count
-        const addRecipeIngredients = (recipe, bottleQty) => {
+        const addRecipeIngredients = (recipe, bottleQty, source = 'customer') => {
           const yieldFactor = recipe.yield_factor || 1.05;
-          bottleCounts[recipe.product_name] = (bottleCounts[recipe.product_name] || 0) + bottleQty;
+          addBottle(recipe.product_name, bottleQty, source);
           for (const ing of (recipe.ingredients || [])) {
             const ingName = ing.ingredient_name;
             const ingQtyOz = (ing.quantity_oz || 0) * bottleQty * yieldFactor;
@@ -244,7 +251,7 @@ Deno.serve(async (req) => {
           continue;
         }
         const yieldFactor = recipe.yield_factor || 1.05;
-        bottleCounts[recipe.product_name] = (bottleCounts[recipe.product_name] || 0) + qty;
+        addBottle(recipe.product_name, qty, 'manual');
         for (const ing of (recipe.ingredients || [])) {
           const ingName = ing.ingredient_name;
           const ingQtyOz = (ing.quantity_oz || 0) * qty * yieldFactor;
@@ -345,6 +352,7 @@ Deno.serve(async (req) => {
         matched_orders: matchedOrders,
         unmatched_items: Array.from(unmatchedItems),
         bottle_counts: bottleCounts,
+        bottle_counts_by_source: bottleCountsBySource,
         bundle_counts: bundleCounts,
         date_from: date_from || null,
         date_to: date_to || null

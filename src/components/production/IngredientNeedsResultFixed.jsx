@@ -134,6 +134,9 @@ export default function IngredientNeedsResultFixed({ result }) {
   const hasResults = result?.ingredient_needs?.length > 0;
   const manualBatches = result?.manual_batches_included || [];
   const totalBottles = Object.values(result?.summary?.bottle_counts || {}).reduce((a, b) => a + b, 0);
+  const bySource = result?.summary?.bottle_counts_by_source || {};
+  const totalCustomerBottles = Object.values(bySource).reduce((a, s) => a + (s.customer || 0), 0);
+  const totalManualBottles = Object.values(bySource).reduce((a, s) => a + (s.manual || 0), 0);
 
   if (!hasResults) {
     return (
@@ -156,14 +159,17 @@ export default function IngredientNeedsResultFixed({ result }) {
           <div className="bg-primary/5 rounded-lg p-3">
             <p className="text-xs text-muted-foreground font-medium">Customer Orders</p>
             <p className="text-2xl font-bold text-foreground mt-1">{result.summary.total_orders}</p>
+            {totalCustomerBottles > 0 && <p className="text-xs text-muted-foreground mt-0.5">{totalCustomerBottles} bottles</p>}
           </div>
           <div className="bg-purple-50 border border-purple-100 rounded-lg p-3">
             <p className="text-xs text-purple-700 font-medium">Manual Batches</p>
             <p className="text-2xl font-bold text-purple-800 mt-1">{result.summary.manual_batch_count ?? manualBatches.length}</p>
+            {totalManualBottles > 0 && <p className="text-xs text-purple-600 mt-0.5">{totalManualBottles} bottles</p>}
           </div>
-          <div className="bg-muted/40 rounded-lg p-3">
-            <p className="text-xs text-muted-foreground font-medium">Total Bottles</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{totalBottles}</p>
+          <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3">
+            <p className="text-xs text-emerald-700 font-medium">Total Bottles</p>
+            <p className="text-2xl font-bold text-emerald-800 mt-1">{totalBottles}</p>
+            <p className="text-xs text-emerald-600 mt-0.5">all sources</p>
           </div>
           <div className="bg-muted/40 rounded-lg p-3">
             <p className="text-xs text-muted-foreground font-medium">Date Range</p>
@@ -173,16 +179,27 @@ export default function IngredientNeedsResultFixed({ result }) {
           </div>
         </div>
 
-        {/* Product totals */}
+        {/* Product totals with source attribution */}
         {Object.keys(result.summary.bottle_counts || {}).length > 0 && (
           <div>
-            <p className="text-xs text-muted-foreground font-medium mb-2">Combined Products (orders + manual)</p>
+            <p className="text-xs text-muted-foreground font-medium mb-2">Combined Products — all sources</p>
             <div className="flex flex-wrap gap-2">
-              {Object.entries(result.summary.bottle_counts).map(([prod, qty]) => (
-                <span key={prod} className="inline-block px-2.5 py-1 bg-primary/10 text-primary rounded text-xs font-semibold">
-                  {qty}× {prod}
-                </span>
-              ))}
+              {Object.entries(result.summary.bottle_counts).map(([prod, qty]) => {
+                const src = bySource[prod] || {};
+                const customerQty = src.customer || 0;
+                const manualQty = src.manual || 0;
+                return (
+                  <div key={prod} className="bg-card border border-border rounded-lg px-3 py-2 min-w-[110px]">
+                    <p className="text-sm font-bold text-foreground">{qty}× {prod}</p>
+                    {customerQty > 0 && (
+                      <p className="text-[10px] text-primary mt-0.5">{customerQty} customer</p>
+                    )}
+                    {manualQty > 0 && (
+                      <p className="text-[10px] text-purple-600">{manualQty} internal</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
