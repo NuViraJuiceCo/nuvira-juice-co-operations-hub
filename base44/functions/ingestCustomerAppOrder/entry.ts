@@ -137,6 +137,19 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
+    // ── ADDRESS VALIDATION for delivery orders ───────────────────────────────
+    const isDelivery = (fulfillment_method || 'delivery') === 'delivery';
+    if (isDelivery && (!address_line1 || !address_city)) {
+      console.warn(`[INGEST] Delivery order ${order_number} missing address — quarantining. address_line1="${address_line1}" address_city="${address_city}"`);
+      return Response.json({
+        status: 'queued',
+        action: 'queued_for_review',
+        reason: 'delivery_order_missing_address',
+        errors: ['Delivery orders require address_line1 and address_city'],
+        order_number,
+      }, { status: 202 });
+    }
+
     // ── PRE-FLIGHT IDEMPOTENCY CHECK ────────────────────────────────────────
     let existingMatchedOrder = null;
     let matchedBy = null;

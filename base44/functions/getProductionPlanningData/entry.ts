@@ -68,24 +68,25 @@ Deno.serve(async (req) => {
       base44.asServiceRole.entities.ProductionBatch.list('-production_date', 500),
     ]);
 
-    // ─── GUARDRAILS: Exclude refunded/deleted/test orders ────────────────────
+    // ─── GUARDRAILS: Multi-guard exclusion (mirrors Fulfillment isOrderProduction) ──
     const isOrderExcluded = (order) => {
-      return (
-        order.payment_status === 'refunded' ||
-        order.production_status === 'refunded' ||
-        order.production_status === 'canceled' ||
-        order.do_not_recover === true ||
-        order.do_not_sync === true ||
-        order.canceled_at ||
-        order.deleted_at
-      );
+      const tags = order.tags || [];
+      if (tags.includes('refunded') || tags.includes('excluded') || tags.includes('do_not_sync') || tags.includes('not_for_production')) return true;
+      if (order.sync_status === 'do_not_sync') return true;
+      if (order.fulfillment_status === 'cancelled' || order.fulfillment_status === 'canceled') return true;
+      if (['fulfilled', 'canceled', 'refunded', 'excluded'].includes(order.production_status)) return true;
+      if (order.data_quality_status === 'quarantined') return true;
+      if (order.do_not_recover === true || order.do_not_sync === true) return true;
+      if (order.canceled_at || order.deleted_at) return true;
+      return false;
     };
 
     // ─── Saturday threshold calculation ──────────────────────────────────────
-    const activeOrders = allOrders.filter(o => 
+    const activeOrders = allOrders.filter(o =>
       !isOrderExcluded(o) &&
       o.payment_status === 'paid'
     );
+    console.log(`[PROD-PLANNING] Active orders: ${activeOrders.length} of ${allOrders.length} total (${allOrders.filter(isOrderExcluded).length} excluded)`);
 
     const saturdayWindowActiveOrders = activeOrders.filter(o => {
       if (!o.customer_order_date) return false;

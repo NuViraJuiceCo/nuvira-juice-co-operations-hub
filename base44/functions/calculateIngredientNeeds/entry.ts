@@ -61,10 +61,44 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Filter to only active/unfulfilled orders
-    const activeOrders = orders.filter(o =>
-      !['fulfilled', 'canceled', 'refunded'].includes(o.production_status)
-    );
+    // ── Multi-guard production filter (matches Fulfillment page isOrderProduction) ──
+    const isProductionVisible = (o) => {
+      if (!o) return false;
+      // Tag-based exclusions
+      const tags = o.tags || [];
+      if (tags.includes('refunded') || tags.includes('excluded') || tags.includes('do_not_sync') || tags.includes('not_for_production')) {
+        console.log(`[CALC] Excluding ${o.shopify_order_number} — excluded tag`);
+        return false;
+      }
+      if (o.sync_status === 'do_not_sync') {
+        console.log(`[CALC] Excluding ${o.shopify_order_number} — sync_status=do_not_sync`);
+        return false;
+      }
+      // Fulfillment status cancelled
+      if (o.fulfillment_status === 'cancelled' || o.fulfillment_status === 'canceled') {
+        console.log(`[CALC] Excluding ${o.shopify_order_number} — fulfillment_status=cancelled`);
+        return false;
+      }
+      // Dead production statuses
+      if (['fulfilled', 'canceled', 'refunded', 'excluded'].includes(o.production_status)) {
+        console.log(`[CALC] Excluding ${o.shopify_order_number} — production_status=${o.production_status}`);
+        return false;
+      }
+      // Quarantined data quality
+      if (o.data_quality_status === 'quarantined') {
+        console.log(`[CALC] Excluding ${o.shopify_order_number} — data_quality_status=quarantined`);
+        return false;
+      }
+      // Must be paid
+      if (o.payment_status !== 'paid') {
+        console.log(`[CALC] Excluding ${o.shopify_order_number} — payment_status=${o.payment_status}`);
+        return false;
+      }
+      return true;
+    };
+
+    const activeOrders = orders.filter(isProductionVisible);
+    console.log(`[CALC] Production-visible orders: ${activeOrders.length} of ${orders.length} total`);
 
     if (activeOrders.length === 0) {
       return Response.json({
