@@ -844,7 +844,8 @@ Deno.serve(async (req) => {
     // Manual batches are internal production needs (not customer orders).
     // They must appear on production cards with source_type='manual_internal_batch'.
     // Only include statuses that represent real production demand.
-    const MANUAL_ACTIVE_STATUSES = new Set(['active', 'included_in_planning']);
+    // in_production is also active — batch is being made, still counts as production demand until produced
+    const MANUAL_ACTIVE_STATUSES = new Set(['active', 'included_in_planning', 'in_production']);
     const activeManualBatches = allManualBatches.filter(b => MANUAL_ACTIVE_STATUSES.has(b.status));
     console.log(`[RECALC] ManualProductionBatch: ${activeManualBatches.length} active of ${allManualBatches.length} total`);
 

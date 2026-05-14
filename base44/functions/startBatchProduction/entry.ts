@@ -88,12 +88,33 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.ProductionBatch.update(batch.id, updateData);
 
+    // ── Sync linked ManualProductionBatch records to in_production ──────────
+    // Find any manual batch sources in this batch's order_sources
+    const manualSources = (batch.order_sources || []).filter(s => s.source_type === 'manual_internal_batch' && s.order_id);
+    const manualBatchIds = [...new Set(manualSources.map(s => s.order_id))];
+    for (const mbId of manualBatchIds) {
+      try {
+        const mb = await base44.asServiceRole.entities.ManualProductionBatch.get(mbId).catch(() => null);
+        if (mb && !['produced', 'completed', 'cancelled'].includes(mb.status)) {
+          const linkedIds = [...new Set([...(mb.linked_production_batch_ids || []), batch.batch_id])];
+          await base44.asServiceRole.entities.ManualProductionBatch.update(mbId, {
+            status: 'in_production',
+            linked_production_batch_ids: linkedIds,
+          });
+          console.log(`[START-BATCH] Updated ManualProductionBatch ${mbId} → in_production`);
+        }
+      } catch (err) {
+        console.warn(`[START-BATCH] Could not update ManualProductionBatch ${mbId}: ${err.message}`);
+      }
+    }
+
     return Response.json({
       success: true,
       batch_id,
       status: 'in_production',
       started_at: now,
       started_by: user.email,
+      manual_batches_updated: manualBatchIds.length,
     });
   } catch (error) {
     console.error('[START-BATCH]', error.message);

@@ -31,6 +31,10 @@
           },
           "quantity": {
             "type": "number"
+          },
+          "produced_quantity": {
+            "type": "number",
+            "description": "Actual quantity produced (for partial completion)"
           }
         }
       }
@@ -41,7 +45,9 @@
         "draft",
         "active",
         "included_in_planning",
+        "in_production",
         "produced",
+        "completed",
         "cancelled"
       ],
       "default": "active"
@@ -52,6 +58,49 @@
     "source_type": {
       "type": "string",
       "default": "manual_internal_batch"
+    },
+    "linked_production_batch_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "ProductionBatch batch_id values that produced items for this manual batch"
+    },
+    "produced_at": {
+      "type": "string",
+      "description": "ISO timestamp when production was completed"
+    },
+    "completed_at": {
+      "type": "string",
+      "description": "ISO timestamp when fully marked completed"
+    },
+    "completed_by": {
+      "type": "string",
+      "description": "Email of user who completed this batch"
+    },
+    "produced_quantities": {
+      "type": "array",
+      "description": "Per-product produced quantity tracking",
+      "items": {
+        "type": "object",
+        "properties": {
+          "product_name": {
+            "type": "string"
+          },
+          "planned_quantity": {
+            "type": "number"
+          },
+          "produced_quantity": {
+            "type": "number"
+          },
+          "production_batch_id": {
+            "type": "string"
+          },
+          "produced_at": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "required": [

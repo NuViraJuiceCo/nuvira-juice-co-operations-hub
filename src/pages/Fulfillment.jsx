@@ -23,6 +23,7 @@ export default function Fulfillment() {
   const [tasks, setTasks] = useState([]);
   const [orders, setOrders] = useState([]);
   const [manualBatches, setManualBatches] = useState([]);
+  const [internalFilter, setInternalFilter] = useState('active'); // 'active' | 'history' | 'all'
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState(new Set());
@@ -66,7 +67,7 @@ export default function Fulfillment() {
       ]);
       setTasks(taskData || []);
       setOrders((orderData || []).filter(isOrderProduction));
-      setManualBatches((batchData || []).filter(b => b.status !== 'cancelled'));
+      setManualBatches(batchData || []);
       setLoading(false);
     }
     load();
@@ -254,10 +255,31 @@ export default function Fulfillment() {
               <Package className="h-3.5 w-3.5 inline mr-1" />
               <strong>Internal production only.</strong> These batches do not have customer orders, Stripe charges, driver routing, or customer notifications. Manage them in Production Planning → Manual Batches.
             </div>
-            {manualBatches.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">No active internal batches.</div>
-            ) : (
-              manualBatches.map(b => (
+            {/* Filter tabs */}
+            <div className="flex gap-1 border-b border-border">
+              {[{k:'active',l:'Active'},{k:'history',l:'History'},{k:'all',l:'All'}].map(tab => {
+                const count = tab.k === 'active'
+                  ? manualBatches.filter(b => ['draft','active','included_in_planning','in_production'].includes(b.status)).length
+                  : tab.k === 'history'
+                  ? manualBatches.filter(b => ['produced','completed','cancelled'].includes(b.status)).length
+                  : manualBatches.length;
+                return (
+                  <button key={tab.k} onClick={() => setInternalFilter(tab.k)}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${internalFilter === tab.k ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+                    {tab.l} {count > 0 && <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            {(() => {
+              const ACTIVE_S = new Set(['draft','active','included_in_planning','in_production']);
+              const TERMINAL_S = new Set(['produced','completed','cancelled']);
+              const filtered = manualBatches.filter(b =>
+                internalFilter === 'active' ? ACTIVE_S.has(b.status) :
+                internalFilter === 'history' ? TERMINAL_S.has(b.status) : true
+              );
+              if (filtered.length === 0) return <div className="text-center py-10 text-muted-foreground">No batches in this view.</div>;
+              return filtered.map(b => (
                 <div key={b.id} className="bg-card border border-purple-200 rounded-xl p-4 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -287,8 +309,8 @@ export default function Fulfillment() {
                   {b.notes && <p className="text-xs text-muted-foreground italic">{b.notes}</p>}
                   <p className="text-[10px] text-muted-foreground">No driver routing · No customer notification · No payment</p>
                 </div>
-              ))
-            )}
+              ));
+            })()}
           </div>
         )}
 

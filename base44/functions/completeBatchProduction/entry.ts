@@ -142,6 +142,55 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.ProductionBatch.update(batch.id, updateData);
 
+    // ── Sync linked ManualProductionBatch records to produced ───────────────
+    // Find any manual batch sources in this batch's order_sources
+    const manualSources = (batch.order_sources || []).filter(s => s.source_type === 'manual_internal_batch' && s.order_id);
+    const manualBatchIds = [...new Set(manualSources.map(s => s.order_id))];
+    for (const mbId of manualBatchIds) {
+      try {
+        const mb = await base44.asServiceRole.entities.ManualProductionBatch.get(mbId).catch(() => null);
+        if (mb && !['completed', 'cancelled'].includes(mb.status)) {
+          const linkedIds = [...new Set([...(mb.linked_production_batch_ids || []), batch.batch_id])];
+
+          // Build produced_quantities: merge new produced qty into existing tracking
+          const existingPQ = mb.produced_quantities || [];
+          const newPQ = [...existingPQ];
+          for (const src of manualSources.filter(s => s.order_id === mbId)) {
+            const existing = newPQ.find(p => p.product_name === src.source_item && p.production_batch_id === batch.batch_id);
+            if (!existing) {
+              const plannedItem = (mb.items || []).find(i => i.product_name === src.source_item || i.product_name?.toLowerCase() === src.source_item?.toLowerCase());
+              newPQ.push({
+                product_name: src.source_item,
+                planned_quantity: plannedItem?.quantity || src.quantity,
+                produced_quantity: src.quantity,
+                production_batch_id: batch.batch_id,
+                produced_at: now,
+              });
+            }
+          }
+
+          // Determine if all items in the manual batch are now produced
+          const allProduced = (mb.items || []).every(item => {
+            const producedForItem = newPQ.filter(p =>
+              p.product_name === item.product_name || p.product_name?.toLowerCase() === item.product_name?.toLowerCase()
+            ).reduce((sum, p) => sum + (p.produced_quantity || 0), 0);
+            return producedForItem >= (item.quantity || 0);
+          });
+
+          await base44.asServiceRole.entities.ManualProductionBatch.update(mbId, {
+            status: allProduced ? 'produced' : 'in_production',
+            produced_at: allProduced ? now : (mb.produced_at || null),
+            completed_by: allProduced ? user.email : (mb.completed_by || null),
+            linked_production_batch_ids: linkedIds,
+            produced_quantities: newPQ,
+          });
+          console.log(`[COMPLETE-BATCH] ManualProductionBatch ${mbId} → ${allProduced ? 'produced' : 'in_production (partial)'}`);
+        }
+      } catch (err) {
+        console.warn(`[COMPLETE-BATCH] Could not update ManualProductionBatch ${mbId}: ${err.message}`);
+      }
+    }
+
     return Response.json({
       success: true,
       batch_id,
@@ -149,6 +198,7 @@ Deno.serve(async (req) => {
       completed_at: now,
       completed_by: user.email,
       awaiting_verification: true,
+      manual_batches_updated: manualBatchIds.length,
     });
   } catch (error) {
     console.error('[COMPLETE-BATCH]', error.message);
