@@ -923,6 +923,7 @@ Deno.serve(async (req) => {
     // GUARDRAIL: Only update fulfillments and assigned_delivery_date.
     // NEVER overwrite: payment_status, address_*, customer_*, production_status, delivery_status, ready_for_driver.
     // These are owned by the source of truth (Stripe/Customer App) or Systems Control repairs.
+    // CRITICAL: Only write if data has materially changed (write-diff guard to prevent unnecessary updates).
     const PROTECTED_FIELDS = new Set([
       'payment_status', 'production_status', 'delivery_status', 'ready_for_driver',
       'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code',
@@ -931,6 +932,8 @@ Deno.serve(async (req) => {
       'line_items', 'order_lock_status', 'internal_notes',
     ]);
     const ordersToUpdate = allOrders.filter(o => o.fulfillments || o._deliveryDateAssigned);
+    let ordersWritten = 0;
+    let ordersSkipped = 0;
     for (const order of ordersToUpdate) {
       const updateData = {};
       if (order.fulfillments && order.fulfillments.length > 0) {
@@ -942,13 +945,30 @@ Deno.serve(async (req) => {
       // Strip any protected fields that may have been accidentally included
       for (const f of PROTECTED_FIELDS) delete updateData[f];
       if (Object.keys(updateData).length > 0) {
-        try {
-          await base44.asServiceRole.entities.ShopifyOrder.update(order.id, updateData);
-        } catch (err) {
-          console.warn(`[RECALC] Failed to update fulfillments for order ${order.id}: ${err.message}`);
+        // WRITE-DIFF GUARD: Only write if data has materially changed
+        let hasChange = false;
+        if (updateData.fulfillments) {
+          const existingJson = JSON.stringify(order.fulfillments || []);
+          const incomingJson = JSON.stringify(updateData.fulfillments);
+          hasChange = existingJson !== incomingJson;
+        }
+        if (updateData.assigned_delivery_date && order.assigned_delivery_date !== updateData.assigned_delivery_date) {
+          hasChange = true;
+        }
+        
+        if (hasChange) {
+          try {
+            await base44.asServiceRole.entities.ShopifyOrder.update(order.id, updateData);
+            ordersWritten++;
+          } catch (err) {
+            console.warn(`[RECALC] Failed to update fulfillments for order ${order.id}: ${err.message}`);
+          }
+        } else {
+          ordersSkipped++;
         }
       }
     }
+    console.log(`[RECALC] Order updates: ${ordersWritten} written, ${ordersSkipped} skipped (no material change)`);
 
     // ─── UPSERT BATCHES ────────────────────────────────────────────────────────
     const results = { created: 0, updated: 0, zeroed: 0, skipped: 0 };
