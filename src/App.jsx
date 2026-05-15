@@ -44,6 +44,7 @@ import POSValidation from './pages/POSValidation';
 import ShopifyConnectionAudit from './pages/ShopifyConnectionAudit';
 import ShopifyTokenSetup from './pages/ShopifyTokenSetup';
 import POSEventReadiness from './pages/POSEventReadiness';
+import RefundReconciliation from './pages/RefundReconciliation';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -105,6 +106,7 @@ const AuthenticatedApp = () => {
         <Route path="/shopify-audit" element={<PageTransition><ShopifyConnectionAudit /></PageTransition>} />
         <Route path="/shopify-token-setup" element={<PageTransition><ShopifyTokenSetup /></PageTransition>} />
         <Route path="/pos-event-readiness" element={<PageTransition><POSEventReadiness /></PageTransition>} />
+        <Route path="/refund-reconciliation" element={<PageTransition><RefundReconciliation /></PageTransition>} />
 
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
