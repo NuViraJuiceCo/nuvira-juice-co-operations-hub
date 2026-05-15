@@ -51,9 +51,11 @@ export default function Dashboard() {
     );
   }
 
-  // Exclude test/quarantined/do_not_sync/refunded/cancelled records from all counts
+  // Exclude archived/refunded/canceled orders and test/quarantined records from operational metrics
   const EXCLUDED_TAGS = new Set(['refunded', 'excluded', 'do_not_sync', 'internal_test_owner_override', 'customer_confusion_duplicate_subscription']);
   const activeOrders = orders.filter(o =>
+    (o.operational_visibility === 'active' || !o.operational_visibility) && // Default to active if not set
+    (o.order_status !== 'refunded' && o.order_status !== 'canceled' && o.order_status !== 'archived') &&
     o.payment_status !== 'refunded' &&
     o.production_status !== 'canceled' &&
     o.production_status !== 'cancelled' &&
@@ -61,6 +63,15 @@ export default function Dashboard() {
     o.sync_status !== 'do_not_sync' &&
     !(Array.isArray(o.tags) && o.tags.some(t => EXCLUDED_TAGS.has(t)))
   );
+  
+  // Separate count for refunded/canceled orders (for optional display)
+  const refundedOrders = orders.filter(o =>
+    o.operational_visibility === 'archived' ||
+    o.order_status === 'refunded' ||
+    o.order_status === 'canceled'
+  );
+  const refundCount = refundedOrders.length;
+  const refundValue = refundedOrders.reduce((sum, o) => sum + (o.total_price || 0), 0);
   const paidOrders = activeOrders.filter((o) => o.payment_status === "paid");
   const newOrders = paidOrders.filter((o) => o.production_status === "new" || o.production_status === "awaiting_production").length;
   const inProduction = paidOrders.filter((o) => o.production_status === "in_production").length;
@@ -120,6 +131,19 @@ export default function Dashboard() {
         <StatCard label="Net Revenue" value={`$${revenue.toFixed(0)}`} icon={DollarSign} variant="success" subtitle="Paid · excl. refunds &amp; cancelled" />
         <StatCard label="Exceptions" value={exceptions} icon={AlertCircle} variant={exceptions > 0 ? "warning" : "default"} />
       </div>
+
+      {/* Optional Refunds/Cancellations Metric */}
+      {refundCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Archived Refunds & Cancellations</p>
+              <p className="text-xs text-amber-700 mt-1">{refundCount} orders · ${refundValue.toFixed(2)} (not included in operational revenue)</p>
+            </div>
+            <a href="/orders?filter=refunds" className="text-sm text-amber-700 hover:text-amber-800 font-medium">View →</a>
+          </div>
+        </div>
+      )}
 
       {/* Sync Panel */}
       <SyncPanel />

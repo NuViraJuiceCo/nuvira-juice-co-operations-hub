@@ -30,6 +30,7 @@ export default function Orders() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const [channelFilter, setChannelFilter] = useState("all");
+  const [visibilityFilter, setVisibilityFilter] = useState("operational");
   const [sortBy, setSortBy] = useState("created_date");
   const [sortDir, setSortDir] = useState("desc");
   const [selected, setSelected] = useState(new Set());
@@ -101,6 +102,15 @@ export default function Orders() {
     return true;
   };
 
+  const isRefundedOrCanceled = (o) => {
+    return (
+      o.order_status === 'refunded' ||
+      o.order_status === 'canceled' ||
+      INACTIVE_PAYMENT_STATUSES.includes(o.payment_status) ||
+      CANCELED_STATUSES.includes(o.production_status)
+    );
+  };
+
   const isPOSOrder = (o) =>
     o.source_type === 'shopify_pos' ||
     o.source_channel === 'pos' ||
@@ -114,14 +124,26 @@ export default function Orders() {
       (o.shopify_order_number && o.shopify_order_number.toLowerCase().includes(search.toLowerCase())) ||
       (o.customer_email && o.customer_email.toLowerCase().includes(search.toLowerCase()));
 
-    // "active" tab hides canceled/quarantined/do_not_recover orders
-    // "canceled" tab shows only canceled/refunded/quarantined
-    // "all" tab shows everything
+    // Visibility filter: operational (active only) vs archive (refunded/canceled only) vs all
+    let matchVisibility;
+    if (visibilityFilter === "operational") {
+      matchVisibility = isActiveOrder(o);
+    } else if (visibilityFilter === "refunds") {
+      matchVisibility = isRefundedOrCanceled(o);
+    } else if (visibilityFilter === "all") {
+      matchVisibility = true;
+    } else {
+      matchVisibility = true;
+    }
+
+    // Status filter within the visibility group
     let matchStatus;
     if (statusFilter === "active") {
       matchStatus = isActiveOrder(o);
-    } else if (statusFilter === "canceled") {
-      matchStatus = !isActiveOrder(o);
+    } else if (statusFilter === "completed") {
+      matchStatus = o.production_status === 'fulfilled' || o.production_status === 'delivered';
+    } else if (statusFilter === "refunds") {
+      matchStatus = isRefundedOrCanceled(o);
     } else if (statusFilter === "all") {
       matchStatus = true;
     } else {
@@ -138,7 +160,7 @@ export default function Orders() {
       matchChannel = o.source_channel === channelFilter && !isPOSOrder(o);
     }
 
-    return matchSearch && matchStatus && matchChannel;
+    return matchSearch && matchVisibility && matchStatus && matchChannel;
   });
 
   const sorted = [...filtered].sort((a, b) => {
@@ -327,21 +349,58 @@ export default function Orders() {
             className="pl-10 w-full"
           />
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
-          <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="Active Orders" triggerClassName="w-full">
-            <SelectContent>
-              <SelectItem value="active">Active Orders</SelectItem>
-              <SelectItem value="all">All Orders</SelectItem>
-              <SelectItem value="canceled">Canceled / Refunded</SelectItem>
-              <SelectItem value="new">New</SelectItem>
-              <SelectItem value="awaiting_production">Awaiting Production</SelectItem>
-              <SelectItem value="in_production">In Production</SelectItem>
-              <SelectItem value="bottled">Bottled</SelectItem>
-              <SelectItem value="labeled">Labeled</SelectItem>
-              <SelectItem value="packed">Packed</SelectItem>
-              <SelectItem value="fulfilled">Fulfilled</SelectItem>
-            </SelectContent>
-          </SelectMobile>
+        <div className="space-y-3">
+          {/* Primary Visibility Tabs */}
+          <div className="flex flex-wrap gap-2">
+            {['operational', 'refunds', 'all'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => {
+                  setVisibilityFilter(tab);
+                  setStatusFilter(tab === 'operational' ? 'active' : tab === 'refunds' ? 'refunds' : 'all');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  visibilityFilter === tab
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                {tab === 'operational' ? '📊 Operational' : tab === 'refunds' ? '💰 Refunds & Cancellations' : '📋 All'}
+              </button>
+            ))}
+          </div>
+
+          {/* Status Subcategories */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
+            <SelectMobile value={statusFilter} onValueChange={setStatusFilter} placeholder="Filter by Status" triggerClassName="w-full">
+              <SelectContent>
+                {visibilityFilter === 'operational' && (
+                  <>
+                    <SelectItem value="active">All Active</SelectItem>
+                    <SelectItem value="new">New</SelectItem>
+                    <SelectItem value="awaiting_production">Awaiting Production</SelectItem>
+                    <SelectItem value="in_production">In Production</SelectItem>
+                    <SelectItem value="bottled">Bottled</SelectItem>
+                    <SelectItem value="labeled">Labeled</SelectItem>
+                    <SelectItem value="packed">Packed</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </>
+                )}
+                {visibilityFilter === 'refunds' && (
+                  <>
+                    <SelectItem value="refunds">All Refunds & Cancellations</SelectItem>
+                  </>
+                )}
+                {visibilityFilter === 'all' && (
+                  <>
+                    <SelectItem value="all">All Orders</SelectItem>
+                    <SelectItem value="active">Active Orders</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="refunds">Refunds & Cancellations</SelectItem>
+                  </>
+                )}
+              </SelectContent>
+            </SelectMobile>
           <SelectMobile value={channelFilter} onValueChange={setChannelFilter} placeholder="All Channels" triggerClassName="w-full">
             <SelectContent>
               <SelectItem value="all">All Channels</SelectItem>
@@ -352,8 +411,9 @@ export default function Orders() {
               <SelectItem value="wholesale">Wholesale</SelectItem>
             </SelectContent>
           </SelectMobile>
-        </div>
-      </div>
+          </div>
+          </div>
+          </div>
 
       {/* Bulk Actions */}
       {selected.size > 0 && (

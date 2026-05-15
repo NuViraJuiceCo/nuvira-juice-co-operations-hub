@@ -243,7 +243,8 @@
         "pending",
         "paid",
         "authorized",
-        "refunded"
+        "refunded",
+        "partially_refunded"
       ]
     },
     "fulfillment_status": {
@@ -292,6 +293,27 @@
       ],
       "default": "unlocked",
       "description": "Lifecycle lock controlling what future syncs are allowed to modify."
+    },
+    "order_status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "completed",
+        "refunded",
+        "canceled",
+        "archived"
+      ],
+      "default": "active",
+      "description": "High-level order lifecycle status for operational visibility"
+    },
+    "operational_visibility": {
+      "type": "string",
+      "enum": [
+        "active",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Controls whether order appears in operational dashboards and workflows. 'archived' hides from default views."
     },
     "tags": {
       "type": "array",
@@ -518,51 +540,5 @@
   "required": [
     "shopify_order_id",
     "shopify_order_number"
-  ],
-  "rls": {
-    "create": {
-      "created_by": "{{user.email}}"
-    },
-    "read": {
-      "$or": [
-        {
-          "data.customer_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": {
-              "$in": [
-                "admin",
-                "operations_staff",
-                "driver"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    "update": {
-      "$or": [
-        {
-          "data.customer_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": {
-              "$in": [
-                "admin",
-                "operations_staff",
-                "driver"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }
