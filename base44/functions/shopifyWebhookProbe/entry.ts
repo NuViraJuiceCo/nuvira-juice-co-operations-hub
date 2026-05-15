@@ -1,49 +1,78 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 /**
- * shopifyWebhookProbe — Diagnostic endpoint to confirm Shopify can reach Base44
- *
- * NO HMAC verification — purely for connectivity testing.
- * After confirming connectivity, delete this function or disable it.
- *
- * Point a Shopify test webhook at this URL and check the delivery logs.
- * The function logs every header and body it receives.
+ * shopifyWebhookProbe — Simple webhook reachability test
+ * 
+ * Purpose: Prove the endpoint is externally reachable and logs requests.
+ * Returns 200 for ANY POST request, logs all headers/body.
+ * Does NOT verify HMAC — that's added later after reachability is proven.
  */
+
 Deno.serve(async (req) => {
-  const rawBody = await req.text();
-  const headers = {};
-  for (const [k, v] of req.headers.entries()) headers[k] = v;
-
-  const topic = headers['x-shopify-topic'] || 'unknown';
-  const hmacHeader = headers['x-shopify-hmac-sha256'] || 'MISSING';
-  const shopDomain = headers['x-shopify-shop-domain'] || 'unknown';
-
-  console.log(`[SHOPIFY-PROBE] *** WEBHOOK RECEIVED ***`);
-  console.log(`[SHOPIFY-PROBE] topic=${topic} shop=${shopDomain}`);
-  console.log(`[SHOPIFY-PROBE] hmac_header=${hmacHeader}`);
-  console.log(`[SHOPIFY-PROBE] body_length=${rawBody.length}`);
-
-  let parsed = null;
+  const timestamp = new Date().toISOString();
+  const logs = [];
+  
   try {
-    parsed = JSON.parse(rawBody);
-    console.log(`[SHOPIFY-PROBE] order_id=${parsed.id} order_number=${parsed.name || parsed.order_number} source_name=${parsed.source_name} location_id=${parsed.location_id} financial_status=${parsed.financial_status}`);
-  } catch (_) {
-    console.log(`[SHOPIFY-PROBE] body is not JSON: ${rawBody.substring(0, 200)}`);
+    // Capture raw body
+    const rawBody = await req.text();
+    
+    // Log method and URL
+    logs.push(`[PROBE] ${timestamp}`);
+    logs.push(`[PROBE] Method: ${req.method}`);
+    logs.push(`[PROBE] URL: ${req.url}`);
+    logs.push(`[PROBE] Content-Type: ${req.headers.get('content-type') || 'NOT SET'}`);
+    logs.push(`[PROBE] Body length: ${rawBody.length} bytes`);
+    logs.push(`[PROBE] Body preview: ${rawBody.substring(0, 200)}`);
+    
+    // Check for Shopify headers (but don't require them)
+    const hmacHeader = req.headers.get('X-Shopify-Hmac-Sha256');
+    const topicHeader = req.headers.get('X-Shopify-Topic');
+    const shopHeader = req.headers.get('X-Shopify-Shop-Domain');
+    
+    logs.push(`[PROBE] X-Shopify-Hmac-Sha256: ${hmacHeader ? 'PRESENT' : 'MISSING'}`);
+    logs.push(`[PROBE] X-Shopify-Topic: ${topicHeader ? 'PRESENT' : 'MISSING'}`);
+    logs.push(`[PROBE] X-Shopify-Shop-Domain: ${shopHeader ? 'PRESENT' : 'MISSING'}`);
+    
+    // Log to console
+    logs.forEach(log => console.log(log));
+    
+    // Try to create HubAlert (will fail if permissions issue, but that's OK)
+    try {
+      const base44 = createClientFromRequest(req);
+      await base44.asServiceRole.entities.HubAlert.create({
+        title: `Webhook Probe — ${topicHeader || 'No Topic'}`,
+        message: logs.join('\n'),
+        category: 'System',
+        severity: hmacHeader ? 'info' : 'warning',
+        source: 'shopifyWebhookProbe',
+        recommended_action: hmacHeader 
+          ? 'HMAC present — ready to enable full verification' 
+          : 'No HMAC — this is a test or Shopify test notification',
+      }).catch(() => null);
+    } catch (e) {
+      console.log('[PROBE] Could not create HubAlert:', e.message);
+    }
+    
+    // Always return 200 so Shopify knows we received it
+    return Response.json({
+      received: true,
+      timestamp,
+      method: req.method,
+      shopify_headers: {
+        hmac_present: !!hmacHeader,
+        topic_present: !!topicHeader,
+        shop_present: !!shopHeader,
+      },
+      body_length: rawBody.length,
+    }, { status: 200 });
+    
+  } catch (error) {
+    console.error('[PROBE] ERROR:', error.message);
+    
+    // Still return 200 to acknowledge receipt
+    return Response.json({
+      received: false,
+      error: error.message,
+    }, { status: 200 });
   }
-
-  // Log to HubAlert so it shows up in the Hub UI too
-  try {
-    const base44 = createClientFromRequest(req);
-    await base44.asServiceRole.entities.HubAlert.create({
-      title: `Shopify Probe: ${topic} received`,
-      message: `Shop: ${shopDomain} | HMAC: ${hmacHeader.substring(0, 10)}... | Order: ${parsed?.name || parsed?.order_number || 'N/A'} | source_name: ${parsed?.source_name || 'N/A'} | location_id: ${parsed?.location_id || 'N/A'} | financial_status: ${parsed?.financial_status || 'N/A'}`,
-      category: 'Sync',
-      severity: 'info',
-      source: 'shopifyWebhookProbe',
-    });
-  } catch (err) {
-    console.log(`[SHOPIFY-PROBE] HubAlert log failed (non-critical): ${err.message}`);
-  }
-
-  return Response.json({ received: true, topic, probe: true }, { status: 200 });
 });
