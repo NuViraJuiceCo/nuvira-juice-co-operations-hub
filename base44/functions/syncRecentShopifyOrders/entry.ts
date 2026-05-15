@@ -1,0 +1,181 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+
+/**
+ * syncRecentShopifyOrders - Pull recent orders from Shopify Admin API as reliable fallback
+ * 
+ * This function:
+ * - Pulls orders from the last 24-48 hours via Admin API
+ * - Classifies POS orders by source_name, channel, location_id, app_id
+ * - Creates/updates ShopifyOrder records idempotently
+ * - Tags POS orders appropriately (shopify_pos)
+ * - Excludes POS orders from fulfillment/production workflows
+ * 
+ * Usage: Admin-only or scheduled automation (every 15-30 minutes)
+ */
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    
+    // Admin-only or internal scheduled call
+    if (!user || user.role !== 'admin') {
+      // Allow internal calls without user context
+      const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+      const requestSecret = req.headers.get('X-Internal-Secret');
+      if (!internalSecret || requestSecret !== internalSecret) {
+        return Response.json({ error: 'Admin access or internal secret required' }, { status: 403 });
+      }
+    }
+
+    const shopDomain = Deno.env.get('SHOPIFY_SHOP_DOMAIN');
+    const adminToken = Deno.env.get('SHOPIFY_ADMIN_ACCESS_TOKEN');
+
+    if (!shopDomain || !adminToken) {
+      return Response.json({ 
+        error: 'Missing Shopify credentials',
+        status: 'FAILED',
+        reason: 'SHOPIFY_SHOP_DOMAIN or SHOPIFY_ADMIN_ACCESS_TOKEN not configured'
+      }, { status: 500 });
+    }
+
+    // Validate token format first
+    if (!adminToken.startsWith('shpat_')) {
+      return Response.json({
+        error: 'Invalid Admin API token format',
+        status: 'FAILED',
+        reason: `Token starts with ${adminToken.substring(0, 6)}... Required: shpat_*`,
+        token_prefix: adminToken.substring(0, 8)
+      }, { status: 500 });
+    }
+
+    const stats = {
+      total_pulled: 0,
+      pos_orders: 0,
+      online_orders: 0,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    // Fetch recent orders (last 48 hours to be safe)
+    const twoDaysAgo = new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString();
+    
+    const ordersResponse = await fetch(`https://${shopDomain}/admin/api/2024-01/orders.json?limit=50&status=any&updated_at_min=${twoDaysAgo}`, {
+      headers: {
+        'X-Shopify-Access-Token': adminToken,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!ordersResponse.ok) {
+      const errorText = await ordersResponse.text().catch(() => 'N/A');
+      return Response.json({
+        error: 'Failed to fetch orders from Shopify',
+        status: 'FAILED',
+        http_status: ordersResponse.status,
+        details: errorText,
+      }, { status: 500 });
+    }
+
+    const ordersData = await ordersResponse.json();
+    const orders = ordersData.orders || [];
+
+    stats.total_pulled = orders.length;
+
+    // Process each order
+    for (const shopifyOrder of orders) {
+      try {
+        // Classify order type
+        const isPOS = 
+          (shopifyOrder.source_name || '').toLowerCase() === 'pos' ||
+          (shopifyOrder.channel || '').toLowerCase() === 'pos' ||
+          !!shopifyOrder.location_id ||
+          ['131', '131313', 'com.jadedpixel.pos'].includes(String(shopifyOrder.app_id));
+
+        if (isPOS) {
+          stats.pos_orders++;
+        } else {
+          stats.online_orders++;
+        }
+
+        // Check if order already exists in Hub
+        const existingOrders = await base44.entities.ShopifyOrder.filter({
+          shopify_order_id: String(shopifyOrder.id),
+        });
+
+        const orderData = {
+          shopify_order_id: String(shopifyOrder.id),
+          shopify_order_number: shopifyOrder.name || String(shopifyOrder.order_number),
+          order_type: isPOS ? 'pos' : 'one_time',
+          source_channel: isPOS ? 'pos' : 'online',
+          source_type: isPOS ? 'shopify_pos' : 'shopify_online',
+          customer_email: shopifyOrder.email,
+          customer_name: shopifyOrder.customer?.name || shopifyOrder.billing_address?.name,
+          customer_phone: shopifyOrder.phone,
+          line_items: (shopifyOrder.line_items || []).map(item => ({
+            title: item.title,
+            quantity: item.quantity,
+            price: parseFloat(item.price),
+          })),
+          payment_status: shopifyOrder.financial_status,
+          fulfillment_status: shopifyOrder.fulfillment_status,
+          subtotal: parseFloat(shopifyOrder.subtotal_price || '0'),
+          total_price: parseFloat(shopifyOrder.total_price || '0'),
+          tags: isPOS ? ['shopify_pos', 'pos_order'] : ['shopify_online'],
+          sync_status: 'synced',
+          last_sync_at: new Date().toISOString(),
+        };
+
+        // Add address fields for non-POS orders
+        if (!isPOS && shopifyOrder.shipping_address) {
+          Object.assign(orderData, {
+            address_line1: shopifyOrder.shipping_address.address1,
+            address_line2: shopifyOrder.shipping_address.address2 || '',
+            address_city: shopifyOrder.shipping_address.city,
+            address_state: shopifyOrder.shipping_address.province,
+            address_postal_code: shopifyOrder.shipping_address.zip,
+            address_country: shopifyOrder.shipping_address.country,
+            delivery_notes: shopifyOrder.note || '',
+          });
+        } else if (isPOS) {
+          // POS orders: mark as pickup/no delivery
+          orderData.fulfillment_method = 'pos';
+          orderData.production_status = 'not_required';
+        }
+
+        if (existingOrders.length > 0) {
+          // Update existing order
+          const existing = existingOrders[0];
+          await base44.entities.ShopifyOrder.update(existing.id, orderData);
+          stats.updated++;
+        } else {
+          // Create new order
+          await base44.entities.ShopifyOrder.create(orderData);
+          stats.created++;
+        }
+
+      } catch (orderError) {
+        stats.errors.push({
+          order_number: shopifyOrder.name,
+          error: orderError.message,
+        });
+      }
+    }
+
+    return Response.json({
+      status: 'SUCCESS',
+      timestamp: new Date().toISOString(),
+      stats,
+      message: `Synced ${stats.total_pulled} orders (${stats.pos_orders} POS, ${stats.online_orders} online). Created: ${stats.created}, Updated: ${stats.updated}`,
+    });
+
+  } catch (error) {
+    return Response.json({
+      status: 'FAILED',
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    }, { status: 500 });
+  }
+});

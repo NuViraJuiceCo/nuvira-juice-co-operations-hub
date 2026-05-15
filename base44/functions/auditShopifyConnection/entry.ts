@@ -36,12 +36,19 @@ Deno.serve(async (req) => {
     const adminToken = Deno.env.get('SHOPIFY_ADMIN_ACCESS_TOKEN');
     const webhookSecret = Deno.env.get('SHOPIFY_WEBHOOK_SECRET');
 
+    // Validate token format
+    const isValidAdminToken = adminToken && adminToken.startsWith('shpat_');
+    const isProxyToken = adminToken && adminToken.startsWith('shpss_');
+    const isSessionToken = adminToken && adminToken.startsWith('shpst_');
+
     results.credentials = {
       shop_domain_present: !!shopDomain,
       shop_domain_value: shopDomain ? `${shopDomain}` : 'MISSING',
       admin_token_present: !!adminToken,
       admin_token_length: adminToken?.length || 0,
       admin_token_prefix: adminToken ? adminToken.substring(0, 8) + '...' : 'MISSING',
+      admin_token_format_valid: isValidAdminToken,
+      admin_token_format_issue: isProxyToken ? 'PROXY_TOKEN' : isSessionToken ? 'SESSION_TOKEN' : !adminToken ? 'MISSING' : 'UNKNOWN',
       webhook_secret_present: !!webhookSecret,
       webhook_secret_length: webhookSecret?.length || 0,
       credentials_complete: !!(shopDomain && adminToken && webhookSecret),
@@ -49,6 +56,17 @@ Deno.serve(async (req) => {
 
     if (!shopDomain || !adminToken) {
       results.recommendations.push('CRITICAL: Missing Shopify credentials. Set SHOPIFY_SHOP_DOMAIN and SHOPIFY_ADMIN_ACCESS_TOKEN secrets.');
+      return Response.json(results);
+    }
+
+    if (!isValidAdminToken) {
+      results.recommendations.push(`CRITICAL: Invalid token format. Current: ${adminToken.substring(0, 8)}... Required format: shpat_*`);
+      if (isProxyToken) {
+        results.recommendations.push('You copied an App Proxy token or Webhook Secret (shpss_*). You need the Admin API access token (shpat_*).');
+      } else if (isSessionToken) {
+        results.recommendations.push('You copied a Session token (shpst_*). You need the Admin API access token (shpat_*).');
+      }
+      results.recommendations.push('Go to Shopify Admin → Settings → Apps → Develop apps → Your app → API credentials → Reveal Admin API access token');
       return Response.json(results);
     }
 

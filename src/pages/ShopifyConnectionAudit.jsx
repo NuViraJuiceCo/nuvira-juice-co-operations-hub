@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { AlertTriangle, CheckCircle2, XCircle, RefreshCw, Database, Shield, Key, Globe } from "lucide-react";
+import { AlertTriangle, CheckCircle2, XCircle, RefreshCw, Database, Shield, Key, Globe, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -94,7 +94,7 @@ export default function ShopifyConnectionAudit() {
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    {auditResults.credentials.admin_token_present ? (
+                    {auditResults.credentials.admin_token_format_valid ? (
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
                     ) : (
                       <XCircle className="h-4 w-4 text-red-500" />
@@ -106,6 +106,11 @@ export default function ShopifyConnectionAudit() {
                       ? `${auditResults.credentials.admin_token_prefix} (${auditResults.credentials.admin_token_length} chars)`
                       : "MISSING"}
                   </p>
+                  {auditResults.credentials.admin_token_format_issue && (
+                    <p className="text-xs text-red-600 ml-6 font-medium">
+                      ⚠️ Invalid format: {auditResults.credentials.admin_token_format_issue}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -272,19 +277,61 @@ export default function ShopifyConnectionAudit() {
                 <p className="text-red-700">
                   The current <code className="bg-red-100 px-1 rounded">SHOPIFY_ADMIN_ACCESS_TOKEN</code> is not a valid Admin API access token.
                 </p>
+                
+                {auditResults.credentials.admin_token_format_issue && (
+                  <div className="bg-white border border-red-200 rounded-lg p-4 space-y-2 text-sm">
+                    <p className="font-semibold text-red-800">
+                      <strong>Issue:</strong> Token format detected: <code className="text-red-600 font-mono">{auditResults.credentials.admin_token_format_issue}</code>
+                    </p>
+                    
+                    {auditResults.credentials.admin_token_format_issue === 'PROXY_TOKEN' && (
+                      <div className="space-y-2">
+                        <p>You copied an <strong>App Proxy token</strong> or <strong>Webhook Secret</strong> (starts with shpss_*).</p>
+                        <p className="text-green-700 font-medium">✅ You need the Admin API access token (starts with shpat_*)</p>
+                      </div>
+                    )}
+                    
+                    {auditResults.credentials.admin_token_format_issue === 'SESSION_TOKEN' && (
+                      <div className="space-y-2">
+                        <p>You copied a <strong>Session token</strong> (starts with shpst_*).</p>
+                        <p className="text-green-700 font-medium">✅ You need the Admin API access token (starts with shpat_*)</p>
+                      </div>
+                    )}
+                    
+                    {auditResults.credentials.admin_token_format_issue === 'MISSING' && (
+                      <p>The Admin API token is not configured in Base44 secrets.</p>
+                    )}
+
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
+                      <p className="font-medium text-amber-800 mb-2">How to get the correct token:</p>
+                      <ol className="list-decimal list-inside space-y-1 text-sm">
+                        <li>Shopify Admin → Settings → Apps and sales channels</li>
+                        <li>Develop apps → Click your app name</li>
+                        <li>API credentials tab → "Admin API access token"</li>
+                        <li>Click "Reveal token once" → Copy the full token</li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-white border border-red-200 rounded-lg p-4 space-y-2 text-sm">
-                  <p><strong>Issue:</strong> Token format <code className="text-red-600">shpss_*</code> indicates a Shopify app proxy token, not an Admin API token.</p>
-                  <p><strong>Required:</strong> Admin API access tokens are typically longer and obtained through:</p>
-                  <ol className="list-decimal list-inside space-y-1 ml-2">
-                    <li>Custom app in Shopify Admin → Settings → Apps and sales channels</li>
-                    <li>Develop apps → Create an app → Configure Admin API scopes</li>
-                    <li>Required scopes: <code className="bg-muted px-1 rounded">read_orders</code>, <code className="bg-muted px-1 rounded">read_all_orders</code>, <code className="bg-muted px-1 rounded">read_products</code>, <code className="bg-muted px-1 rounded">read_inventory</code>, <code className="bg-muted px-1 rounded">read_locations</code></li>
-                    <li>Install app → Copy Admin API access token</li>
-                  </ol>
+                  <p><strong>Required scopes:</strong></p>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {['read_orders', 'read_all_orders', 'read_products', 'read_inventory', 'read_locations'].map(scope => (
+                      <Badge key={scope} variant="secondary" className="text-xs">
+                        <Key className="h-3 w-3 mr-1" />
+                        {scope}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-xs text-red-700">
-                  <strong>Next Step:</strong> Update the <code className="bg-red-100 px-1 rounded">SHOPIFY_ADMIN_ACCESS_TOKEN</code> secret with a valid Admin API access token before proceeding with webhook debugging.
-                </p>
+                
+                <div className="flex gap-2 mt-3">
+                  <Button onClick={() => window.location.href = '/shopify-token-setup'} variant="default" size="sm" className="gap-2">
+                    <ExternalLink className="h-4 w-4" />
+                    Open Setup Guide
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}

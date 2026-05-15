@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { AlertTriangle, CheckCircle2, ChevronRight, ExternalLink, Key, RefreshCw, Shield, Copy } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, ExternalLink, Key, RefreshCw, Shield, Copy, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,7 @@ const STEPS = [
     id: 3,
     title: "Create Custom App",
     description: "Click 'Create an app' and give it a name",
-    action: "Name it 'NuVira Hub Integration' or similar",
+    action: "Name it 'NuVira Hub Core' or similar",
   },
   {
     id: 4,
@@ -33,9 +33,11 @@ const STEPS = [
     required_scopes: [
       "read_orders",
       "read_all_orders",
+      "write_orders",
       "read_products",
       "read_inventory",
       "read_locations",
+      "read_customers",
     ],
     action: "Click 'Save' after selecting all required scopes",
   },
@@ -69,6 +71,8 @@ const STEPS = [
 export default function ShopifyTokenSetup() {
   const { user } = useAuth();
   const [copiedStep, setCopiedStep] = useState(null);
+  const [auditStatus, setAuditStatus] = useState(null);
+  const [checking, setChecking] = useState(false);
 
   const copyToClipboard = (text, stepId) => {
     navigator.clipboard.writeText(text);
@@ -78,8 +82,10 @@ export default function ShopifyTokenSetup() {
   };
 
   const runQuickTest = async () => {
+    setChecking(true);
     try {
       const res = await base44.functions.invoke("auditShopifyConnection", {});
+      setAuditStatus(res.data);
       if (res.data.api_tests?.connectivity === "PASS") {
         toast.success("✅ Shopify Admin API connected successfully!");
       } else {
@@ -87,6 +93,8 @@ export default function ShopifyTokenSetup() {
       }
     } catch (err) {
       toast.error("Audit failed: " + err.message);
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -105,40 +113,65 @@ export default function ShopifyTokenSetup() {
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold text-foreground">Shopify Admin API Token Setup</h1>
         <p className="text-muted-foreground">
-          Replace the invalid <code className="bg-muted px-1 rounded">shpss_*</code> token with a proper Admin API access token
+          Complete Shopify integration setup with proper Admin API access token
         </p>
       </div>
 
       {/* Current Status Alert */}
-      <Card className="border-red-300 bg-red-50">
-        <CardHeader>
-          <CardTitle className="text-red-800 flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Current Issue
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-red-900">
-          <p>
-            The current <code className="bg-red-100 px-1 rounded font-mono">SHOPIFY_ADMIN_ACCESS_TOKEN</code> is invalid.
-          </p>
-          <p>
-            <strong>Token format detected:</strong> <code className="font-mono">shpss_*</code> (app proxy/session token)
-          </p>
-          <p>
-            <strong>Required format:</strong> <code className="font-mono">shpat_*</code> (Admin API access token)
-          </p>
-          <div className="flex gap-2 mt-3">
-            <Button onClick={runQuickTest} variant="outline" size="sm" className="gap-2">
+      {auditStatus && (
+        <Card className={auditStatus.api_tests?.connectivity === "PASS" ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}>
+          <CardHeader>
+            <CardTitle className={auditStatus.api_tests?.connectivity === "PASS" ? "text-green-800" : "text-red-800"}>
+              <div className="flex items-center gap-2">
+                {auditStatus.api_tests?.connectivity === "PASS" ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+                Current Connection Status
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-muted-foreground">Token Prefix:</p>
+                <code className="font-mono">{auditStatus.credentials?.admin_token_prefix || "N/A"}</code>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Status:</p>
+                <Badge variant={auditStatus.api_tests?.connectivity === "PASS" ? "default" : "destructive"}>
+                  {auditStatus.api_tests?.connectivity || "UNKNOWN"}
+                </Badge>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Button onClick={runQuickTest} variant="outline" size="sm" className="gap-2" disabled={checking}>
+                <RefreshCw className={`h-4 w-4 ${checking ? "animate-spin" : ""}`} />
+                {checking ? "Checking..." : "Quick Connection Test"}
+              </Button>
+              <Button onClick={() => window.location.href = "/shopify-audit"} variant="outline" size="sm" className="gap-2">
+                <ExternalLink className="h-4 w-4" />
+                View Full Audit
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!auditStatus && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="text-amber-800 flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Initial Setup Required
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-amber-900">
+            <p>Follow the steps below to configure your Shopify Admin API integration.</p>
+            <Button onClick={runQuickTest} variant="outline" size="sm" className="gap-2 mt-2">
               <RefreshCw className="h-4 w-4" />
-              Quick Connection Test
+              Run Initial Connection Test
             </Button>
-            <Button onClick={() => window.location.href = "/shopify-audit"} variant="outline" size="sm" className="gap-2">
-              <ExternalLink className="h-4 w-4" />
-              View Full Audit
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Step-by-Step Guide */}
       <div className="space-y-4">
@@ -253,7 +286,7 @@ export default function ShopifyTokenSetup() {
                   <td className="p-2 font-medium">App Proxy Token</td>
                   <td className="p-2 font-mono">shpss_*</td>
                   <td className="p-2">App proxy requests</td>
-                  <td className="p-2 text-red-600">❌ NO - This is what you have now</td>
+                  <td className="p-2 text-red-600">❌ NO</td>
                 </tr>
                 <tr className="border-b bg-red-50">
                   <td className="p-2 font-medium">Session Token</td>
@@ -271,7 +304,7 @@ export default function ShopifyTokenSetup() {
                   <td className="p-2 font-medium">Admin API Access Token</td>
                   <td className="p-2 font-mono">shpat_*</td>
                   <td className="p-2">Admin API calls</td>
-                  <td className="p-2 text-green-600">✅ YES - This is what you need</td>
+                  <td className="p-2 text-green-600">✅ YES</td>
                 </tr>
               </tbody>
             </table>
