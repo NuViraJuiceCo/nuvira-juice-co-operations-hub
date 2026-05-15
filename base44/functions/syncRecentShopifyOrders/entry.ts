@@ -30,21 +30,60 @@ Deno.serve(async (req) => {
 
     const shopDomain = Deno.env.get('SHOPIFY_SHOP_DOMAIN');
     const adminToken = Deno.env.get('SHOPIFY_ADMIN_ACCESS_TOKEN');
+    const clientId = Deno.env.get('SHOPIFY_CLIENT_ID');
+    const clientSecret = Deno.env.get('SHOPIFY_CLIENT_SECRET');
 
-    if (!shopDomain || !adminToken) {
+    // Detect auth flow
+    const usingClientCredentials = !!clientId && !!clientSecret;
+    const usingStaticToken = !!adminToken;
+
+    if (!shopDomain || (!usingClientCredentials && !usingStaticToken)) {
       return Response.json({ 
         error: 'Missing Shopify credentials',
         status: 'FAILED',
-        reason: 'SHOPIFY_SHOP_DOMAIN or SHOPIFY_ADMIN_ACCESS_TOKEN not configured'
+        reason: 'SHOPIFY_SHOP_DOMAIN required, plus either (SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET) for Dev Dashboard flow OR SHOPIFY_ADMIN_ACCESS_TOKEN for static token flow'
       }, { status: 500 });
     }
 
-    // Validate token format first
-    if (!adminToken.startsWith('shpat_')) {
+    // Get access token via exchange or use static token
+    let accessToken = adminToken;
+    
+    if (usingClientCredentials) {
+      try {
+        const tokenResponse = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: clientId,
+            client_secret: clientSecret,
+            grant_type: 'client_credentials'
+          })
+        });
+
+        const tokenData = await tokenResponse.json();
+        
+        if (!tokenResponse.ok || !tokenData.access_token) {
+          return Response.json({
+            error: 'Token exchange failed',
+            status: 'FAILED',
+            reason: tokenData.message || 'Failed to obtain access token from client credentials',
+            details: tokenData
+          }, { status: 500 });
+        }
+
+        accessToken = tokenData.access_token;
+      } catch (err) {
+        return Response.json({
+          error: 'Token exchange error',
+          status: 'FAILED',
+          reason: err.message
+        }, { status: 500 });
+      }
+    } else if (!adminToken.startsWith('shpat_')) {
       return Response.json({
         error: 'Invalid Admin API token format',
         status: 'FAILED',
-        reason: `Token starts with ${adminToken.substring(0, 6)}... Required: shpat_*`,
+        reason: `Token starts with ${adminToken.substring(0, 6)}... Required: shpat_* (or use client credentials flow)`,
         token_prefix: adminToken.substring(0, 8)
       }, { status: 500 });
     }
@@ -64,7 +103,7 @@ Deno.serve(async (req) => {
     
     const ordersResponse = await fetch(`https://${shopDomain}/admin/api/2024-01/orders.json?limit=50&status=any&updated_at_min=${twoDaysAgo}`, {
       headers: {
-        'X-Shopify-Access-Token': adminToken,
+        'X-Shopify-Access-Token': accessToken,
         'Content-Type': 'application/json',
       },
     });
