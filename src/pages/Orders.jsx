@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Search, Download, Edit2, RefreshCw } from "lucide-react";
+import { Search, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import StatusBadge from "../components/shared/StatusBadge";
+import { isPOSOrder } from "../lib/utils";
 import moment from "moment";
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [view, setView] = useState("all"); // all, online, pos
 
   useEffect(() => {
     async function load() {
@@ -35,12 +38,19 @@ export default function Orders() {
 
   const filtered = orders.filter((o) => {
     if (!o) return false;
-    return (
-      !search ||
+    const matchesSearch = !search ||
       (o.shopify_order_number && o.shopify_order_number.toLowerCase().includes(search.toLowerCase())) ||
-      (o.customer_email && o.customer_email.toLowerCase().includes(search.toLowerCase()))
-    );
+      (o.customer_email && o.customer_email.toLowerCase().includes(search.toLowerCase()));
+    
+    if (!matchesSearch) return false;
+    
+    if (view === "pos") return isPOSOrder(o);
+    if (view === "online") return !isPOSOrder(o);
+    return true;
   });
+
+  const posCount = orders.filter(o => isPOSOrder(o)).length;
+  const onlineCount = orders.filter(o => !isPOSOrder(o)).length;
 
   if (loading) {
     return (
@@ -55,12 +65,46 @@ export default function Orders() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Orders</h1>
-          <p className="text-muted-foreground mt-1">{orders.length} orders</p>
+          <p className="text-muted-foreground mt-1">{orders.length} total orders</p>
         </div>
         <Button variant="outline" onClick={handleRefresh} className="gap-2">
           <RefreshCw className="h-4 w-4" />
           Refresh
         </Button>
+      </div>
+
+      {/* View Tabs */}
+      <div className="flex gap-2 border-b border-border">
+        <button
+          onClick={() => setView("all")}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            view === "all"
+              ? "text-primary border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          All Orders ({orders.length})
+        </button>
+        <button
+          onClick={() => setView("online")}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            view === "online"
+              ? "text-primary border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Online ({onlineCount})
+        </button>
+        <button
+          onClick={() => setView("pos")}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            view === "pos"
+              ? "text-primary border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          POS/Event Sales ({posCount})
+        </button>
       </div>
 
       <div className="bg-card border border-border rounded-xl p-4">
@@ -82,6 +126,7 @@ export default function Orders() {
             <thead>
               <tr className="border-b border-border">
                 <th className="px-5 py-3 text-left">Order ID</th>
+                <th className="px-5 py-3 text-left">Type</th>
                 <th className="px-5 py-3 text-left">Customer</th>
                 <th className="px-5 py-3 text-left">Email</th>
                 <th className="px-5 py-3 text-left">Status</th>
@@ -93,6 +138,13 @@ export default function Orders() {
               {filtered.map((order) => (
                 <tr key={order.id} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="px-5 py-3.5 font-medium text-primary">{order.shopify_order_number || '—'}</td>
+                  <td className="px-5 py-3.5">
+                    {isPOSOrder(order) ? (
+                      <Badge className="bg-orange-500/20 text-orange-700">POS/Event</Badge>
+                    ) : (
+                      <Badge variant="outline">Online</Badge>
+                    )}
+                  </td>
                   <td className="px-5 py-3.5">{order.customer_name || '—'}</td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.customer_email || '—'}</td>
                   <td className="px-5 py-3.5">
@@ -118,7 +170,14 @@ export default function Orders() {
         ) : (
           filtered.map((order) => (
             <div key={order.id} className="bg-card border border-border rounded-lg p-4 space-y-2">
-              <p className="font-medium text-primary text-sm">{order.shopify_order_number || '—'}</p>
+              <div className="flex items-center justify-between">
+                <p className="font-medium text-primary text-sm">{order.shopify_order_number || '—'}</p>
+                {isPOSOrder(order) ? (
+                  <Badge className="bg-orange-500/20 text-orange-700 text-xs">POS/Event</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs">Online</Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">{order.customer_name || '—'}</p>
               <p className="text-xs text-muted-foreground">{order.customer_email || '—'}</p>
               <div className="pt-2 grid grid-cols-2 gap-2 text-xs">
