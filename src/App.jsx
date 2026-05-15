@@ -41,6 +41,7 @@ import Alerts from './pages/Alerts';
 import LiveOrderMonitor from './pages/LiveOrderMonitor';
 import DeliveryRouteReviews from './pages/DeliveryRouteReviews';
 import POSValidation from './pages/POSValidation';
+import ShopifyConnectionAudit from './pages/ShopifyConnectionAudit';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -99,6 +100,7 @@ const AuthenticatedApp = () => {
         <Route path="/live-monitor" element={<PageTransition><LiveOrderMonitor /></PageTransition>} />
         <Route path="/delivery-route-reviews" element={<PageTransition><DeliveryRouteReviews /></PageTransition>} />
         <Route path="/pos-validation" element={<PageTransition><POSValidation /></PageTransition>} />
+        <Route path="/shopify-audit" element={<PageTransition><ShopifyConnectionAudit /></PageTransition>} />
 
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
