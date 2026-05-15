@@ -1,0 +1,57 @@
+{
+  "name": "IntegrationUsageLog",
+  "type": "object",
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when the function ran"
+    },
+    "function_name": {
+      "type": "string",
+      "description": "Name of the function that consumed credits"
+    },
+    "automation_id": {
+      "type": "string",
+      "description": "Automation ID if triggered by an automation, null if manual"
+    },
+    "automation_name": {
+      "type": "string",
+      "description": "Human-readable automation name"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "failure",
+        "error"
+      ],
+      "description": "Execution status"
+    },
+    "estimated_credits_used": {
+      "type": "number",
+      "description": "Estimated integration credits consumed (Stripe calls=2, API calls=1, writes=0.5)"
+    },
+    "records_written": {
+      "type": "number",
+      "description": "Number of database records created/updated"
+    },
+    "records_skipped": {
+      "type": "number",
+      "description": "Number of records skipped due to no-change logic"
+    },
+    "api_calls": {
+      "type": "number",
+      "description": "Number of external API calls made"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional context (e.g., failure reason, function args)"
+    }
+  },
+  "required": [
+    "timestamp",
+    "function_name",
+    "status"
+  ]
+}

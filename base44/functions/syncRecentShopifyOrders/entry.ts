@@ -175,10 +175,27 @@ Deno.serve(async (req) => {
         }
 
         if (existingOrders.length > 0) {
-          // Update existing order
+          // Update existing order — WRITE-DIFF GUARD: only write if data materially changed
           const existing = existingOrders[0];
-          await base44.entities.ShopifyOrder.update(existing.id, orderData);
-          stats.updated++;
+          let hasChange = false;
+
+          // Compare key mutable fields (exclude sync_status/last_sync_at — they change every run)
+          const compareFields = ['payment_status', 'fulfillment_status', 'production_status', 'address_line1', 'address_city', 'total_price', 'tags'];
+          for (const field of compareFields) {
+            const existingVal = JSON.stringify(existing[field]);
+            const incomingVal = JSON.stringify(orderData[field]);
+            if (existingVal !== incomingVal) {
+              hasChange = true;
+              break;
+            }
+          }
+
+          if (hasChange) {
+            await base44.entities.ShopifyOrder.update(existing.id, orderData);
+            stats.updated++;
+          } else {
+            stats.skipped++;
+          }
         } else {
           // Create new order
           await base44.entities.ShopifyOrder.create(orderData);
