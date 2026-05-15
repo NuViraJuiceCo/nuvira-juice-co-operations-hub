@@ -43,6 +43,7 @@ const navGroups = [
       { path: "/settings", label: "Settings", icon: Settings },
       { path: "/users", label: "User Management", icon: UserCog },
       { path: "/stripe-repair", label: "Stripe Recovery", icon: Zap },
+      { path: "/pos-validation", label: "POS Validation", icon: Route },
     ],
   },
 ];
