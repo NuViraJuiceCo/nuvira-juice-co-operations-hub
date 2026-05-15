@@ -10,6 +10,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  * - Tags POS orders appropriately (shopify_pos)
  * - Excludes POS orders from fulfillment/production workflows
  * 
+ * Auth: Client ID + Client Secret via OAuth 2.0 client credentials exchange
  * Usage: Admin-only or scheduled automation (every 15-30 minutes)
  */
 
@@ -29,62 +30,51 @@ Deno.serve(async (req) => {
     }
 
     const shopDomain = Deno.env.get('SHOPIFY_SHOP_DOMAIN');
-    const adminToken = Deno.env.get('SHOPIFY_ADMIN_ACCESS_TOKEN');
     const clientId = Deno.env.get('SHOPIFY_CLIENT_ID');
     const clientSecret = Deno.env.get('SHOPIFY_CLIENT_SECRET');
 
-    // Detect auth flow
+    // Active auth: Client ID + Client Secret (static token no longer supported)
     const usingClientCredentials = !!clientId && !!clientSecret;
-    const usingStaticToken = !!adminToken;
 
-    if (!shopDomain || (!usingClientCredentials && !usingStaticToken)) {
+    if (!shopDomain || !usingClientCredentials) {
       return Response.json({ 
         error: 'Missing Shopify credentials',
         status: 'FAILED',
-        reason: 'SHOPIFY_SHOP_DOMAIN required, plus either (SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET) for Dev Dashboard flow OR SHOPIFY_ADMIN_ACCESS_TOKEN for static token flow'
+        reason: 'SHOPIFY_SHOP_DOMAIN, SHOPIFY_CLIENT_ID, and SHOPIFY_CLIENT_SECRET required (from Shopify Dev Dashboard)'
       }, { status: 500 });
     }
 
-    // Get access token via exchange or use static token
-    let accessToken = adminToken;
+    // Get access token via client credentials exchange
+    let accessToken = null;
     
-    if (usingClientCredentials) {
-      try {
-        const tokenResponse = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            client_id: clientId,
-            client_secret: clientSecret,
-            grant_type: 'client_credentials'
-          })
-        });
+    try {
+      const tokenResponse = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: 'client_credentials'
+        })
+      });
 
-        const tokenData = await tokenResponse.json();
-        
-        if (!tokenResponse.ok || !tokenData.access_token) {
-          return Response.json({
-            error: 'Token exchange failed',
-            status: 'FAILED',
-            reason: tokenData.message || 'Failed to obtain access token from client credentials',
-            details: tokenData
-          }, { status: 500 });
-        }
-
-        accessToken = tokenData.access_token;
-      } catch (err) {
+      const tokenData = await tokenResponse.json();
+      
+      if (!tokenResponse.ok || !tokenData.access_token) {
         return Response.json({
-          error: 'Token exchange error',
+          error: 'Token exchange failed',
           status: 'FAILED',
-          reason: err.message
+          reason: tokenData.message || 'Failed to obtain access token from client credentials',
+          details: tokenData
         }, { status: 500 });
       }
-    } else if (!adminToken.startsWith('shpat_')) {
+
+      accessToken = tokenData.access_token;
+    } catch (err) {
       return Response.json({
-        error: 'Invalid Admin API token format',
+        error: 'Token exchange error',
         status: 'FAILED',
-        reason: `Token starts with ${adminToken.substring(0, 6)}... Required: shpat_* (or use client credentials flow)`,
-        token_prefix: adminToken.substring(0, 8)
+        reason: err.message
       }, { status: 500 });
     }
 

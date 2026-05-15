@@ -26,59 +26,46 @@ Deno.serve(async (req) => {
       executed_by: user.email,
       credentials: {},
       api_tests: {},
-      order_samples: [],
+      order_samples: {
+        total_fetched: 0,
+        pos_count: 0,
+        online_count: 0,
+        recent_orders: [],
+      },
       webhook_config: {},
       recommendations: [],
     };
 
     // ── 1. Check credentials presence ──
     const shopDomain = Deno.env.get('SHOPIFY_SHOP_DOMAIN');
-    const adminToken = Deno.env.get('SHOPIFY_ADMIN_ACCESS_TOKEN');
     const webhookSecret = Deno.env.get('SHOPIFY_WEBHOOK_SECRET');
     const clientId = Deno.env.get('SHOPIFY_CLIENT_ID');
     const clientSecret = Deno.env.get('SHOPIFY_CLIENT_SECRET');
 
-    // Detect authentication flow type
+    // Active authentication flow: Client ID + Client Secret (static token no longer supported)
     const usingClientCredentials = !!clientId && !!clientSecret;
-    const usingStaticToken = !!adminToken;
     
     results.credentials = {
       shop_domain_present: !!shopDomain,
       shop_domain_value: shopDomain || 'MISSING',
-      auth_flow: usingClientCredentials ? 'client_credentials' : usingStaticToken ? 'static_token' : 'none',
+      auth_flow: usingClientCredentials ? 'client_credentials' : 'none',
       client_credentials_present: usingClientCredentials,
-      static_token_present: usingStaticToken,
-      admin_token_present: usingStaticToken,
-      admin_token_length: adminToken?.length || 0,
-      admin_token_prefix: adminToken ? adminToken.substring(0, 8) + '...' : (usingClientCredentials ? 'client_credentials_flow' : 'MISSING'),
-      admin_token_format_valid: usingClientCredentials ? true : (adminToken && adminToken.startsWith('shpat_')),
-      admin_token_format_issue: usingClientCredentials ? null : (adminToken && adminToken.startsWith('shpss_') ? 'PROXY_TOKEN' : adminToken && adminToken.startsWith('shpst_') ? 'SESSION_TOKEN' : !adminToken && !usingClientCredentials ? 'MISSING' : null),
+      client_id_present: !!clientId,
+      client_secret_present: !!clientSecret,
       webhook_secret_present: !!webhookSecret,
       webhook_secret_length: webhookSecret?.length || 0,
-      credentials_complete: !!(shopDomain && (usingClientCredentials || adminToken) && webhookSecret),
+      credentials_complete: !!(shopDomain && usingClientCredentials && webhookSecret),
     };
 
-    if (!shopDomain || (!usingClientCredentials && !adminToken)) {
-      results.recommendations.push('CRITICAL: Missing Shopify credentials. Set SHOPIFY_SHOP_DOMAIN and either (SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET) for Dev Dashboard flow OR SHOPIFY_ADMIN_ACCESS_TOKEN for static token flow.');
+    if (!shopDomain || !usingClientCredentials) {
+      results.recommendations.push('CRITICAL: Missing Shopify credentials. Set SHOPIFY_SHOP_DOMAIN, SHOPIFY_CLIENT_ID, and SHOPIFY_CLIENT_SECRET (from Shopify Dev Dashboard).');
       return Response.json(results);
     }
 
-    if (usingStaticToken && !adminToken.startsWith('shpat_')) {
-      results.recommendations.push(`CRITICAL: Invalid token format. Current: ${adminToken.substring(0, 8)}... Required format: shpat_*`);
-      if (adminToken.startsWith('shpss_')) {
-        results.recommendations.push('You copied an App Proxy token or Webhook Secret (shpss_*). You need the Admin API access token (shpat_*) OR use client credentials flow.');
-      } else if (adminToken.startsWith('shpst_')) {
-        results.recommendations.push('You copied a Session token (shpst_*). You need the Admin API access token (shpat_*) OR use client credentials flow.');
-      }
-      results.recommendations.push('Option 1: Use Dev Dashboard flow - set SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET. Option 2: Get static token from Shopify Admin → Settings → Apps → Develop apps → Your app → API credentials → Reveal Admin API access token');
-      return Response.json(results);
-    }
-
-    // ── 2. Get access token (exchange if using client credentials, or use static token) ──
-    let accessToken = adminToken;
+    // ── 2. Get access token via client credentials exchange ──
+    let accessToken = null;
     
-    if (usingClientCredentials) {
-      try {
+    try {
         const tokenResponse = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -102,12 +89,11 @@ Deno.serve(async (req) => {
           results.recommendations.push('Client credentials token exchange failed. Verify SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET are correct.');
           return Response.json(results);
         }
-      } catch (err) {
-        results.api_tests.token_exchange = 'ERROR';
-        results.api_tests.token_exchange_error = err.message;
-        results.recommendations.push(`Token exchange network error: ${err.message}`);
-        return Response.json(results);
-      }
+    } catch (err) {
+      results.api_tests.token_exchange = 'ERROR';
+      results.api_tests.token_exchange_error = err.message;
+      results.recommendations.push(`Token exchange network error: ${err.message}`);
+      return Response.json(results);
     }
 
     // ── 3. Test Admin API connectivity ──
@@ -138,7 +124,7 @@ Deno.serve(async (req) => {
         const errorText = await shopResponse.text().catch(() => 'N/A');
         results.api_tests.error = errorText;
         results.api_tests.connectivity = 'FAIL';
-        results.recommendations.push('Admin API connection failed. Check SHOPIFY_ADMIN_ACCESS_TOKEN is valid and has not expired.');
+        results.recommendations.push('Admin API connection failed. Check token exchange is working and token has not expired.');
       }
     } catch (err) {
       results.api_tests.connectivity = 'ERROR';
@@ -236,7 +222,6 @@ Deno.serve(async (req) => {
     results.webhook_config = {
       secret_configured: !!webhookSecret,
       secret_length: webhookSecret?.length || 0,
-      secret_separate_from_token: webhookSecret !== adminToken,
     };
 
     if (!webhookSecret) {

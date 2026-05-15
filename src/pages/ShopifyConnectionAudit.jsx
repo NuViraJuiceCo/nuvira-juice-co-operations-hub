@@ -94,23 +94,18 @@ export default function ShopifyConnectionAudit() {
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    {auditResults.credentials.admin_token_format_valid ? (
+                    {auditResults.credentials.client_credentials_present ? (
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
                     ) : (
                       <XCircle className="h-4 w-4 text-red-500" />
                     )}
-                    <span className="text-sm font-medium">Admin Token</span>
+                    <span className="text-sm font-medium">Client Credentials</span>
                   </div>
                   <p className="text-xs text-muted-foreground ml-6">
-                    {auditResults.credentials.admin_token_present 
-                      ? `${auditResults.credentials.admin_token_prefix} (${auditResults.credentials.admin_token_length} chars)`
+                    {auditResults.credentials.client_credentials_present 
+                      ? "Configured"
                       : "MISSING"}
                   </p>
-                  {auditResults.credentials.admin_token_format_issue && (
-                    <p className="text-xs text-red-600 ml-6 font-medium">
-                      ⚠️ Invalid format: {auditResults.credentials.admin_token_format_issue}
-                    </p>
-                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -136,11 +131,11 @@ export default function ShopifyConnectionAudit() {
                     ) : (
                       <XCircle className="h-4 w-4 text-red-500" />
                     )}
-                    <span className="text-sm font-medium">All Credentials</span>
+                    <span className="text-sm font-medium">Auth Flow</span>
                   </div>
-                  <p className="text-xs text-muted-foreground ml-6">
-                    {auditResults.credentials.credentials_complete ? "Complete" : "Incomplete"}
-                  </p>
+                  <Badge variant={auditResults.credentials.credentials_complete ? "default" : "destructive"}>
+                    {auditResults.credentials.auth_flow === 'client_credentials' ? '✅ Client Credentials' : 'NONE'}
+                  </Badge>
                 </div>
               </div>
             </CardContent>
@@ -270,54 +265,28 @@ export default function ShopifyConnectionAudit() {
               <CardHeader>
                 <CardTitle className="text-red-800 flex items-center gap-2">
                   <Shield className="h-5 w-5" />
-                  CRITICAL: Admin API Token Invalid
+                  CRITICAL: Client Credentials Token Exchange Failed
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-red-700">
-                  The current <code className="bg-red-100 px-1 rounded">SHOPIFY_ADMIN_ACCESS_TOKEN</code> is not a valid Admin API access token.
+                  The token exchange with Shopify failed. Check your Client ID and Client Secret are correct and match the Shopify Dev Dashboard.
                 </p>
                 
-                {auditResults.credentials.admin_token_format_issue && (
-                  <div className="bg-white border border-red-200 rounded-lg p-4 space-y-2 text-sm">
-                    <p className="font-semibold text-red-800">
-                      <strong>Issue:</strong> Token format detected: <code className="text-red-600 font-mono">{auditResults.credentials.admin_token_format_issue}</code>
-                    </p>
-                    
-                    {auditResults.credentials.admin_token_format_issue === 'PROXY_TOKEN' && (
-                      <div className="space-y-2">
-                        <p>You copied an <strong>App Proxy token</strong> or <strong>Webhook Secret</strong> (starts with shpss_*).</p>
-                        <p className="text-green-700 font-medium">✅ You need the Admin API access token (starts with shpat_*)</p>
-                      </div>
-                    )}
-                    
-                    {auditResults.credentials.admin_token_format_issue === 'SESSION_TOKEN' && (
-                      <div className="space-y-2">
-                        <p>You copied a <strong>Session token</strong> (starts with shpst_*).</p>
-                        <p className="text-green-700 font-medium">✅ You need the Admin API access token (starts with shpat_*)</p>
-                      </div>
-                    )}
-                    
-                    {auditResults.credentials.admin_token_format_issue === 'MISSING' && (
-                      <p>The Admin API token is not configured in Base44 secrets.</p>
-                    )}
-
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-3">
-                      <p className="font-medium text-amber-800 mb-2">How to get the correct token:</p>
-                      <ol className="list-decimal list-inside space-y-1 text-sm">
-                        <li>Shopify Admin → Settings → Apps and sales channels</li>
-                        <li>Develop apps → Click your app name</li>
-                        <li>API credentials tab → "Admin API access token"</li>
-                        <li>Click "Reveal token once" → Copy the full token</li>
-                      </ol>
-                    </div>
-                  </div>
-                )}
+                <div className="bg-white border border-red-200 rounded-lg p-4 space-y-2 text-sm">
+                  <p><strong>What to check:</strong></p>
+                  <ul className="list-disc list-inside space-y-1 text-red-700 ml-2">
+                    <li>SHOPIFY_CLIENT_ID matches Shopify Dev Dashboard</li>
+                    <li>SHOPIFY_CLIENT_SECRET matches Shopify Dev Dashboard</li>
+                    <li>App is installed for the Shopify store</li>
+                    <li>App has required scopes enabled</li>
+                  </ul>
+                </div>
 
                 <div className="bg-white border border-red-200 rounded-lg p-4 space-y-2 text-sm">
                   <p><strong>Required scopes:</strong></p>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {['read_orders', 'read_all_orders', 'read_products', 'read_inventory', 'read_locations'].map(scope => (
+                    {['read_all_orders', 'read_products', 'read_inventory', 'read_locations'].map(scope => (
                       <Badge key={scope} variant="secondary" className="text-xs">
                         <Key className="h-3 w-3 mr-1" />
                         {scope}
