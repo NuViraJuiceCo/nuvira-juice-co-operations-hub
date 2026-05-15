@@ -431,7 +431,7 @@ export default function Orders() {
 
 
       {/* Desktop Table — visible on sm+ screens ONLY (hidden on mobile) */}
-      <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden" style={{display: 'none'}}>
+      <div className="hidden sm:block bg-card border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -575,13 +575,16 @@ export default function Orders() {
           </div>
 
           {/* Mobile Cards — ONLY LAYOUT BELOW 768px */}
-          <div className="sm:hidden space-y-3 w-full" style={{display: 'block'}}>
+          <div className="sm:hidden space-y-3 w-full">
           {sorted.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <p>No orders match your filters.</p>
           </div>
           ) : (
-          sorted.map((order) => (
+          sorted.map((order) => {
+            if (!order) return null;
+            try {
+              return (
             <div
               key={order.id}
               className="bg-card border border-border rounded-lg p-4 space-y-3 cursor-pointer hover:shadow-md transition-shadow"
@@ -589,9 +592,9 @@ export default function Orders() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-primary text-sm">{order.shopify_order_number}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{order.customer_name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{order.customer_email}</p>
+                  <p className="font-medium text-primary text-sm">{order.shopify_order_number || 'N/A'}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{order.customer_name || 'Unknown'}</p>
+                  <p className="text-xs text-muted-foreground truncate">{order.customer_email || 'N/A'}</p>
                 </div>
                 <input
                   type="checkbox"
@@ -609,16 +612,20 @@ export default function Orders() {
                     🏪 POS / Event
                   </span>
                 ) : (
-                  <p className="font-medium">{order.source_channel}</p>
+                  <p className="font-medium">{order.source_channel || '—'}</p>
                 )}
               </div>
               <div>
                 <p className="text-muted-foreground">Payment</p>
-                <StatusBadge status={getDisplayPaymentStatus(order)} />
+                <div>
+                  {order.payment_status ? <StatusBadge status={getDisplayPaymentStatus(order)} /> : <span className="text-xs">—</span>}
+                </div>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Status</p>
-                  <StatusBadge status={order.production_status} />
+                  <div>
+                    {order.production_status ? <StatusBadge status={order.production_status} /> : <span className="text-xs">—</span>}
+                  </div>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Total</p>
@@ -627,7 +634,7 @@ export default function Orders() {
               </div>
 
               <div className="text-xs text-muted-foreground">
-                {moment(order.customer_order_date).utcOffset(-5).format("MMM D, h:mm A")} CT
+                {order.customer_order_date ? moment(order.customer_order_date).utcOffset(-5).format("MMM D, h:mm A") : moment().format("MMM D, h:mm A")} CT
               </div>
 
               <div className="flex gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
@@ -654,8 +661,8 @@ export default function Orders() {
                     <div>
                       <p className="text-xs font-semibold text-foreground mb-1">Delivery Address</p>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        {order.address_line1}{order.address_line2 ? `, ${order.address_line2}` : ''}<br />
-                        {order.address_city}, {order.address_state} {order.address_postal_code}
+                        {order.address_line1 || '—'}{order.address_line2 ? `, ${order.address_line2}` : ''}<br />
+                        {order.address_city || '—'}, {order.address_state || '—'} {order.address_postal_code || '—'}
                       </p>
                     </div>
                   )}
@@ -665,8 +672,8 @@ export default function Orders() {
                       <div className="space-y-1">
                         {order.line_items.filter(item => !['delivery fee','delivery charge','shipping fee','shipping charge','tip','service fee'].some(kw => (item.title||'').toLowerCase().includes(kw))).map((item, idx) => (
                           <div key={idx} className="flex items-center justify-between bg-muted/20 rounded px-2 py-1.5">
-                            <p className="text-xs font-medium text-foreground truncate flex-1">{item.title}</p>
-                            <p className="text-xs text-muted-foreground ml-2 flex-shrink-0">×{item.quantity}</p>
+                            <p className="text-xs font-medium text-foreground truncate flex-1">{item.title || 'Item'}</p>
+                            <p className="text-xs text-muted-foreground ml-2 flex-shrink-0">×{item.quantity || 1}</p>
                           </div>
                         ))}
                       </div>
@@ -674,8 +681,17 @@ export default function Orders() {
                   )}
                 </div>
               )}
-            </div>
-          ))
+              </div>
+              );
+              } catch (err) {
+              console.error(`Error rendering order ${order.id}:`, err);
+              return (
+                <div key={order.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-xs text-red-700">Error rendering order {order.shopify_order_number || 'unknown'}</p>
+                </div>
+              );
+              }
+              }))
           )}
           </div>
           </div>
