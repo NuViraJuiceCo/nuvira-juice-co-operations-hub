@@ -34,16 +34,19 @@ export default function Fulfillment() {
   const [saveError, setSaveError] = useState("");
   const [view, setView] = useState("orders"); // "orders" | "tasks" | "internal"
 
-  // Multi-guard exclusion: never show stale/canceled/refunded orders even if canonical fields are wrong
+  // Multi-guard exclusion: never show stale/canceled/refunded/POS orders in active fulfillment
   const isOrderProduction = (o) => {
     if (!o) return false;
     const tags = o.tags || [];
     if (tags.includes('refunded') || tags.includes('excluded') || tags.includes('do_not_sync') || tags.includes('not_for_production')) return false;
     if (o.sync_status === 'do_not_sync') return false;
     if (o.fulfillment_status === 'cancelled' || o.fulfillment_status === 'canceled') return false;
-    const deadStatuses = ['fulfilled', 'canceled', 'refunded', 'canceled', 'excluded'];
+    const deadStatuses = ['fulfilled', 'canceled', 'refunded', 'excluded'];
     if (deadStatuses.includes(o.production_status)) return false;
     if (o.data_quality_status === 'quarantined') return false;
+    // POS/event orders are fulfilled on-site — exclude from active fulfillment pipeline
+    if (o.source_type === 'shopify_pos' || o.source_channel === 'pos' || o.order_type === 'pos' || o.fulfillment_method === 'pos') return false;
+    if (o.production_status === 'not_required') return false;
     return true;
   };
 

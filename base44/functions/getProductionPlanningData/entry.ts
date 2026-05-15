@@ -78,6 +78,9 @@ Deno.serve(async (req) => {
       if (order.data_quality_status === 'quarantined') return true;
       if (order.do_not_recover === true || order.do_not_sync === true) return true;
       if (order.canceled_at || order.deleted_at) return true;
+      // ── CRITICAL: POS/event orders are fulfilled on-site — NEVER create production demand ──
+      if (order.source_type === 'shopify_pos' || order.source_channel === 'pos' || order.order_type === 'pos' || order.fulfillment_method === 'pos') return true;
+      if (order.production_status === 'not_required') return true;
       return false;
     };
 

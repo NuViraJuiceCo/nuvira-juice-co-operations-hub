@@ -643,8 +643,27 @@ Deno.serve(async (req) => {
 
     // ── STEP 8.2: DELIVERY ADDRESS QUALITY GATE ────────────────────────────
     // CRITICAL: All delivery orders MUST have complete address before entering Driver Portal
-    // Check parent-level → fulfillment-level → FulfillmentTask fallback
-    const isDeliveryOrder = incomingData.fulfillment_method === 'delivery' || existingOrder?.fulfillment_method === 'delivery';
+    // POS orders are fulfilled on-site and NEVER need a delivery address — skip entirely.
+    const isPOSOrder = incomingData.source_type === 'shopify_pos' ||
+                       incomingData.source_channel === 'pos' ||
+                       incomingData.order_type === 'pos' ||
+                       incomingData.fulfillment_method === 'pos' ||
+                       existingOrder?.source_type === 'shopify_pos' ||
+                       existingOrder?.source_channel === 'pos' ||
+                       existingOrder?.order_type === 'pos';
+
+    if (isPOSOrder) {
+      console.log(`[SAFE-SYNC] POS order detected — skipping address gate, production, delivery, and fulfillment task creation.`);
+      // Force POS fields to ensure consistency even if caller forgot some
+      incomingData.production_status = incomingData.production_status || 'not_required';
+      incomingData.order_lock_status = incomingData.order_lock_status || 'fulfilled';
+      incomingData.fulfillment_status = incomingData.fulfillment_status || 'fulfilled';
+      incomingData.payment_status = incomingData.payment_status || 'paid';
+      incomingData.source_channel = 'pos';
+      incomingData.source_type = 'shopify_pos';
+    }
+
+    const isDeliveryOrder = !isPOSOrder && (incomingData.fulfillment_method === 'delivery' || existingOrder?.fulfillment_method === 'delivery');
 
     if (isDeliveryOrder) {
       const hasParentAddress = incomingData.address_line1 && incomingData.address_city && 

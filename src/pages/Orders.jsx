@@ -101,6 +101,12 @@ export default function Orders() {
     return true;
   };
 
+  const isPOSOrder = (o) =>
+    o.source_type === 'shopify_pos' ||
+    o.source_channel === 'pos' ||
+    o.order_type === 'pos' ||
+    o.fulfillment_method === 'pos';
+
   const filtered = orders.filter((o) => {
     if (!o) return false;
     const matchSearch =
@@ -122,7 +128,16 @@ export default function Orders() {
       matchStatus = o.production_status === statusFilter;
     }
 
-    const matchChannel = channelFilter === "all" || o.source_channel === channelFilter;
+    // Channel filter: "pos" matches all POS variants
+    let matchChannel;
+    if (channelFilter === "all") {
+      matchChannel = true;
+    } else if (channelFilter === "pos") {
+      matchChannel = isPOSOrder(o);
+    } else {
+      matchChannel = o.source_channel === channelFilter && !isPOSOrder(o);
+    }
+
     return matchSearch && matchStatus && matchChannel;
   });
 
@@ -331,7 +346,7 @@ export default function Orders() {
             <SelectContent>
               <SelectItem value="all">All Channels</SelectItem>
               <SelectItem value="online">Online</SelectItem>
-              <SelectItem value="pos">POS</SelectItem>
+              <SelectItem value="pos">POS / Event Sales</SelectItem>
               <SelectItem value="draft">Draft</SelectItem>
               <SelectItem value="subscription">Subscription</SelectItem>
               <SelectItem value="wholesale">Wholesale</SelectItem>
@@ -408,7 +423,11 @@ export default function Orders() {
                       <p className="text-sm text-muted-foreground">{order.customer_email}</p>
                       <p className="text-xs text-muted-foreground">{order.customer_phone}</p>
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.source_channel}</td>
+                    <td className="px-5 py-3.5 text-sm text-muted-foreground">
+                      {isPOSOrder(order) ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">🏪 POS</span>
+                      ) : order.source_channel}
+                    </td>
                     <td className="px-5 py-3.5"><StatusBadge status={order.production_status} /></td>
                     <td className="px-5 py-3.5"><StatusBadge status={getDisplayPaymentStatus(order)} /></td>
                     <td className="px-5 py-3.5 text-sm text-muted-foreground">
@@ -525,7 +544,13 @@ export default function Orders() {
               <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
                 <p className="text-muted-foreground">Channel</p>
-                <p className="font-medium">{order.source_channel}</p>
+                {isPOSOrder(order) ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">
+                    🏪 POS / Event
+                  </span>
+                ) : (
+                  <p className="font-medium">{order.source_channel}</p>
+                )}
               </div>
               <div>
                 <p className="text-muted-foreground">Payment</p>
