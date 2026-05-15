@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { CheckCircle2, XCircle, Clock, RefreshCw, ShoppingCart, AlertTriangle, FlaskConical, Database } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, RefreshCw, ShoppingCart, AlertTriangle, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import moment from "moment";
@@ -53,11 +53,6 @@ export default function POSValidation() {
   const [testRunning, setTestRunning] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
-  // ── Shopify Admin API sync state ──
-  const [syncRunning, setSyncRunning] = useState(false);
-  const [syncResult, setSyncResult] = useState(null);
-  const [lastSyncAt, setLastSyncAt] = useState(null);
-
   const searchOrder = async () => {
     if (!orderNumber.trim()) return;
     setSearching(true);
@@ -107,25 +102,6 @@ export default function POSValidation() {
   }, [foundOrder, autoRunDone]);
 
   const setCheck = (id, val) => setChecks((prev) => ({ ...prev, [id]: val }));
-
-  // ── Shopify Admin API sync (pull recent POS orders) ──
-  const runShopifySync = async () => {
-    setSyncRunning(true);
-    setSyncResult(null);
-    try {
-      const res = await base44.functions.invoke("syncRecentShopifyOrders", {
-        created_at_min: "-24h",
-        limit: 50,
-        source: "pos",
-      });
-      setSyncResult({ ok: true, data: res.data });
-      setLastSyncAt(new Date());
-    } catch (err) {
-      setSyncResult({ ok: false, error: err.message || "Sync failed" });
-    } finally {
-      setSyncRunning(false);
-    }
-  };
 
   // ── Server-side test ingestion (no secrets exposed client-side) ──
   // Calls the backend function via SDK — the function enforces its own auth internally
@@ -227,50 +203,7 @@ export default function POSValidation() {
         )}
       </div>
 
-      {/* Step 2b — Shopify Admin API Sync */}
-      <div className="bg-card border border-blue-200 rounded-xl p-5 space-y-3">
-        <h2 className="font-semibold text-foreground flex items-center gap-2">
-          <span className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2b</span>
-          Sync Recent Shopify POS Orders (Admin API Pull)
-          <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full ml-1">FALLBACK</span>
-        </h2>
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2">
-          <Database className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-blue-800">
-            Pull recent POS orders directly from Shopify via Admin API. Use this if webhooks fail or to reconcile missing orders. Fetches orders from the last 24 hours by default.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={runShopifySync}
-            disabled={syncRunning}
-            variant="outline"
-            className="gap-2 border-blue-300 text-blue-800 hover:bg-blue-50"
-          >
-            <Database className={`h-4 w-4 ${syncRunning ? "animate-spin" : ""}`} />
-            {syncRunning ? "Syncing…" : "Sync Recent POS Orders"}
-          </Button>
-          {lastSyncAt && (
-            <p className="text-xs text-muted-foreground">
-              Last sync: {moment(lastSyncAt).format("MMM D, h:mm A")}
-            </p>
-          )}
-        </div>
-        {syncResult && (
-          <div className={`rounded-lg p-3 text-xs font-mono ${syncResult.ok ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-700"}`}>
-            {syncResult.ok ? (
-              <div className="space-y-1">
-                <p>✓ Sync complete</p>
-                <p>Found: {syncResult.data.fetched_count || syncResult.data.synced_count} | Created: {syncResult.data.created_count} | Updated: {syncResult.data.updated_count} | Skipped: {syncResult.data.skipped_count}</p>
-                <p>POS orders: {syncResult.data.pos_count} | Online: {syncResult.data.online_count}</p>
-                {syncResult.data.errors?.length > 0 && <p className="text-red-600">Errors: {syncResult.data.errors.length}</p>}
-              </div>
-            ) : (
-              <p>✗ {syncResult.error}</p>
-            )}
-          </div>
-        )}
-      </div>
+
 
       {/* Step 3 — Find the order in Hub */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
