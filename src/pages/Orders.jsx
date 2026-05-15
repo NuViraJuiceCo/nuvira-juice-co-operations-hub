@@ -12,7 +12,7 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [view, setView] = useState("all"); // all, online, pos
+  const [view, setView] = useState("active"); // active, pos, refunded, all
 
   useEffect(() => {
     async function load() {
@@ -36,6 +36,11 @@ export default function Orders() {
     }
   };
 
+  const isArchived = (o) => o.operational_visibility === 'archived';
+  const isRefunded = (o) => o.payment_status === 'refunded' || o.order_status === 'refunded';
+  const isCanceled = (o) => o.order_status === 'canceled';
+  const isRefundedOrCanceled = (o) => isRefunded(o) || isCanceled(o);
+
   const filtered = orders.filter((o) => {
     if (!o) return false;
     const matchesSearch = !search ||
@@ -44,13 +49,16 @@ export default function Orders() {
     
     if (!matchesSearch) return false;
     
-    if (view === "pos") return isPOSOrder(o);
-    if (view === "online") return !isPOSOrder(o);
+    if (view === "active") return !isArchived(o); // Active orders only
+    if (view === "pos") return !isArchived(o) && isPOSOrder(o); // Active POS orders only
+    if (view === "refunded") return isRefundedOrCanceled(o); // Show all refunded/canceled (archived or not)
+    if (view === "all") return true;
     return true;
   });
 
-  const posCount = orders.filter(o => isPOSOrder(o)).length;
-  const onlineCount = orders.filter(o => !isPOSOrder(o)).length;
+  const activeCount = orders.filter(o => !isArchived(o)).length;
+  const posCount = orders.filter(o => !isArchived(o) && isPOSOrder(o)).length;
+  const refundedCount = orders.filter(o => isRefundedOrCanceled(o)).length;
 
   if (loading) {
     return (
@@ -74,36 +82,46 @@ export default function Orders() {
       </div>
 
       {/* View Tabs */}
-      <div className="flex gap-2 border-b border-border">
+      <div className="flex gap-2 border-b border-border overflow-x-auto">
+        <button
+          onClick={() => setView("active")}
+          className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
+            view === "active"
+              ? "text-primary border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Active ({activeCount})
+        </button>
+        <button
+          onClick={() => setView("pos")}
+          className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
+            view === "pos"
+              ? "text-primary border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          POS/Event ({posCount})
+        </button>
+        <button
+          onClick={() => setView("refunded")}
+          className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
+            view === "refunded"
+              ? "text-primary border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Refunded/Canceled ({refundedCount})
+        </button>
         <button
           onClick={() => setView("all")}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
+          className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
             view === "all"
               ? "text-primary border-b-2 border-primary"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
           All Orders ({orders.length})
-        </button>
-        <button
-          onClick={() => setView("online")}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            view === "online"
-              ? "text-primary border-b-2 border-primary"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Online ({onlineCount})
-        </button>
-        <button
-          onClick={() => setView("pos")}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            view === "pos"
-              ? "text-primary border-b-2 border-primary"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          POS/Event Sales ({posCount})
         </button>
       </div>
 
@@ -139,16 +157,24 @@ export default function Orders() {
                 <tr key={order.id} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="px-5 py-3.5 font-medium text-primary">{order.shopify_order_number || '—'}</td>
                   <td className="px-5 py-3.5">
-                    {isPOSOrder(order) ? (
-                      <Badge className="bg-orange-500/20 text-orange-700">POS/Event</Badge>
-                    ) : (
-                      <Badge variant="outline">Online</Badge>
-                    )}
+                    <div className="flex gap-1.5 flex-wrap">
+                      {isPOSOrder(order) ? (
+                        <Badge className="bg-orange-500/20 text-orange-700">POS/Event</Badge>
+                      ) : (
+                        <Badge variant="outline">Online</Badge>
+                      )}
+                      {isRefunded(order) && (
+                        <Badge className="bg-red-500/20 text-red-700">Refunded</Badge>
+                      )}
+                      {isCanceled(order) && (
+                        <Badge className="bg-gray-500/20 text-gray-700">Canceled</Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="px-5 py-3.5">{order.customer_name || '—'}</td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">{order.customer_email || '—'}</td>
                   <td className="px-5 py-3.5">
-                    <StatusBadge status={order.production_status} />
+                    <StatusBadge status={order.payment_status} />
                   </td>
                   <td className="px-5 py-3.5 font-semibold text-right">${(order.total_price || 0).toFixed(2)}</td>
                   <td className="px-5 py-3.5 text-sm text-muted-foreground">
@@ -170,20 +196,28 @@ export default function Orders() {
         ) : (
           filtered.map((order) => (
             <div key={order.id} className="bg-card border border-border rounded-lg p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="font-medium text-primary text-sm">{order.shopify_order_number || '—'}</p>
-                {isPOSOrder(order) ? (
-                  <Badge className="bg-orange-500/20 text-orange-700 text-xs">POS/Event</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-xs">Online</Badge>
-                )}
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium text-primary text-sm flex-1">{order.shopify_order_number || '—'}</p>
+                <div className="flex gap-1 flex-wrap justify-end">
+                  {isPOSOrder(order) ? (
+                    <Badge className="bg-orange-500/20 text-orange-700 text-xs">POS/Event</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">Online</Badge>
+                  )}
+                  {isRefunded(order) && (
+                    <Badge className="bg-red-500/20 text-red-700 text-xs">Refunded</Badge>
+                  )}
+                  {isCanceled(order) && (
+                    <Badge className="bg-gray-500/20 text-gray-700 text-xs">Canceled</Badge>
+                  )}
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">{order.customer_name || '—'}</p>
               <p className="text-xs text-muted-foreground">{order.customer_email || '—'}</p>
               <div className="pt-2 grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <p className="text-muted-foreground">Status</p>
-                  <StatusBadge status={order.production_status} />
+                  <StatusBadge status={order.payment_status} />
                 </div>
                 <div>
                   <p className="text-muted-foreground">Total</p>

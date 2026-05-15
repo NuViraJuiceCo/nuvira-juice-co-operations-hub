@@ -134,6 +134,35 @@ Deno.serve(async (req) => {
           shopify_order_id: String(shopifyOrder.id),
         });
 
+        // Determine refund/cancel status from Shopify
+        const isRefunded = ['refunded', 'voided'].includes((shopifyOrder.financial_status || '').toLowerCase());
+        const isPartiallyRefunded = (shopifyOrder.financial_status || '').toLowerCase() === 'partially_refunded';
+        const isCanceled = !!shopifyOrder.cancelled_at || (shopifyOrder.status || '').toLowerCase() === 'cancelled';
+
+        // Map Shopify financial_status to Hub payment_status
+        let paymentStatus = shopifyOrder.financial_status || 'pending';
+        if (isRefunded) paymentStatus = 'refunded';
+        else if (isPartiallyRefunded) paymentStatus = 'partially_refunded';
+        else if ((shopifyOrder.financial_status || '').toLowerCase() === 'voided') paymentStatus = 'voided';
+        else if ((shopifyOrder.financial_status || '').toLowerCase() === 'paid') paymentStatus = 'paid';
+        else if ((shopifyOrder.financial_status || '').toLowerCase() === 'authorized') paymentStatus = 'authorized';
+
+        // Map order status
+        let orderStatus = 'active';
+        if (isCanceled) orderStatus = 'canceled';
+        else if (isRefunded) orderStatus = 'refunded';
+        else if (isPartiallyRefunded) orderStatus = 'partially_refunded';
+
+        // Set operational visibility
+        const operationalVisibility = (isCanceled || isRefunded || isPartiallyRefunded) ? 'archived' : 'active';
+
+        // Build tags
+        const tags = isPOS ? ['shopify_pos', 'pos_order'] : ['shopify_online'];
+        if (isRefunded) tags.push('refunded');
+        if (isCanceled) tags.push('canceled');
+        if (isPartiallyRefunded) tags.push('partially_refunded');
+        if (operationalVisibility === 'archived') tags.push('archived');
+
         const orderData = {
           shopify_order_id: String(shopifyOrder.id),
           shopify_order_number: shopifyOrder.name || String(shopifyOrder.order_number),
@@ -148,13 +177,18 @@ Deno.serve(async (req) => {
             quantity: item.quantity,
             price: parseFloat(item.price),
           })),
-          payment_status: shopifyOrder.financial_status,
+          payment_status: paymentStatus,
+          order_status: orderStatus,
           fulfillment_status: shopifyOrder.fulfillment_status,
+          fulfillment_method: isPOS ? 'pos' : 'delivery',
           subtotal: parseFloat(shopifyOrder.subtotal_price || '0'),
           total_price: parseFloat(shopifyOrder.total_price || '0'),
-          tags: isPOS ? ['shopify_pos', 'pos_order'] : ['shopify_online'],
+          operational_visibility: operationalVisibility,
+          tags,
           sync_status: 'synced',
           last_sync_at: new Date().toISOString(),
+          ...(isCanceled && shopifyOrder.cancelled_at && { cancelled_at: shopifyOrder.cancelled_at }),
+          ...(isRefunded || isPartiallyRefunded) && { archived_at: new Date().toISOString() },
         };
 
         // Add address fields for non-POS orders
