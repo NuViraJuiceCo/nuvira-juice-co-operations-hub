@@ -43,6 +43,7 @@ import DeliveryRouteReviews from './pages/DeliveryRouteReviews';
 import POSValidation from './pages/POSValidation';
 import ShopifyConnectionAudit from './pages/ShopifyConnectionAudit';
 import ShopifyTokenSetup from './pages/ShopifyTokenSetup';
+import POSEventReadiness from './pages/POSEventReadiness';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -103,6 +104,7 @@ const AuthenticatedApp = () => {
         <Route path="/pos-validation" element={<PageTransition><POSValidation /></PageTransition>} />
         <Route path="/shopify-audit" element={<PageTransition><ShopifyConnectionAudit /></PageTransition>} />
         <Route path="/shopify-token-setup" element={<PageTransition><ShopifyTokenSetup /></PageTransition>} />
+        <Route path="/pos-event-readiness" element={<PageTransition><POSEventReadiness /></PageTransition>} />
 
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />

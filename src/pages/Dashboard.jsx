@@ -12,6 +12,7 @@ import DashboardWidgetSelector from "../components/dashboard/DashboardWidgetSele
 import ProductionThroughputWidget from "../components/dashboard/ProductionThroughputWidget";
 import ActiveOrderStatusWidget from "../components/dashboard/ActiveOrderStatusWidget";
 import InventoryAlertsWidget from "../components/dashboard/InventoryAlertsWidget";
+import POSMetricsCard from "../components/dashboard/POSMetricsCard";
 import PullToRefresh from "../components/shared/PullToRefresh";
 import SyncPanel from "../components/dashboard/SyncPanel";
 import moment from "moment";
@@ -122,6 +123,9 @@ export default function Dashboard() {
 
       {/* Sync Panel */}
       <SyncPanel />
+
+      {/* POS Event Metrics (May 30 rehearsal) */}
+      <POSMetricsCard orders={orders} />
 
       {/* Widget Selector */}
       <DashboardWidgetSelector widgets={visibleWidgets} onToggle={(id) => {
