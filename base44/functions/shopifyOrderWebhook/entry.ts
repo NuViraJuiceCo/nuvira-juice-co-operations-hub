@@ -59,22 +59,26 @@ Deno.serve(async (req) => {
 
   console.log(`[SHOPIFY-WEBHOOK] Received POST — topic=${topic} shop=${shopDomain} hmac_present=${!!hmacHeader} body_length=${rawBody.length}`);
 
-  // ── Signature verification — TEMPORARILY LOGGING ONLY for delivery diagnostics ──
+  // ── Signature verification ──
   if (!hmacHeader) {
-    console.warn('[SHOPIFY-WEBHOOK] WARNING — missing X-Shopify-Hmac-Sha256 header (allowing through for diagnostics)');
-  } else {
-    let verified = false;
-    try {
-      verified = await verifyShopifyHmac(rawBody, hmacHeader);
-    } catch (err) {
-      console.error('[SHOPIFY-WEBHOOK] HMAC verification error:', err.message);
-    }
-    if (verified) {
-      console.log(`[SHOPIFY-WEBHOOK] HMAC verified OK — topic=${topic}`);
-    } else {
-      console.error(`[SHOPIFY-WEBHOOK] HMAC MISMATCH — logging payload anyway for diagnostics. hmac_received=${hmacHeader?.substring(0, 20)}...`);
-    }
+    console.error('[SHOPIFY-WEBHOOK] REJECTED — missing X-Shopify-Hmac-Sha256 header');
+    return Response.json({ error: 'Unauthorized — missing HMAC' }, { status: 401 });
   }
+
+  let verified = false;
+  try {
+    verified = await verifyShopifyHmac(rawBody, hmacHeader);
+  } catch (err) {
+    console.error('[SHOPIFY-WEBHOOK] HMAC verification error:', err.message);
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!verified) {
+    console.error('[SHOPIFY-WEBHOOK] REJECTED — HMAC signature mismatch. Check SHOPIFY_WEBHOOK_SECRET matches Shopify signing secret exactly.');
+    return Response.json({ error: 'Unauthorized — signature mismatch' }, { status: 401 });
+  }
+
+  console.log(`[SHOPIFY-WEBHOOK] HMAC verified OK — topic=${topic}`);
 
   // Respond 200 immediately so Shopify doesn't retry, then process async
   (async () => {
