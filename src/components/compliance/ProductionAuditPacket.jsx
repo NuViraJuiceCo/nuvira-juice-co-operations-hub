@@ -4,9 +4,10 @@ import { useAuth } from '@/lib/AuthContext';
 import {
   ClipboardCheck, Thermometer, ShieldCheck, Beaker, Package,
   AlertTriangle, CheckCircle2, Printer, X, ChevronDown, ChevronUp,
-  FileText, Pen
+  FileText, Pen, Clock, Zap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import moment from 'moment';
 
 /**
@@ -65,11 +66,120 @@ function StatusPill({ value }) {
   );
 }
 
-function MissingBadge({ label }) {
+function MissingLogPlaceholder({ label, isSetupPhase, logType }) {
+  if (isSetupPhase) {
+    // During setup, show as informational
+    return (
+      <div className="flex items-center gap-2 py-3 px-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+        <Clock className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+        <div>
+          <p className="font-medium">{label} will be logged when production starts.</p>
+          <p className="text-blue-700 mt-0.5 opacity-80">This section will populate as staff complete tasks.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Production is active but logs are missing - show as warning
   return (
-    <div className="flex items-center gap-2 py-2 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-      No {label} log found for this production date.
+    <div className="flex items-center gap-2 py-3 px-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-500" />
+      <div>
+        <p className="font-medium">Missing {label} logs for this production date.</p>
+        <p className="text-red-700 mt-0.5 opacity-90">Production is active but required compliance data is not being logged.</p>
+      </div>
+    </div>
+  );
+}
+
+function ReadinessProgressBar({ steps, productionDate, productionStarted }) {
+  const completedCount = steps.filter(s => s.complete).length;
+  const progressPercent = (completedCount / steps.length) * 100;
+  const isSetupPhase = !productionStarted && completedCount < steps.length;
+  const isReady = !productionStarted && completedCount === steps.length;
+
+  return (
+    <div className="bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/20 rounded-xl p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="font-bold text-sm flex items-center gap-2">
+            {productionStarted ? (
+              <>
+                <Zap className="w-4 h-4 text-orange-500" />
+                Production Active
+              </>
+            ) : isReady ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                Production Ready
+              </>
+            ) : (
+              <>
+                <Clock className="w-4 h-4 text-amber-500" />
+                Setup In Progress
+              </>
+            )}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {moment(productionDate).format('MMMM D, YYYY')} — {completedCount}/{steps.length} setup steps complete
+          </p>
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="space-y-1.5">
+        <Progress value={progressPercent} className="h-2" />
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>{Math.round(progressPercent)}% Complete</span>
+          <span>{completedCount}/{steps.length} Steps</span>
+        </div>
+      </div>
+
+      {/* Checklist Items */}
+      <div className="space-y-2">
+        {steps.map((step) => (
+          <div key={step.key} className="flex items-center gap-2">
+            {step.complete ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                <span className="text-sm text-foreground opacity-70">{step.label}</span>
+              </>
+            ) : (
+              <>
+                <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                <span className="text-sm text-foreground font-medium">{step.label}</span>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Status Message */}
+      {productionStarted && (
+        <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-2">
+          <Zap className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-orange-800">
+            Production is active. Continue logging compliance data throughout the day.
+          </p>
+        </div>
+      )}
+      {isReady && !productionStarted && (
+        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-green-800">
+            All prerequisite compliance logs are initialized. Production can proceed.
+          </p>
+        </div>
+      )}
+      {isSetupPhase && (
+        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
+          <Clock className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-800">
+            Complete the remaining compliance setup steps before starting production.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -80,6 +190,8 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
   const [loading, setLoading] = useState(true);
   const [signOffNote, setSignOffNote] = useState('');
   const [signed, setSigned] = useState(false);
+  const [readinessSteps, setReadinessSteps] = useState([]);
+  const [productionStarted, setProductionStarted] = useState(false);
 
   useEffect(() => {
     if (!productionDate) return;
@@ -109,7 +221,7 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
 
       // Filter all to this production date
       const today = productionDate;
-      setData({
+      const filtered = {
         sanitationLogs: (sanitationLogs || []).filter(l => l.log_date === today),
         dailyChecklists: (dailyChecklists || []).filter(l => l.checklist_date === today),
         temperatureLogs: (temperatureLogs || []).filter(l => l.log_date === today),
@@ -117,7 +229,43 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
         batchLogs: (batchLogs || []).filter(l => l.date === today),
         correctiveActions: (complianceLogs || []).filter(l => l.log_date === today && l.log_type === 'corrective_action'),
         batches: batches || [],
-      });
+      };
+
+      setData(filtered);
+
+      // Check if production has officially started (batch has actual_start_time or is marked in_production)
+      const hasStarted = (filtered.batches || []).some(b => b.actual_start_time || b.status === 'in_production');
+      setProductionStarted(hasStarted);
+
+      // Calculate readiness steps
+      const steps = [
+        {
+          key: 'sanitation',
+          label: 'Sanitation Complete',
+          complete: filtered.sanitationLogs.length > 0,
+        },
+        {
+          key: 'checklist',
+          label: 'Daily Checklist Complete',
+          complete: filtered.dailyChecklists.length > 0,
+        },
+        {
+          key: 'temperature',
+          label: 'Temperature Logs Started',
+          complete: filtered.temperatureLogs.length > 0,
+        },
+        {
+          key: 'ccp',
+          label: 'CCP Monitoring Started',
+          complete: filtered.ccpLogs.length > 0,
+        },
+        {
+          key: 'batch',
+          label: 'Batch Logs Active',
+          complete: filtered.batchLogs.length > 0,
+        },
+      ];
+      setReadinessSteps(steps);
     } finally {
       setLoading(false);
     }
@@ -179,6 +327,13 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
         ) : (
           <div className="p-5 space-y-4">
 
+            {/* Production Readiness Dashboard */}
+            <ReadinessProgressBar
+              steps={readinessSteps}
+              productionDate={productionDate}
+              productionStarted={productionStarted}
+            />
+
             {/* Packet index */}
             <div className="bg-muted/30 border border-border rounded-xl p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Audit Packet Contents</p>
@@ -206,7 +361,11 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
             {/* 1. Receiving / Sanitation Log */}
             <Section icon={ShieldCheck} title="Receiving / Sanitation Log" color="text-green-600">
               {data.sanitationLogs.length === 0 ? (
-                <MissingBadge label="Sanitation" />
+                <MissingLogPlaceholder
+                  label="Sanitation"
+                  isSetupPhase={!productionStarted}
+                  logType="sanitation"
+                />
               ) : data.sanitationLogs.map((log, i) => (
                 <div key={log.id || i} className="border border-border rounded-lg p-3 space-y-1.5">
                   <div className="flex items-center justify-between mb-1">
@@ -227,7 +386,11 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
             {/* 2. Daily Checklist */}
             <Section icon={ClipboardCheck} title="Daily Checklist" color="text-blue-600">
               {data.dailyChecklists.length === 0 ? (
-                <MissingBadge label="Daily Checklist" />
+                <MissingLogPlaceholder
+                  label="Daily Checklist"
+                  isSetupPhase={!productionStarted}
+                  logType="checklist"
+                />
               ) : data.dailyChecklists.map((log, i) => (
                 <div key={log.id || i} className="border border-border rounded-lg p-3 space-y-1.5">
                   <div className="flex items-center justify-between mb-1">
@@ -250,7 +413,11 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
             {/* 3. Temperature Log */}
             <Section icon={Thermometer} title="Temperature Log" color="text-red-500">
               {data.temperatureLogs.length === 0 ? (
-                <MissingBadge label="Temperature" />
+                <MissingLogPlaceholder
+                  label="Temperature"
+                  isSetupPhase={!productionStarted}
+                  logType="temperature"
+                />
               ) : data.temperatureLogs.map((log, i) => (
                 <div key={log.id || i} className="border border-border rounded-lg p-3 space-y-1.5">
                   <div className="flex items-center justify-between mb-1">
@@ -269,7 +436,11 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
             {/* 4. CCP Log */}
             <Section icon={Beaker} title="CCP Monitoring Log" color="text-purple-600">
               {data.ccpLogs.length === 0 ? (
-                <MissingBadge label="CCP Monitoring" />
+                <MissingLogPlaceholder
+                  label="CCP Monitoring"
+                  isSetupPhase={!productionStarted}
+                  logType="ccp"
+                />
               ) : data.ccpLogs.map((log, i) => (
                 <div key={log.id || i} className="border border-border rounded-lg p-3 space-y-1.5">
                   <div className="flex items-center justify-between mb-1">
@@ -289,7 +460,11 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
             {/* 5. Batch Logs */}
             <Section icon={Package} title={`Batch Logs (${data.batches.length} batches scheduled)`} color="text-amber-600">
               {data.batches.length === 0 && data.batchLogs.length === 0 ? (
-                <MissingBadge label="Batch" />
+                <MissingLogPlaceholder
+                  label="Batch"
+                  isSetupPhase={!productionStarted}
+                  logType="batch"
+                />
               ) : (
                 <>
                   {/* Show planned batches from ProductionBatch entity */}
