@@ -40,6 +40,7 @@ import OrderReviewQueue from './pages/OrderReviewQueue';
 import Alerts from './pages/Alerts';
 import LiveOrderMonitor from './pages/LiveOrderMonitor';
 import DeliveryRouteReviews from './pages/DeliveryRouteReviews';
+import POSValidation from './pages/POSValidation';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -97,6 +98,7 @@ const AuthenticatedApp = () => {
         <Route path="/alerts" element={<PageTransition><Alerts /></PageTransition>} />
         <Route path="/live-monitor" element={<PageTransition><LiveOrderMonitor /></PageTransition>} />
         <Route path="/delivery-route-reviews" element={<PageTransition><DeliveryRouteReviews /></PageTransition>} />
+        <Route path="/pos-validation" element={<PageTransition><POSValidation /></PageTransition>} />
 
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
