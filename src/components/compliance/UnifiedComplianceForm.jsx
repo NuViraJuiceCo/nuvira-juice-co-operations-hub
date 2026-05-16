@@ -188,11 +188,21 @@ export default function UnifiedComplianceForm() {
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={handleLogTypeChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 h-auto">
+          <div className="flex flex-wrap gap-2 mb-4">
             {Object.entries(LOG_TYPES).map(([key, val]) => (
-              <TabsTrigger key={key} value={key} className="text-xs py-2">{val.label}</TabsTrigger>
+              <button
+                key={key}
+                onClick={() => handleLogTypeChange(key)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
+                  activeTab === key
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-foreground border-border hover:bg-muted'
+                }`}
+              >
+                {val.label}
+              </button>
             ))}
-          </TabsList>
+          </div>
 
           {Object.entries(LOG_TYPES).map(([logType, cfg]) => (
             <TabsContent key={logType} value={logType} className="space-y-4">
