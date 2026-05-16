@@ -344,12 +344,11 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
   const isDelivered = order.status === FULFILLMENT_STATUS.COMPLETED;
   const isUnableToDeliver = order.status === FULFILLMENT_STATUS.UNABLE_TO_DELIVER;
   // Map DB canonical status to stage index
-  // 'In Transit' and 'Out For Delivery' both map to index 1 (In Transit stage done, show OFD next)
   const statusToStageIndex = {
     'Scheduled': -1,
     'Packed': 0,
-    'In Transit': 1,
-    'Out For Delivery': 2, // also canonical for completed staging
+    'In Transit': 1,      // legacy — treated same as Out For Delivery
+    'Out For Delivery': 2, // canonical "on the way" status
   };
   const currentStageIndex = statusToStageIndex[order.status] !== undefined ? statusToStageIndex[order.status] : -1;
   const nextStage = currentStageIndex < DELIVERY_STAGES.length - 1 ? DELIVERY_STAGES[currentStageIndex + 1] : null;
@@ -398,7 +397,7 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="text-sm font-semibold">#{order.order_number}</p>
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isDelivered ? 'bg-green-100 text-green-700' : isUnableToDeliver ? 'bg-red-100 text-red-700' : 'bg-primary/10 text-primary'}`}>
-              {isDelivered ? 'Delivered ✓' : isUnableToDeliver ? 'Unable to Deliver' : (order.status || 'Scheduled')}
+              {isDelivered ? 'Delivered ✓' : isUnableToDeliver ? 'Unable to Deliver' : (order.status === 'In Transit' ? 'Out for Delivery' : (order.status || 'Scheduled'))}
             </span>
             <ZoneBadge order={order} />
           </div>
@@ -428,16 +427,6 @@ function StopCard({ order, pendingReturn, onMarkDelivered, onMarkUnableToDeliver
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Customer</p>
                 <p className="text-xs">{order.customer_email}</p>
                 {order.contact_phone && <p className="text-xs font-semibold">{order.contact_phone}</p>}
-              </div>
-
-              {/* DEBUG: Visible raw status for live verification */}
-              <div className="bg-slate-100 border border-slate-300 rounded-lg p-2.5 space-y-1">
-                <p className="text-[9px] font-mono text-slate-700">
-                  <span className="font-bold">Task ID:</span> {order.id}
-                </p>
-                <p className="text-[9px] font-mono text-slate-700">
-                  <span className="font-bold">Status:</span> <span className="bg-yellow-200 px-1 rounded">{order.status || '(none)'}</span>
-                </p>
               </div>
 
               <div className="space-y-0.5">
@@ -748,13 +737,26 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
     setManualOrder(null); // Reset manual ordering
   }, [date]);
 
+  // Optimistic local update — immediately mutates deliveryScheduleItems state
+  const optimisticUpdate = (orderId, patch) => {
+    setDeliveryScheduleItems(prev =>
+      (prev || []).map(item => item.id === orderId ? { ...item, ...patch } : item)
+    );
+  };
+
   const handleMarkDelivered = async (order, proofPhotoUrl, dropLocation) => {
     if (!proofPhotoUrl) {
       toast.error('Proof of delivery photo is required');
       return;
     }
     setUpdatingId(order.id);
-    console.log(`[DriverPortal] handleMarkDelivered: task_id=${order.id}, drop_location=${dropLocation}`);
+    // Optimistic update — card updates instantly
+    optimisticUpdate(order.id, {
+      status: FULFILLMENT_STATUS.COMPLETED,
+      delivery_photo_url: proofPhotoUrl,
+      delivery_drop_location: dropLocation,
+      delivered_at: new Date().toISOString(),
+    });
     try {
       const res = await base44.functions.invoke('recordDriverDelivery', {
         task_id: order.id,
@@ -765,13 +767,12 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         timestamp: new Date().toISOString(),
       });
       if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Save failed');
-      console.log(`[DriverPortal] recordDriverDelivery succeeded:`, res.data);
       toast.success('✓ Delivery confirmed & saved');
-      await new Promise(resolve => setTimeout(resolve, 500)); // brief pause for DB commit
-      await loadQueue();
-      setRouteData(null);
+      // Background refresh to sync server state (no await — non-blocking)
+      loadQueue();
     } catch (err) {
-      console.error('[DriverPortal] Delivery save error:', err);
+      // Revert optimistic update on failure
+      optimisticUpdate(order.id, { status: order.status });
       toast.error('Failed to save delivery: ' + (err.message || 'Unknown error'));
     } finally {
       setUpdatingId(null);
@@ -780,28 +781,19 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
   const handleMarkUnableToDeliver = async (order, reason, notes) => {
     setUpdatingId(order.id);
+    // Optimistic update
+    optimisticUpdate(order.id, { status: FULFILLMENT_STATUS.UNABLE_TO_DELIVER });
     try {
       const taskId = order.fulfillment_task_id || order.id;
-      if (taskId) {
-        const res = await base44.functions.invoke('updateDriverDeliveryTask', {
-          task_id: taskId,
-          action: 'mark_unable_to_deliver',
-          driver_email: user?.email,
-          failure_reason: reason,
-          note: notes,
-          timestamp: new Date().toISOString(),
-        });
-        if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Task update failed');
-      } else {
-        await base44.functions.invoke('receiveDriverStatusUpdate', {
-          order_id: order.id,
-          order_number: order.order_number,
-          driver_email: user?.email,
-          action: 'unable_to_deliver',
-          unable_reason: reason,
-          delivery_notes: notes,
-        });
-      }
+      const res = await base44.functions.invoke('updateDriverDeliveryTask', {
+        task_id: taskId,
+        action: 'mark_unable_to_deliver',
+        driver_email: user?.email,
+        failure_reason: reason,
+        note: notes,
+        timestamp: new Date().toISOString(),
+      });
+      if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Task update failed');
       const linkedReturn = bagReturns.find(r => r.customer_email === order.customer_email && r.verification_status === 'requested');
       if (linkedReturn) {
         await base44.entities.BagReturn.update(linkedReturn.id, {
@@ -813,10 +805,10 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         });
       }
       toast.success('Stop marked — admin notified');
-      loadQueue();
-      setRouteData(null);
-    } catch {
-      toast.error('Update failed');
+      loadQueue(); // background sync
+    } catch (err) {
+      optimisticUpdate(order.id, { status: order.status });
+      toast.error('Update failed: ' + (err.message || 'Unknown error'));
     } finally {
       setUpdatingId(null);
     }
@@ -824,16 +816,12 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
   const handleMarkStage = async (order, nextStage) => {
     setUpdatingId(order.id);
-    console.log(`[DriverPortal] handleMarkStage called: order_id=${order.id}, nextStage.key=${nextStage.key}, driver_email=${user?.email}`);
+    // Optimistic update — use the display status directly
+    const optimisticStatus = nextStage.key === 'Out For Delivery' ? FULFILLMENT_STATUS.OUT_FOR_DELIVERY : nextStage.key;
+    optimisticUpdate(order.id, { status: optimisticStatus });
     try {
-      // CRITICAL: 'Out For Delivery' button saves canonical status='In Transit'
-      // Only 'Out For Delivery' button calls updateDriverDeliveryTask (which handles the mapping)
-      // Other stages (Packed, In Transit) save directly to their canonical status values
       if (nextStage.key === 'Out For Delivery') {
-        // The 'Out For Delivery' button triggers updateDriverDeliveryTask
-        // which will map to canonical status 'In Transit' in the backend
         const taskId = order.fulfillment_task_id || order.id;
-        console.log(`[DriverPortal] Calling updateDriverDeliveryTask: task_id=${taskId}, action=mark_out_for_delivery`);
         const res = await base44.functions.invoke('updateDriverDeliveryTask', {
           task_id: taskId,
           action: 'mark_out_for_delivery',
@@ -841,19 +829,13 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           timestamp: new Date().toISOString(),
         });
         if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Task update failed');
-        console.log(`[DriverPortal] updateDriverDeliveryTask succeeded:`, res.data);
       } else {
-        // For Packed/In Transit — direct entity update with the ACTUAL canonical status key
-        console.log(`[DriverPortal] Direct update: task_id=${order.id}, status=${nextStage.key}`);
-        const updateResult = await base44.entities.FulfillmentTask.update(order.id, { status: nextStage.key });
-        console.log(`[DriverPortal] Direct update succeeded:`, updateResult);
+        await base44.entities.FulfillmentTask.update(order.id, { status: nextStage.key });
       }
       toast.success(`✓ Marked ${nextStage.label}`);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      await loadQueue();
-      setRouteData(null);
+      loadQueue(); // background sync
     } catch (err) {
-      console.error(`[DriverPortal] handleMarkStage error:`, err);
+      optimisticUpdate(order.id, { status: order.status }); // revert
       toast.error('Update failed: ' + (err.message || 'Unknown error'));
     } finally {
       setUpdatingId(null);
@@ -861,21 +843,20 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
   };
 
   const handleDeleteOrder = async (order) => {
-    // Delete is admin-only — deletion is not an order write, it's a removal
     if (user?.role !== 'admin') {
       toast.error('Only admins can delete orders');
       return;
     }
     setDeletingId(order.id);
+    // Optimistic: remove from list immediately
+    setDeliveryScheduleItems(prev => (prev || []).filter(item => item.id !== order.id));
     try {
-      await base44.asServiceRole.entities.ShopifyOrder.delete(order.id);
-      console.log('Order deleted successfully');
+      await base44.entities.FulfillmentTask.delete(order.id);
       toast.success('Order deleted');
-      loadQueue();
-      setRouteData(null);
+      loadQueue(); // background sync
     } catch (err) {
-      console.error('Delete error:', err);
       toast.error('Delete failed: ' + (err.message || 'Unknown error'));
+      loadQueue(); // restore list
     } finally {
       setDeletingId(null);
     }
