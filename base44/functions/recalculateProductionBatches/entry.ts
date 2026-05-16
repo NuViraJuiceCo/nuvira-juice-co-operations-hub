@@ -499,11 +499,17 @@ Deno.serve(async (req) => {
 
       // GUARDRAIL: Skip already-bottled/produced orders — they are NOT new production needs.
       // bottled, labeled, qc_checked, packed, in_cold_storage = physically produced, just awaiting delivery.
-      // Including them would cause duplicate batch quantities (more bottles made than needed).
+      // EXCEPTION: multi_delivery (subscription) orders — they have multiple future fulfillment instances
+      // that still need production even if the current/past instance is packed/bottled.
+      // For subscriptions, the per-fulfillment production_date guards (fDateObj < today) handle skipping past instances.
       const alreadyProducedStatuses = ['bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage', 'assigned_for_pickup', 'assigned_for_delivery'];
-      if (alreadyProducedStatuses.includes(order.production_status)) {
+      const isMultiDelivery = order.fulfillment_mode === 'multi_delivery' || order.order_type === 'subscription';
+      if (!isMultiDelivery && alreadyProducedStatuses.includes(order.production_status)) {
         console.log(`[RECALC] Skipping already-produced order ${order.shopify_order_number} (${order.production_status}) — not a new production need`);
         continue;
+      }
+      if (isMultiDelivery && alreadyProducedStatuses.includes(order.production_status)) {
+        console.log(`[RECALC] Subscription ${order.shopify_order_number} (${order.production_status}) — continuing to check future fulfillment instances`);
       }
 
       // CRITICAL FIX: For subscriptions, read from fulfillments directly instead of parent line_items
