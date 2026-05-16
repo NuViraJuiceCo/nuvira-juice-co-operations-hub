@@ -117,8 +117,7 @@ Deno.serve(async (req) => {
     let orderDeliveryStatus = null; // what to push to ShopifyOrder
 
     if (action === 'mark_out_for_delivery') {
-      // CRITICAL: Button label says 'Out For Delivery' but canonical DB status is 'In Transit'
-      newStatus = 'In Transit';
+      newStatus = 'Out For Delivery';
       taskUpdate.status = newStatus;
       orderDeliveryStatus = 'out_for_delivery';
 

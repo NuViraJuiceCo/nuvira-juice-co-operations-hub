@@ -768,8 +768,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
       });
       if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Save failed');
       toast.success('✓ Delivery confirmed & saved');
-      // Background refresh to sync server state (no await — non-blocking)
-      loadQueue();
+      setTimeout(() => loadQueue(), 1500); // background sync after DB commit
     } catch (err) {
       // Revert optimistic update on failure
       optimisticUpdate(order.id, { status: order.status });
@@ -805,7 +804,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         });
       }
       toast.success('Stop marked — admin notified');
-      loadQueue(); // background sync
+      setTimeout(() => loadQueue(), 1500); // background sync after DB commit
     } catch (err) {
       optimisticUpdate(order.id, { status: order.status });
       toast.error('Update failed: ' + (err.message || 'Unknown error'));
@@ -833,7 +832,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
         await base44.entities.FulfillmentTask.update(order.id, { status: nextStage.key });
       }
       toast.success(`✓ Marked ${nextStage.label}`);
-      loadQueue(); // background sync
+      setTimeout(() => loadQueue(), 1500); // background sync after DB commit
     } catch (err) {
       optimisticUpdate(order.id, { status: order.status }); // revert
       toast.error('Update failed: ' + (err.message || 'Unknown error'));
