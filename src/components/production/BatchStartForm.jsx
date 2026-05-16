@@ -235,7 +235,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
               <textarea
                 value={formData.ingredients_notes}
                 onChange={(e) => setFormData(prev => ({ ...prev, ingredients_notes: e.target.value }))}
-                className="mt-1 w-full p-2 border border-border rounded-lg bg-background h-12 resize-none text-sm"
+                className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-foreground h-12 resize-none text-sm"
                 placeholder="Lot #, source farm, prep notes, deviations…"
               />
             </div>
@@ -399,7 +399,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
                   max="14"
                   value={formData.pH_result}
                   onChange={(e) => setFormData(prev => ({ ...prev, pH_result: parseFloat(e.target.value) || '' }))}
-                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-foreground text-sm"
                   placeholder="0.0 – 14.0"
                 />
               </div>
@@ -409,7 +409,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
                   type="time"
                   value={formData.formula_mixed_time}
                   onChange={(e) => setFormData(prev => ({ ...prev, formula_mixed_time: e.target.value }))}
-                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-foreground text-sm"
                 />
               </div>
               <div>
@@ -418,7 +418,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
                   type="time"
                   value={formData.bottling_start_time}
                   onChange={(e) => setFormData(prev => ({ ...prev, bottling_start_time: e.target.value }))}
-                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-foreground text-sm"
                 />
               </div>
               <div>
@@ -427,7 +427,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
                   type="time"
                   value={formData.refrigeration_time}
                   onChange={(e) => setFormData(prev => ({ ...prev, refrigeration_time: e.target.value }))}
-                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-sm"
+                  className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-foreground text-sm"
                 />
               </div>
             </div>
@@ -438,7 +438,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-              className="mt-1 w-full p-2 border border-border rounded-lg bg-background h-16 resize-none text-sm"
+              className="mt-1 w-full p-2 border border-border rounded-lg bg-background text-foreground h-16 resize-none text-sm"
               placeholder="Production start notes..."
             />
           </div>

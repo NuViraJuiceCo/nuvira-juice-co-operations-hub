@@ -129,9 +129,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 5. Update ProductionBatch with verification data and lock
+    // 5. Cascade: update linked FulfillmentTasks for this production_date to "Packed"
+    //    Only update tasks that are in a pre-packed state (Scheduled, Unassigned)
+    const fulfillmentTasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
+      production_date: batch.production_date,
+    });
+    const packableStatuses = ['Unassigned', 'Scheduled'];
+    for (const task of fulfillmentTasks) {
+      if (packableStatuses.includes(task.status)) {
+        await base44.asServiceRole.entities.FulfillmentTask.update(task.id, { status: 'Packed' });
+      }
+    }
+
+    // 6. Update ProductionBatch with verification data, production_status = bottled, and lock
     const updateData = {
       status: 'verified_logged',
+      production_status: 'bottled',
       verified_by: user.email,
       verified_at: now,
       compliance_log_id: complianceLog.id,
