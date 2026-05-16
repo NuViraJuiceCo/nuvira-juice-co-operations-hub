@@ -20,6 +20,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { task_id, driver_email, driver_name, photo_url, drop_location, timestamp } = body;
 
+    // ts is the canonical timestamp — use provided timestamp or generate now
+    const ts = timestamp || new Date().toISOString();
+
     if (!task_id) {
       return Response.json({ error: 'task_id required' }, { status: 400 });
     }
@@ -32,18 +35,31 @@ Deno.serve(async (req) => {
       return Response.json({ error: `FulfillmentTask not found: ${task_id}` }, { status: 404 });
     }
 
+    // Guard: already delivered — return success (idempotent)
+    if (task.status === 'Completed' && task.delivery_status === 'delivered') {
+      console.log(`[RECORD-DELIVERY] Task ${task_id} already delivered — skipping duplicate write`);
+      return Response.json({
+        status: 'success',
+        task_id,
+        action: 'mark_delivered',
+        new_status: 'Completed',
+        timestamp: task.delivered_at || ts,
+        idempotent: true,
+      });
+    }
+
     // Validate caller is authorized: assigned driver, admin, or operations role
     const isAssignedDriver = task.assigned_driver && (
       task.assigned_driver.toLowerCase() === user.email.toLowerCase() ||
       (driver_email && driver_email.toLowerCase() === user.email.toLowerCase())
     );
-    const isOperations = user.role === 'admin' || user.role === 'operations_staff' || user.role === 'production_manager';
+    const isOperations = user.role === 'admin' || user.role === 'operations_staff' || user.role === 'production_manager' || user.role === 'driver';
     
     if (!isAssignedDriver && !isOperations) {
       return Response.json({ error: 'Forbidden: Only assigned driver or operations staff can record delivery' }, { status: 403 });
     }
 
-    // Update FulfillmentTask
+    // Update FulfillmentTask — status='Completed' is terminal, cannot be downgraded by any sync
     await base44.asServiceRole.entities.FulfillmentTask.update(task_id, {
       status: 'Completed',
       delivery_status: 'delivered',
@@ -53,7 +69,7 @@ Deno.serve(async (req) => {
       driver_notes: `[DELIVERY CONFIRMED | ${ts}] driver: ${driver_email || user.email}${driver_name ? ` (${driver_name})` : ''}${drop_location ? ` | drop: ${drop_location}` : ''}`,
     });
 
-    console.log(`[RECORD-DELIVERY] Task ${task_id} marked delivered by ${driver_email || user.email}`);
+    console.log(`[RECORD-DELIVERY] Task ${task_id} marked Completed (delivered) by ${driver_email || user.email} at ${ts}`);
 
     // Sync delivery completion directly to linked ShopifyOrder (operations-safe fields only)
     if (task.order_id) {

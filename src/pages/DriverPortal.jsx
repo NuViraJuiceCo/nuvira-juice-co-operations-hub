@@ -768,7 +768,7 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
       });
       if (res?.data?.status !== 'success') throw new Error(res?.data?.error || 'Save failed');
       toast.success('✓ Delivery confirmed & saved');
-      setTimeout(() => loadQueue(), 1500); // background sync after DB commit
+      setTimeout(() => loadQueue(), 2500); // background sync — wait for DB propagation before refetch
     } catch (err) {
       // Revert optimistic update on failure
       optimisticUpdate(order.id, { status: order.status });
