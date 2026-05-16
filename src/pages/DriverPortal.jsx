@@ -9,7 +9,7 @@ import { formatAdminTimestamp, formatDeliveryDate } from '@/lib/timezoneUtils';
 import {
   Leaf, MapPin, Navigation, CheckCircle2, ChevronDown, ChevronRight,
   RefreshCw, Clock, Route, XCircle, Recycle, Package, Camera, X,
-  AlertTriangle, Truck, RotateCcw, ArrowLeft, Trash2
+  AlertTriangle, Truck, RotateCcw, ArrowLeft, Trash2, ClipboardCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PreOptimizeOrderCard from '@/components/driver/PreOptimizeOrderCard';
@@ -911,6 +911,28 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
 
   const quickDates = getQuickDates();
 
+  const [validationDismissed, setValidationDismissed] = useState(() =>
+    sessionStorage.getItem('delivery_validation_dismissed') === 'true'
+  );
+  const dismissValidation = () => {
+    sessionStorage.setItem('delivery_validation_dismissed', 'true');
+    setValidationDismissed(true);
+  };
+
+  // Show the validation checklist when viewing a future date with no completed deliveries
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isFutureDate = date > todayStr;
+  const showValidationBanner = !validationDismissed && isFutureDate && allTasksForDate.length === 0 && !loading;
+
+  const VALIDATION_CHECKLIST = [
+    { label: 'delivered_at timestamp persisted', detail: 'Check FulfillmentTask.delivered_at & ShopifyOrder.delivered_at' },
+    { label: 'Proof photo saved', detail: 'FulfillmentTask.delivery_photo_url & ShopifyOrder.delivery_photo_url' },
+    { label: 'Drop location recorded', detail: 'FulfillmentTask.delivery_drop_location' },
+    { label: 'Customer App shows "Delivered"', detail: 'Open customer app — status should update within 1 min via polling' },
+    { label: 'Delivery confirmation email received', detail: 'Check customer inbox for NuVira delivery email' },
+    { label: 'No duplicate notifications', detail: 'Idempotency guard prevents re-sending if already Completed' },
+  ];
+
   return (
     <div className="pb-10">
       {/* Date Navigation */}
@@ -983,6 +1005,39 @@ function RouteTab({ bagReturns, allCredits, user, onBagReturnVerified }) {
           </div>
         ))}
       </div>
+
+      {showValidationBanner && (
+        <div className="px-4 mt-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                <p className="text-sm font-bold text-amber-800">Next Delivery — Validation Checklist</p>
+              </div>
+              <button onClick={dismissValidation} className="text-amber-400 hover:text-amber-600 shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-amber-700">
+              On the first fresh delivery for this run, verify each item below after confirming delivery.
+            </p>
+            <div className="space-y-2">
+              {VALIDATION_CHECKLIST.map((item, idx) => (
+                <div key={idx} className="flex items-start gap-2.5 bg-white border border-amber-100 rounded-lg px-3 py-2.5">
+                  <div className="w-5 h-5 rounded-full border-2 border-amber-300 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-900">{item.label}</p>
+                    <p className="text-[10px] text-amber-600 mt-0.5">{item.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={dismissValidation} className="w-full py-2 text-xs font-semibold text-amber-700 border border-amber-300 rounded-xl bg-white active:scale-95 transition-transform">
+              Dismiss — I'll check manually
+            </button>
+          </div>
+        </div>
+      )}
 
       {routeData?.route_stats && (
         <div className="px-4 mt-4 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2">
