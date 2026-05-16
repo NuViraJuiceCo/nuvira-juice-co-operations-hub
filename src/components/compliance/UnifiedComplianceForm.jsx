@@ -164,10 +164,12 @@ export default function UnifiedComplianceForm() {
 
   const getStatus = (type, data) => {
     if (type === 'temperature') {
-      return (data.temperature >= data.min_range && data.temperature <= data.max_range) ? 'pass' : 'fail';
+      const temp = parseFloat(data.temperature);
+      return (!isNaN(temp) && temp >= data.min_range && temp <= data.max_range) ? 'pass' : 'fail';
     }
     if (type === 'pH') {
-      return (data.ph_value >= data.min_ph && data.ph_value <= data.max_ph) ? 'pass' : 'fail';
+      const ph = parseFloat(data.ph_value);
+      return (!isNaN(ph) && ph >= data.min_ph && ph <= data.max_ph) ? 'pass' : 'fail';
     }
     if (type === 'sanitation') {
       return (data.cleaned && data.sanitized) ? 'complete' : 'incomplete';
