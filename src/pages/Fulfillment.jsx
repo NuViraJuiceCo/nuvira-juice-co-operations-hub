@@ -204,11 +204,21 @@ export default function Fulfillment() {
                       <p className="font-semibold text-foreground">{order.shopify_order_number}</p>
                       <p className="text-sm text-muted-foreground">{order.customer_name} · {order.customer_email}</p>
                     </div>
-                    <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${
-                      order.production_status === 'new' ? 'bg-blue-50 text-blue-700' :
-                      order.production_status === 'awaiting_production' ? 'bg-amber-50 text-amber-700' :
-                      'bg-green-50 text-green-700'
-                    }`}>{order.production_status?.replace(/_/g, ' ')}</span>
+                    {(() => {
+                      const linkedTask = tasks.find(t => t.order_id === order.id);
+                      const taskStatus = linkedTask?.status;
+                      const prodStatus = order.production_status;
+                      const isPacked = taskStatus === 'Packed' || taskStatus === 'In Transit' || taskStatus === 'Completed' || prodStatus === 'bottled' || prodStatus === 'packed' || prodStatus === 'labeled' || prodStatus === 'qc_checked';
+                      const isAwaiting = !isPacked && (prodStatus === 'awaiting_production' || prodStatus === 'scheduled_for_production' || prodStatus === 'in_production');
+                      const displayLabel = taskStatus === 'Packed' ? 'Packed / Ready' : taskStatus === 'In Transit' ? 'In Transit' : taskStatus === 'Completed' ? 'Delivered' : isPacked ? prodStatus.replace(/_/g, ' ') : prodStatus?.replace(/_/g, ' ') || 'new';
+                      return (
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${
+                          isPacked ? 'bg-green-50 text-green-700' :
+                          isAwaiting ? 'bg-amber-50 text-amber-700' :
+                          'bg-blue-50 text-blue-700'
+                        }`}>{displayLabel}</span>
+                      );
+                    })()}
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span><span className="font-medium text-foreground">Total:</span> {

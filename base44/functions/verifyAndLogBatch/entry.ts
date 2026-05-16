@@ -179,7 +179,20 @@ Deno.serve(async (req) => {
     }
     console.log(`[VERIFY-BATCH] Packed ${packedCount} FulfillmentTask(s) for production_date ${batch.production_date}`);
 
-    // 6. Update ProductionBatch with verification data, production_status = bottled, and lock
+    // 6a. Cascade production_status: 'bottled' to linked ShopifyOrders
+    const orderIdsToUpdate = [...new Set((batch.order_sources || []).map(s => s.order_id).filter(Boolean))];
+    for (const orderId of orderIdsToUpdate) {
+      try {
+        const order = await base44.asServiceRole.entities.ShopifyOrder.get(orderId).catch(() => null);
+        if (order && !['fulfilled', 'canceled', 'refunded'].includes(order.production_status)) {
+          await base44.asServiceRole.entities.ShopifyOrder.update(orderId, { production_status: 'bottled' });
+        }
+      } catch (err) {
+        console.warn(`[VERIFY-BATCH] Could not update ShopifyOrder ${orderId}: ${err.message}`);
+      }
+    }
+
+    // 6b. Update ProductionBatch with verification data, production_status = bottled, and lock
     const updateData = {
       status: 'verified_logged',
       production_status: 'bottled',
