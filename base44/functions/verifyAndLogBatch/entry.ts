@@ -179,12 +179,20 @@ Deno.serve(async (req) => {
     }
     console.log(`[VERIFY-BATCH] Packed ${packedCount} FulfillmentTask(s) for production_date ${batch.production_date}`);
 
-    // 6a. Cascade production_status: 'bottled' to linked ShopifyOrders
+    // 6a. Cascade production_status: 'bottled' ONLY to non-subscription ShopifyOrders
+    // Subscription (multi_delivery) orders must NOT have parent status overwritten —
+    // their status is managed per-fulfillment-instance, not at the parent level.
     const orderIdsToUpdate = [...new Set((batch.order_sources || []).map(s => s.order_id).filter(Boolean))];
     for (const orderId of orderIdsToUpdate) {
       try {
         const order = await base44.asServiceRole.entities.ShopifyOrder.get(orderId).catch(() => null);
-        if (order && !['fulfilled', 'canceled', 'refunded'].includes(order.production_status)) {
+        if (!order) continue;
+        // Skip subscription/multi-delivery orders — never cascade status to them
+        if (order.fulfillment_mode === 'multi_delivery' || order.order_type === 'subscription') {
+          console.log(`[VERIFY-BATCH] Skipping subscription order ${orderId} — instance-level status only`);
+          continue;
+        }
+        if (!['fulfilled', 'canceled', 'refunded'].includes(order.production_status)) {
           await base44.asServiceRole.entities.ShopifyOrder.update(orderId, { production_status: 'bottled' });
         }
       } catch (err) {
