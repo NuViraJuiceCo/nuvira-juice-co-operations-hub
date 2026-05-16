@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 const LOG_TYPES = {
   temperature: {
     label: '🌡️ Temperature',
-    fields: ['location', 'temperature', 'min_range', 'max_range'],
+    fields: ['location', 'temperature'],
     defaults: { location: 'Cold Room 1', temperature: '', min_range: 35, max_range: 40 }
   },
   pH: {
