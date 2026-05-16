@@ -105,41 +105,79 @@ Deno.serve(async (req) => {
       correctiveLogId = correctiveLog.id;
     }
 
-    // 4. If sanitation verification complete, link or create SanitationVerificationLog
+    // 4. If sanitation verification complete, link or create SanitationLog (no duplicates)
     let sanitationLogId = null;
     if (batch.sanitation_verification_complete) {
-      // If sanitizer_log_reference exists, use it; otherwise create new
       if (batch.sanitizer_log_reference) {
+        // Already linked — reuse
         sanitationLogId = batch.sanitizer_log_reference;
       } else {
-        const startTime = batch.actual_start_time ? new Date(batch.actual_start_time).toTimeString().slice(0, 5) : '00:00';
-        const sanitationLog = await base44.asServiceRole.entities.SanitationLog.create({
+        // Check if a sanitation log already exists for this date before creating
+        const existingSanitation = await base44.asServiceRole.entities.SanitationLog.filter({
           log_date: batch.production_date,
-          log_time: startTime,
-          staff_member: (batch.staff_on_duty || [])[0] || user.email,
-          area: 'Production Floor',
-          sanitizer_type: 'Standard',
-          sanitizer_level: 'Adequate',
-          cleaned: true,
-          sanitized: true,
-          verified_by: user.email,
-          notes: 'Pre-production sanitation — auto-logged from batch verification',
         });
-        sanitationLogId = sanitationLog.id;
+        if (existingSanitation && existingSanitation.length > 0) {
+          sanitationLogId = existingSanitation[0].id;
+        } else {
+          const startTime = batch.actual_start_time ? new Date(batch.actual_start_time).toTimeString().slice(0, 5) : '00:00';
+          const sanitationLog = await base44.asServiceRole.entities.SanitationLog.create({
+            log_date: batch.production_date,
+            log_time: startTime,
+            staff_member: (batch.staff_on_duty || [])[0] || user.email,
+            area: 'Production Floor',
+            sanitizer_type: 'Standard',
+            sanitizer_level: 'Adequate',
+            cleaned: true,
+            sanitized: true,
+            verified_by: user.email,
+            notes: 'Pre-production sanitation — auto-logged from batch verification',
+          });
+          sanitationLogId = sanitationLog.id;
+        }
       }
     }
 
-    // 5. Cascade: update linked FulfillmentTasks for this production_date to "Packed"
-    //    Only update tasks that are in a pre-packed state (Scheduled, Unassigned)
-    const fulfillmentTasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
-      production_date: batch.production_date,
-    });
+    // 5. Cascade: update linked FulfillmentTasks to "Packed"
+    //    Strategy: match by production_date OR by scheduled_date (delivery = production_date + 1 day)
+    //    OR by order_id from batch.order_sources (most reliable for tasks missing production_date)
     const packableStatuses = ['Unassigned', 'Scheduled'];
-    for (const task of fulfillmentTasks) {
-      if (packableStatuses.includes(task.status)) {
-        await base44.asServiceRole.entities.FulfillmentTask.update(task.id, { status: 'Packed' });
+
+    // Collect order IDs from batch sources for direct matching
+    const batchOrderIds = new Set(
+      (batch.order_sources || []).map(s => s.order_id).filter(Boolean)
+    );
+
+    // Delivery date = production_date + 1 day
+    const deliveryDate = new Date(batch.production_date);
+    deliveryDate.setDate(deliveryDate.getDate() + 1);
+    const deliveryDateStr = deliveryDate.toISOString().split('T')[0];
+
+    // Fetch tasks by production_date (canonical) and by scheduled_date (delivery date)
+    const [tasksByProdDate, tasksBySchedDate] = await Promise.all([
+      base44.asServiceRole.entities.FulfillmentTask.filter({ production_date: batch.production_date }),
+      base44.asServiceRole.entities.FulfillmentTask.filter({ scheduled_date: deliveryDateStr }),
+    ]);
+
+    // Merge, deduplicate by id
+    const allTasksMap = {};
+    for (const t of [...tasksByProdDate, ...tasksBySchedDate]) {
+      allTasksMap[t.id] = t;
+    }
+
+    let packedCount = 0;
+    for (const task of Object.values(allTasksMap)) {
+      if (!packableStatuses.includes(task.status)) continue;
+      // Only update if the task is linked to one of this batch's orders (if order IDs known)
+      const isLinked = batchOrderIds.size === 0 || batchOrderIds.has(task.order_id);
+      if (isLinked) {
+        await base44.asServiceRole.entities.FulfillmentTask.update(task.id, {
+          status: 'Packed',
+          production_date: batch.production_date, // backfill missing production_date
+        });
+        packedCount++;
       }
     }
+    console.log(`[VERIFY-BATCH] Packed ${packedCount} FulfillmentTask(s) for production_date ${batch.production_date}`);
 
     // 6. Update ProductionBatch with verification data, production_status = bottled, and lock
     const updateData = {
@@ -173,12 +211,14 @@ Deno.serve(async (req) => {
       success: true,
       batch_id,
       status: 'verified_logged',
+      production_status: 'bottled',
       verified_at: now,
       verified_by: user.email,
       compliance_log_id: complianceLog.id,
       ccp_log_id: ccpLogId,
       corrective_action_log_id: correctiveLogId,
       sanitation_log_id: sanitationLogId,
+      fulfillment_tasks_packed: packedCount,
     });
   } catch (error) {
     console.error('[VERIFY-BATCH]', error.message);
