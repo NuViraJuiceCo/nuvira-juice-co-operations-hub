@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
               delivered_at: ts,
               delivered_by: driver_name || driver_email || user.email,
               delivery_photo_url: photo_url || null,
+              delivery_drop_location: drop_location || null,
               internal_notes: `[DELIVERY | ${ts}] driver: ${driver_email || user.email}${drop_location ? ` | drop: ${drop_location}` : ''}`,
             });
             console.log(`[RECORD-DELIVERY] ShopifyOrder ${task.order_id} delivery sync successful`);
