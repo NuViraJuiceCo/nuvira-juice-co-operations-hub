@@ -101,6 +101,51 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Customer-facing notifications ──────────────────────────────────────
+    // Fire-and-forget: push status to customer app + send delivery email.
+    // Non-blocking — delivery is already confirmed even if these fail.
+    const customerEmail = task.customer_email;
+    const orderNumber = task.order_number || task.id;
+
+    // 1. Push "delivered" status to Customer App
+    if (customerEmail) {
+      base44.asServiceRole.functions.invoke('pushOrderStatusToCustomerApp', {
+        _internalSecret: Deno.env.get('INTERNAL_FUNCTION_SECRET'),
+        orderId: task.order_id || task_id,
+        orderData: {
+          order_id: task.order_id || task_id,
+          order_number: orderNumber,
+          customer_email: customerEmail,
+          status: 'fulfilled',
+          fulfillment_status: 'fulfilled',
+          delivered_at: ts,
+          delivery_photo_url: photo_url || null,
+          delivery_drop_location: drop_location || null,
+          fulfillment_type: task.fulfillment_type || 'Delivery',
+          notes: `Your order has been delivered${drop_location ? ` — left at: ${drop_location}` : ''}.`,
+        },
+      }).catch(err => console.error('[RECORD-DELIVERY] Customer app push failed (non-critical):', err.message));
+    }
+
+    // 2. Send delivery confirmation email via orderStatusEmail
+    if (customerEmail) {
+      base44.asServiceRole.functions.invoke('orderStatusEmail', {
+        _internalSecret: Deno.env.get('INTERNAL_FUNCTION_SECRET'),
+        data: {
+          customer_email: customerEmail,
+          shopify_order_number: orderNumber,
+          fulfillment_status: 'fulfilled',
+          production_status: 'fulfilled',
+          delivered_at: ts,
+          delivery_photo_url: photo_url || null,
+          delivery_drop_location: drop_location || null,
+          assigned_delivery_date: task.scheduled_date || null,
+        },
+      }).catch(err => console.error('[RECORD-DELIVERY] Delivery email failed (non-critical):', err.message));
+    }
+
+    console.log(`[RECORD-DELIVERY] Customer notifications dispatched for ${customerEmail}`);
+
     return Response.json({
       status: 'success',
       task_id,

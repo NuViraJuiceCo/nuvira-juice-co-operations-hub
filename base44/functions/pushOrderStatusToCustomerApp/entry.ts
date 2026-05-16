@@ -25,10 +25,17 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         order_id: orderData.order_id,
+        order_number: orderData.order_number || null,
+        customer_email: orderData.customer_email || null,
         status: orderData.status,
+        fulfillment_status: orderData.fulfillment_status || null,
         fulfillment_type: orderData.fulfillment_type,
         delivery_address: orderData.delivery_address,
         notes: orderData.notes,
+        // ── Delivery outcome fields ──
+        delivered_at: orderData.delivered_at || null,
+        delivery_photo_url: orderData.delivery_photo_url || null,
+        delivery_drop_location: orderData.delivery_drop_location || null,
         updated_at: new Date().toISOString(),
       }),
     });

@@ -59,6 +59,12 @@ Deno.serve(async (req) => {
         contact_email: order.customer_email, // also expose as contact_email for Apple Sign In user matching
         customer_app_user_id: order.customer_app_user_id || null,
         status: order.production_status,
+        fulfillment_status: order.fulfillment_status || null,
+        // ── Delivery outcome fields (visible to customer) ──
+        delivered_at: order.delivered_at || null,
+        delivered_by: order.delivered_by || null,
+        delivery_photo_url: order.delivery_photo_url || null,
+        delivery_drop_location: order.delivery_drop_location || null,
         total: order.total_price,
         fulfillment_type: order.fulfillment_method,
         estimated_delivery_date: order.assigned_delivery_date,
