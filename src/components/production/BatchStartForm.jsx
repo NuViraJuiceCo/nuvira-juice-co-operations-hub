@@ -12,6 +12,14 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
   const { recipe, formulaSummary, loading: recipeLoading, notFound: recipeNotFound } = useProductFormula(batch.product_name);
   const [formulaOverridden, setFormulaOverridden] = useState(false);
 
+  // Default start time: 9:00 PM on the production date (or today if not retrospective)
+  const defaultStartTime = isRetrospective
+    ? `${batch.production_date}T21:00`
+    : `${batch.production_date}T21:00`;
+
+  const STAFF_OPTIONS = ['Kirandeep Gill', 'Kiran Kahlon', 'Amar Kahlon'];
+  const EQUIPMENT_OPTIONS = ['Nama J2'];
+
   const [formData, setFormData] = useState({
     staff_on_duty: batch.staff_on_duty || [],
     equipment_used: batch.equipment_used || [],
@@ -19,7 +27,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
     refrigerator_temp_checked: false,
     notes: '',
     retrospective_reason: '',
-    actual_start_time_override: isRetrospective ? `${batch.production_date}T06:00` : '',
+    actual_start_time_override: isRetrospective ? defaultStartTime : defaultStartTime,
     ingredients_notes: batch.ingredient_lot_notes || '',
     final_ingredients: batch.ingredients_used || [],
     manual_ingredient_override: false,
@@ -93,7 +101,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
         final_ingredients: formData.final_ingredients,
         default_formula_ingredients: recipe?.ingredients || [],
         manual_ingredient_override: formData.manual_ingredient_override || false,
-        actual_start_time_override: isRetrospective && formData.actual_start_time_override
+        actual_start_time_override: formData.actual_start_time_override
           ? new Date(formData.actual_start_time_override).toISOString()
           : undefined,
       });
@@ -208,7 +216,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
               <textarea
                 value={formData.ingredients_notes}
                 onChange={(e) => setFormData(prev => ({ ...prev, ingredients_notes: e.target.value }))}
-                className="w-full p-2 border border-red-300 rounded-lg bg-background h-16 resize-none text-sm"
+                className="w-full p-2 border border-red-300 rounded-lg bg-background text-foreground h-16 resize-none text-sm"
                 placeholder="Formula not found — manually enter ingredients (e.g. Apple, Ginger, Lemon)"
               />
             ) : null}
@@ -217,7 +225,7 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
               <textarea
                 value={formData.ingredients_notes}
                 onChange={(e) => setFormData(prev => ({ ...prev, ingredients_notes: e.target.value }))}
-                className="w-full p-2 border border-amber-300 rounded-lg bg-background h-16 resize-none text-sm"
+                className="w-full p-2 border border-amber-300 rounded-lg bg-background text-foreground h-16 resize-none text-sm"
                 placeholder="Override ingredients here…"
               />
             )}
@@ -233,57 +241,79 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
             </div>
           </div>
 
+          {/* Start time — always shown, defaults to 9 PM */}
+          <div>
+            <label className="text-sm font-medium">
+              {isRetrospective ? 'Actual Start Time (Historical)' : 'Batch Start Time'}
+              {isRetrospective && <span className="text-amber-600 ml-1">*</span>}
+            </label>
+            <input
+              type="datetime-local"
+              value={formData.actual_start_time_override}
+              onChange={(e) => setFormData(prev => ({ ...prev, actual_start_time_override: e.target.value }))}
+              className={`mt-1 w-full p-2 border rounded-lg bg-background text-foreground text-sm ${isRetrospective ? 'border-amber-300' : 'border-border'}`}
+            />
+            {!isRetrospective && (
+              <p className="text-xs text-muted-foreground mt-1">Default: 9:00 PM. Adjust if production starts at a different time.</p>
+            )}
+          </div>
+
           {isRetrospective && (
-            <>
-              <div>
-                <label className="text-sm font-medium text-amber-700">Retrospective Reason <span className="text-red-500">*</span></label>
-                <textarea
-                  value={formData.retrospective_reason}
-                  onChange={(e) => setFormData(prev => ({ ...prev, retrospective_reason: e.target.value }))}
-                  className="mt-1 w-full p-2 border border-amber-300 rounded-lg bg-background h-14 resize-none text-sm"
-                  placeholder="e.g. May 1 production was completed before batch logging workflow was active. Logging for compliance accuracy."
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-amber-700">Actual Start Time (Historical)</label>
-                <input
-                  type="datetime-local"
-                  value={formData.actual_start_time_override}
-                  onChange={(e) => setFormData(prev => ({ ...prev, actual_start_time_override: e.target.value }))}
-                  className="mt-1 w-full p-2 border border-amber-300 rounded-lg bg-background text-sm"
-                />
-              </div>
-            </>
+            <div>
+              <label className="text-sm font-medium text-amber-700">Retrospective Reason <span className="text-red-500">*</span></label>
+              <textarea
+                value={formData.retrospective_reason}
+                onChange={(e) => setFormData(prev => ({ ...prev, retrospective_reason: e.target.value }))}
+                className="mt-1 w-full p-2 border border-amber-300 rounded-lg bg-background text-foreground h-14 resize-none text-sm"
+                placeholder="e.g. May 1 production was completed before batch logging workflow was active. Logging for compliance accuracy."
+                required
+              />
+            </div>
           )}
 
           <div>
             <label className="text-sm font-medium">Staff on Duty</label>
-            <div className="flex gap-2 mt-1">
+            <div className="mt-2 flex flex-wrap gap-2">
+              {STAFF_OPTIONS.map(name => {
+                const selected = formData.staff_on_duty.includes(name);
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setFormData(prev => ({
+                      ...prev,
+                      staff_on_duty: selected
+                        ? prev.staff_on_duty.filter(s => s !== name)
+                        : [...prev.staff_on_duty, name],
+                    }))}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                      selected
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-foreground border-border hover:bg-muted'
+                    }`}
+                  >
+                    {selected ? '✓ ' : ''}{name}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Free-text for additional staff */}
+            <div className="flex gap-2 mt-2">
               <input
                 type="text"
                 value={staffInput}
                 onChange={(e) => setStaffInput(e.target.value)}
-                placeholder="Add staff member"
-                className="flex-1 p-2 border border-border rounded-lg bg-background text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddStaff();
-                  }
-                }}
+                placeholder="Add other staff..."
+                className="flex-1 p-2 border border-border rounded-lg bg-background text-foreground text-sm"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddStaff(); } }}
               />
-              <Button type="button" variant="outline" size="sm" onClick={handleAddStaff}>
-                Add
-              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={handleAddStaff}>Add</Button>
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
-              {formData.staff_on_duty.map((staff, idx) => (
-                <div key={idx} className="bg-primary/10 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+              {formData.staff_on_duty.filter(s => !STAFF_OPTIONS.includes(s)).map((staff, idx) => (
+                <div key={idx} className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm flex items-center gap-2">
                   {staff}
-                  <button type="button" onClick={() => handleRemoveStaff(idx)} className="text-primary hover:text-primary/70">
-                    ×
-                  </button>
+                  <button type="button" onClick={() => handleRemoveStaff(formData.staff_on_duty.indexOf(staff))} className="hover:opacity-70">×</button>
                 </div>
               ))}
             </div>
@@ -291,31 +321,46 @@ export default function BatchStartForm({ batch, onClose, onSave }) {
 
           <div>
             <label className="text-sm font-medium">Equipment Used</label>
-            <div className="flex gap-2 mt-1">
+            <div className="mt-2 flex flex-wrap gap-2">
+              {EQUIPMENT_OPTIONS.map(eq => {
+                const selected = formData.equipment_used.includes(eq);
+                return (
+                  <button
+                    key={eq}
+                    type="button"
+                    onClick={() => setFormData(prev => ({
+                      ...prev,
+                      equipment_used: selected
+                        ? prev.equipment_used.filter(e => e !== eq)
+                        : [...prev.equipment_used, eq],
+                    }))}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                      selected
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-foreground border-border hover:bg-muted'
+                    }`}
+                  >
+                    {selected ? '✓ ' : ''}{eq}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 mt-2">
               <input
                 type="text"
                 value={equipmentInput}
                 onChange={(e) => setEquipmentInput(e.target.value)}
-                placeholder="Add equipment"
-                className="flex-1 p-2 border border-border rounded-lg bg-background text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddEquipment();
-                  }
-                }}
+                placeholder="Add other equipment..."
+                className="flex-1 p-2 border border-border rounded-lg bg-background text-foreground text-sm"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddEquipment(); } }}
               />
-              <Button type="button" variant="outline" size="sm" onClick={handleAddEquipment}>
-                Add
-              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={handleAddEquipment}>Add</Button>
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
-              {formData.equipment_used.map((eq, idx) => (
-                <div key={idx} className="bg-secondary/20 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+              {formData.equipment_used.filter(e => !EQUIPMENT_OPTIONS.includes(e)).map((eq, idx) => (
+                <div key={idx} className="bg-secondary/20 text-foreground px-3 py-1 rounded-full text-sm flex items-center gap-2">
                   {eq}
-                  <button type="button" onClick={() => handleRemoveEquipment(idx)} className="text-secondary hover:text-secondary/70">
-                    ×
-                  </button>
+                  <button type="button" onClick={() => handleRemoveEquipment(formData.equipment_used.indexOf(eq))} className="hover:opacity-70">×</button>
                 </div>
               ))}
             </div>

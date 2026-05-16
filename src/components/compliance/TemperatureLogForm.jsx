@@ -13,10 +13,12 @@ export default function TemperatureLogForm({ onClose }) {
     staff_member: '',
     location: 'Cold Room 1',
     temperature: '',
-    min_range: 2,
-    max_range: 8,
+    min_range: 35,
+    max_range: 40,
+    unit: 'F',
     shift: 'Morning',
     notes: '',
+    production_date: new Date().toISOString().split('T')[0],
   });
   const [warning, setWarning] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,8 +37,10 @@ export default function TemperatureLogForm({ onClose }) {
     // Check if temperature is in range
     if (field === 'temperature') {
       const temp = parseFloat(value);
-      if (temp < formData.min_range || temp > formData.max_range) {
-        setWarning(`Temperature ${temp}°C is outside range ${formData.min_range}-${formData.max_range}°C`);
+      const min = field === 'temperature' ? formData.min_range : formData.min_range;
+      const max = field === 'temperature' ? formData.max_range : formData.max_range;
+      if (temp < min || temp > max) {
+        setWarning(`Temperature ${temp}°F is outside the expected range ${min}–${max}°F`);
       } else {
         setWarning('');
       }
@@ -52,10 +56,11 @@ export default function TemperatureLogForm({ onClose }) {
       const temp = parseFloat(formData.temperature);
       const isInRange = temp >= formData.min_range && temp <= formData.max_range;
 
-      const entry = await base44.entities.TemperatureLog.create({
+      await base44.entities.TemperatureLog.create({
         ...formData,
         temperature: temp,
         within_range: isInRange,
+        production_date: formData.log_date,
       });
 
       // If out of range, create corrective action prompt
@@ -90,7 +95,7 @@ export default function TemperatureLogForm({ onClose }) {
                 type="date"
                 value={formData.log_date}
                 onChange={(e) => handleChange('log_date', e.target.value)}
-                className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               />
             </div>
             <div>
@@ -99,7 +104,7 @@ export default function TemperatureLogForm({ onClose }) {
                 type="time"
                 value={formData.log_time}
                 onChange={(e) => handleChange('log_time', e.target.value)}
-                className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               />
             </div>
           </div>
@@ -110,7 +115,7 @@ export default function TemperatureLogForm({ onClose }) {
               type="text"
               value={formData.staff_member}
               onChange={(e) => handleChange('staff_member', e.target.value)}
-              className="w-full border rounded-md p-2 mt-1"
+              className="w-full border rounded-md p-2 mt-1 bg-muted text-foreground"
               disabled
             />
           </div>
@@ -121,7 +126,7 @@ export default function TemperatureLogForm({ onClose }) {
               <select
                 value={formData.location}
                 onChange={(e) => handleChange('location', e.target.value)}
-                className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               >
                 <option>Cold Room 1</option>
                 <option>Cold Room 2</option>
@@ -134,7 +139,7 @@ export default function TemperatureLogForm({ onClose }) {
               <select
                 value={formData.shift}
                 onChange={(e) => handleChange('shift', e.target.value)}
-                className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               >
                 <option>Morning</option>
                 <option>Afternoon</option>
@@ -144,17 +149,17 @@ export default function TemperatureLogForm({ onClose }) {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Temperature (°C)</label>
+            <label className="text-sm font-medium">Temperature (°F)</label>
             <input
               type="number"
               step="0.1"
               value={formData.temperature}
               onChange={(e) => handleChange('temperature', e.target.value)}
-              placeholder="e.g., 4.5"
-              className="w-full border rounded-md p-2 mt-1"
+              placeholder="e.g., 37"
+              className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               required
             />
-            <p className="text-xs text-muted-foreground mt-1">Target range: {formData.min_range}°C - {formData.max_range}°C</p>
+            <p className="text-xs text-muted-foreground mt-1">Target range: {formData.min_range}°F – {formData.max_range}°F (refrigerator)</p>
           </div>
 
           {warning && (
@@ -174,7 +179,7 @@ export default function TemperatureLogForm({ onClose }) {
               value={formData.notes}
               onChange={(e) => handleChange('notes', e.target.value)}
               placeholder="Any additional observations..."
-              className="w-full border rounded-md p-2 mt-1 resize-none"
+              className="w-full border rounded-md p-2 mt-1 resize-none bg-background text-foreground"
               rows="3"
             />
           </div>

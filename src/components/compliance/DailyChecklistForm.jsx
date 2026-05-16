@@ -61,16 +61,17 @@ export default function DailyChecklistForm() {
   };
 
   const calculateStatus = (data) => {
-    const allChecked =
+    // Only pre-production items are required to mark checklist as Complete
+    // batch_logs_completed and ccp_logs_completed are post-production and optional at submit time
+    const preProductionComplete =
       data.morning_fridge_temp_logged &&
-      data.evening_fridge_temp_logged &&
       data.sanitizer_levels_checked &&
       data.equipment_sanitized &&
-      data.work_areas_cleaned &&
-      data.batch_logs_completed &&
-      data.ccp_logs_completed;
+      data.work_areas_cleaned;
 
-    return allChecked ? 'Complete' : 'Incomplete';
+    if (!preProductionComplete) return 'Incomplete';
+    const postProductionComplete = data.batch_logs_completed && data.ccp_logs_completed;
+    return postProductionComplete ? 'Complete' : 'Pre-Production Complete';
   };
 
   const handleSubmit = async (e) => {
@@ -98,6 +99,15 @@ export default function DailyChecklistForm() {
       setIsSubmitting(false);
     }
   };
+
+  // Pre-production required items (must be done before batches start)
+  const preProductionItems = [
+    formData.morning_fridge_temp_logged,
+    formData.sanitizer_levels_checked,
+    formData.equipment_sanitized,
+    formData.work_areas_cleaned,
+  ];
+  const preProductionComplete = preProductionItems.every(Boolean);
 
   const completedCount = [
     formData.morning_fridge_temp_logged,
@@ -128,7 +138,7 @@ export default function DailyChecklistForm() {
                 type="date"
                 value={formData.checklist_date}
                 disabled
-                className="w-full border rounded-md p-2 mt-1 bg-muted"
+                className="w-full border rounded-md p-2 mt-1 bg-muted text-foreground"
               />
             </div>
             <div>
@@ -136,7 +146,7 @@ export default function DailyChecklistForm() {
               <select
                 value={formData.shift}
                 onChange={(e) => handleChange('shift', e.target.value)}
-                className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               >
                 <option>Morning</option>
                 <option>Afternoon</option>
@@ -158,7 +168,7 @@ export default function DailyChecklistForm() {
                 type="time"
                 value={formData.morning_fridge_time}
                 onChange={(e) => handleChange('morning_fridge_time', e.target.value)}
-                className="w-24 border rounded p-1 text-sm"
+                className="w-24 border rounded p-1 text-sm bg-background text-foreground"
                 placeholder="HH:MM"
               />
             </div>
@@ -168,12 +178,12 @@ export default function DailyChecklistForm() {
                 onCheckedChange={(c) => handleChange('evening_fridge_temp_logged', c)}
                 id="evening_fridge"
               />
-              <label htmlFor="evening_fridge" className="text-sm cursor-pointer flex-1">Evening refrigerator temperature logged</label>
+              <label htmlFor="evening_fridge" className="text-sm cursor-pointer flex-1">Evening refrigerator temperature logged <span className="text-muted-foreground text-xs">(after production)</span></label>
               <input
                 type="time"
                 value={formData.evening_fridge_time}
                 onChange={(e) => handleChange('evening_fridge_time', e.target.value)}
-                className="w-24 border rounded p-1 text-sm"
+                className="w-24 border rounded p-1 text-sm bg-background text-foreground"
                 placeholder="HH:MM"
               />
             </div>
@@ -192,7 +202,7 @@ export default function DailyChecklistForm() {
                 type="time"
                 value={formData.sanitizer_check_time}
                 onChange={(e) => handleChange('sanitizer_check_time', e.target.value)}
-                className="w-24 border rounded p-1 text-sm"
+                className="w-24 border rounded p-1 text-sm bg-background text-foreground"
               />
             </div>
             <div className="flex items-center gap-3">
@@ -206,7 +216,7 @@ export default function DailyChecklistForm() {
                 type="time"
                 value={formData.sanitization_time}
                 onChange={(e) => handleChange('sanitization_time', e.target.value)}
-                className="w-24 border rounded p-1 text-sm"
+                className="w-24 border rounded p-1 text-sm bg-background text-foreground"
               />
             </div>
             <div className="flex items-center gap-3">
@@ -220,7 +230,7 @@ export default function DailyChecklistForm() {
                 type="time"
                 value={formData.cleaning_time}
                 onChange={(e) => handleChange('cleaning_time', e.target.value)}
-                className="w-24 border rounded p-1 text-sm"
+                className="w-24 border rounded p-1 text-sm bg-background text-foreground"
               />
             </div>
           </div>
@@ -240,7 +250,7 @@ export default function DailyChecklistForm() {
                   value={formData.batches_logged}
                   onChange={(e) => handleChange('batches_logged', e.target.value)}
                   placeholder="Which batches? (e.g., #101, #102)"
-                  className="w-full border rounded p-2 mt-1 text-sm"
+                  className="w-full border rounded p-2 mt-1 text-sm bg-background text-foreground"
                 />
               </div>
             </div>
@@ -257,7 +267,7 @@ export default function DailyChecklistForm() {
                   value={formData.ccp_notes}
                   onChange={(e) => handleChange('ccp_notes', e.target.value)}
                   placeholder="CCP details or notes..."
-                  className="w-full border rounded p-2 mt-1 text-sm"
+                  className="w-full border rounded p-2 mt-1 text-sm bg-background text-foreground"
                 />
               </div>
             </div>
@@ -269,24 +279,34 @@ export default function DailyChecklistForm() {
               value={formData.issues_reported}
               onChange={(e) => handleChange('issues_reported', e.target.value)}
               placeholder="Report any problems, equipment issues, or other concerns..."
-              className="w-full border rounded-md p-2 mt-1 resize-none"
+              className="w-full border rounded-md p-2 mt-1 resize-none bg-background text-foreground"
               rows="3"
             />
           </div>
 
-          {completedCount < totalItems && (
-            <div className="flex gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-yellow-800">
-                <p className="font-semibold">Incomplete Checklist</p>
-                <p>Complete all items before submitting ({completedCount}/{totalItems})</p>
+          {!preProductionComplete && (
+            <div className="flex gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800">
+                <p className="font-semibold">Required Pre-Production Items Incomplete</p>
+                <p>Complete the temperature check, sanitizer check, equipment sanitation, and work area cleaning before submitting.</p>
+              </div>
+            </div>
+          )}
+
+          {preProductionComplete && completedCount < totalItems && (
+            <div className="flex gap-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <p className="font-semibold">Pre-Production Ready</p>
+                <p>You can submit now. Batch logs and CCP logs can be updated after production completes. ({completedCount}/{totalItems} done)</p>
               </div>
             </div>
           )}
 
           <Button
             type="submit"
-            disabled={isSubmitting || completedCount < totalItems}
+            disabled={isSubmitting || !preProductionComplete}
             className="w-full"
           >
             {isSubmitting ? 'Saving...' : `Submit Checklist (${completedCount}/${totalItems})`}
