@@ -64,7 +64,7 @@ export default function SanitationLogForm({ onClose }) {
                 type="date"
                 value={formData.log_date}
                 onChange={(e) => handleChange('log_date', e.target.value)}
-                className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               />
             </div>
             <div>
@@ -73,7 +73,7 @@ export default function SanitationLogForm({ onClose }) {
                 type="time"
                 value={formData.log_time}
                 onChange={(e) => handleChange('log_time', e.target.value)}
-                className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               />
             </div>
           </div>
@@ -84,7 +84,7 @@ export default function SanitationLogForm({ onClose }) {
               type="text"
               value={formData.staff_member}
               onChange={(e) => handleChange('staff_member', e.target.value)}
-              className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-muted text-foreground"
               disabled
             />
           </div>
@@ -95,7 +95,7 @@ export default function SanitationLogForm({ onClose }) {
               <select
                 value={formData.area}
                 onChange={(e) => handleChange('area', e.target.value)}
-                className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               >
                 <option>Prep Area</option>
                 <option>Production Floor</option>
@@ -110,7 +110,7 @@ export default function SanitationLogForm({ onClose }) {
               <select
                 value={formData.sanitizer_type}
                 onChange={(e) => handleChange('sanitizer_type', e.target.value)}
-                className="w-full border rounded-md p-2 mt-1"
+                className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
               >
                 <option>Bleach Solution</option>
                 <option>Quaternary Ammonium</option>
@@ -125,7 +125,7 @@ export default function SanitationLogForm({ onClose }) {
             <select
               value={formData.sanitizer_level}
               onChange={(e) => handleChange('sanitizer_level', e.target.value)}
-              className="w-full border rounded-md p-2 mt-1"
+              className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
             >
               <option>Low</option>
               <option>Adequate</option>
@@ -159,7 +159,7 @@ export default function SanitationLogForm({ onClose }) {
               value={formData.verified_by}
               onChange={(e) => handleChange('verified_by', e.target.value)}
               placeholder="Manager or supervisor name"
-              className="w-full border rounded-md p-2 mt-1"
+              className="w-full border rounded-md p-2 mt-1 bg-background text-foreground"
             />
           </div>
 
@@ -169,7 +169,7 @@ export default function SanitationLogForm({ onClose }) {
               value={formData.notes}
               onChange={(e) => handleChange('notes', e.target.value)}
               placeholder="Any issues or observations..."
-              className="w-full border rounded-md p-2 mt-1 resize-none"
+              className="w-full border rounded-md p-2 mt-1 resize-none bg-background text-foreground"
               rows="3"
             />
           </div>

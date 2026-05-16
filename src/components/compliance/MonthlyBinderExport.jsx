@@ -130,13 +130,13 @@ export default function MonthlyBinderExport({ user, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+      <div className="bg-card text-card-foreground rounded-xl shadow-xl w-full max-w-md p-6 border border-border">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-green-700" />
             <h2 className="text-lg font-bold">Export Monthly Binder</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -145,21 +145,21 @@ export default function MonthlyBinderExport({ user, onClose }) {
           {/* Month / Year selectors */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Month</label>
+              <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">Month</label>
               <select
                 value={month}
                 onChange={e => setMonth(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                className="w-full p-2 border border-border rounded-lg text-sm bg-background text-foreground"
               >
                 {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Year</label>
+              <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">Year</label>
               <select
                 value={year}
                 onChange={e => setYear(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                className="w-full p-2 border border-border rounded-lg text-sm bg-background text-foreground"
               >
                 {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
@@ -168,11 +168,11 @@ export default function MonthlyBinderExport({ user, onClose }) {
 
           {/* Log type filter */}
           <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">Log Types</label>
+            <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">Log Types</label>
             <select
               value={logTypeFilter}
               onChange={e => setLogTypeFilter(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+              className="w-full p-2 border border-border rounded-lg text-sm bg-background text-foreground"
             >
               {LOG_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -182,7 +182,7 @@ export default function MonthlyBinderExport({ user, onClose }) {
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <p className="text-xs font-semibold text-green-800 mb-3">Records for {monthLabel}</p>
             {countLoading ? (
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading counts…
               </div>
             ) : counts ? (
@@ -208,7 +208,7 @@ export default function MonthlyBinderExport({ user, onClose }) {
             ) : null}
           </div>
 
-          <p className="text-xs text-gray-400 italic">
+          <p className="text-xs text-muted-foreground italic">
             This will export records for {monthLabel} only. Individual log exports remain available separately.
           </p>
         </div>
