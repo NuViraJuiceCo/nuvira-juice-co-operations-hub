@@ -128,15 +128,15 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
-    // ── CONCURRENCY LOCK: bail if another pull ran within last 10 minutes ──────
-    // Extended from 3 min to 10 min — at 4-hour cadence this prevents any race conditions.
+    // ── CONCURRENCY LOCK: bail if another pull ran within last 30 minutes ──────
+    // 30-min lock aligns with 4-hour schedule and prevents double-firing.
     const recentLogs = await base44.asServiceRole.entities.OrderSyncLog.filter(
       { sync_source: 'pullOrdersFromCustomerApp', event_type: 'pull_summary' },
       '-sync_timestamp', 1
     );
     if (recentLogs?.length > 0) {
       const secondsAgo = (Date.now() - new Date(recentLogs[0].sync_timestamp).getTime()) / 1000;
-      if (secondsAgo < 600) {
+      if (secondsAgo < 1800) {
         console.log(`[PULL-ORDERS] Skipping — another pull ran ${Math.round(secondsAgo)}s ago`);
         return Response.json({ status: 'skipped', reason: 'concurrency_lock', last_run_seconds_ago: Math.round(secondsAgo) });
       }
@@ -372,15 +372,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── SINGLE SUMMARY LOG ENTRY (replaces per-order spam) ────────────────────
+    // ── SINGLE SUMMARY LOG ENTRY ──────────────────────────────────────────────
+    // success=true as long as the run completed — individual order failures are
+    // tracked in stats.failed but do not mark the whole pull as failed.
+    const anyWrites = (stats.created + stats.updated) > 0;
     await base44.asServiceRole.entities.OrderSyncLog.create({
       sync_timestamp: new Date().toISOString(),
       sync_source: 'pullOrdersFromCustomerApp',
       event_type: 'pull_summary',
-      action: (stats.created + stats.updated) > 0 ? 'updated' : 'skipped',
+      action: anyWrites ? 'updated' : 'skipped',
       reason: `created=${stats.created} updated=${stats.updated} skipped_no_change=${stats.skipped_no_change} skipped_excluded=${stats.skipped_excluded} skipped_dedup=${stats.skipped_dedup} failed=${stats.failed}`,
-      success: stats.failed === 0,
-      fields_updated: [`total_processed:${stats.processed}`],
+      success: true,
+      fields_updated: [`total_processed:${stats.processed}`, `writes:${stats.created + stats.updated}`],
     });
 
     console.log(`[PULL-ORDERS] Done. created=${stats.created} updated=${stats.updated} skipped_no_change=${stats.skipped_no_change} excluded=${stats.skipped_excluded} dedup=${stats.skipped_dedup} failed=${stats.failed}`);
