@@ -15,6 +15,13 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'no_data' });
     }
 
+    // Guard: never alert on archived, resolved, dismissed, or historical noise records
+    const silentStatuses = new Set(['archived', 'resolved', 'dismissed', 'ignored', 'historical_noise']);
+    if (silentStatuses.has(item.status) || silentStatuses.has(item.queue_visibility_status)) {
+      console.log(`[QUEUE-ALERT] Skipping alert — record is ${item.status}/${item.queue_visibility_status}`);
+      return Response.json({ status: 'skipped', reason: 'archived_or_resolved' });
+    }
+
     // Get all admin users to notify
     const admins = await base44.asServiceRole.entities.User.filter({ role: 'admin' });
     const adminEmails = admins.map(u => u.email).filter(Boolean);

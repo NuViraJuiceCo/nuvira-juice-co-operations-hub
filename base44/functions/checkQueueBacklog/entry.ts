@@ -18,8 +18,12 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    const pending = await base44.asServiceRole.entities.OrderReviewQueue.filter({ status: 'pending' });
-    const count = (pending || []).length;
+    // Only count truly active pending records — never sweep archived/resolved/dismissed noise
+    const allPending = await base44.asServiceRole.entities.OrderReviewQueue.filter({ status: 'pending' });
+    const pending = (allPending || []).filter(item =>
+      !item.queue_visibility_status || item.queue_visibility_status === 'active'
+    );
+    const count = pending.length;
 
     if (count < ALERT_THRESHOLD) {
       return Response.json({ status: 'ok', pending_count: count, threshold: ALERT_THRESHOLD });
