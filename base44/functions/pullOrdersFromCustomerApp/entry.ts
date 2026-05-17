@@ -6,8 +6,6 @@ const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 const stripe = new Stripe(Deno.env.get('STRIPE_API_KEY'), { apiVersion: '2023-10-16' });
 
 // ── PRODUCTION DATE DERIVATION ───────────────────────────────────────────────
-// Derive production_date from assigned_delivery_date using Hub production rules.
-// Production occurs Tue/Fri/Sat (day before delivery, adjusted for production day).
 function deriveProductionDate(deliveryDateStr) {
   if (!deliveryDateStr) return null;
   const PRODUCTION_DAYS_DOW = { 2: true, 5: true, 6: true }; // Tue, Fri, Sat
@@ -19,17 +17,12 @@ function deriveProductionDate(deliveryDateStr) {
       return check.toISOString().split('T')[0];
     }
   }
-  // Fallback: simple day before
   const fallback = new Date(d);
   fallback.setDate(d.getDate() - 1);
   return fallback.toISOString().split('T')[0];
 }
 
 // ── STRIPE HYDRATION FALLBACK ────────────────────────────────────────────────
-// When a CA order arrives with missing address/items/delivery fields but has a
-// stripe_checkout_session_id, fetch from Stripe and hydrate the missing fields.
-// This prevents the race condition where Hub pulls the CA record before address
-// hydration completes on the CA side (root cause of NV-MOT59U9C manual recovery).
 async function hydrateFromStripe(ord) {
   const result = {};
   try {
@@ -39,19 +32,15 @@ async function hydrateFromStripe(ord) {
       expand: ['line_items', 'customer', 'payment_intent'],
     });
 
-    // Name
     const name = session.customer_details?.name || session.customer?.name;
     if (name && !ord.customer_name) result.customer_name = name;
 
-    // Email
     const email = session.customer_details?.email || session.customer?.email;
     if (email && !ord.customer_email) result.customer_email = email;
 
-    // Phone
     const phone = session.customer_details?.phone || session.customer?.phone;
     if (phone && !ord.customer_phone) result.customer_phone = phone;
 
-    // Address — hydrate if CA fields are blank
     const addr = session.customer_details?.address || session.shipping?.address;
     if (addr && !ord.address_line1) {
       result.address_line1    = addr.line1 || '';
@@ -62,35 +51,27 @@ async function hydrateFromStripe(ord) {
       result.address_country  = addr.country || 'US';
       result.address_last_synced_from = 'stripe_metadata';
       result.address_last_synced_at   = new Date().toISOString();
-      console.log(`[PULL-ORDERS] Hydrated address from Stripe for ${ord.shopify_order_number || ord.shopify_order_id}: ${addr.line1}, ${addr.city}`);
+      console.log(`[PULL-ORDERS] Hydrated address from Stripe for ${ord.shopify_order_number}: ${addr.line1}, ${addr.city}`);
     }
 
-    // Line items — hydrate if CA sent empty items
     if (session.line_items?.data?.length > 0 && (!ord.line_items || ord.line_items.length === 0)) {
       result.line_items = session.line_items.data.map(li => ({
         title: li.description || li.price?.product?.name || li.price?.nickname || 'Item',
         quantity: li.quantity || 1,
         price: (li.amount_total || 0) / 100 / (li.quantity || 1),
       }));
-      console.log(`[PULL-ORDERS] Hydrated ${result.line_items.length} line_items from Stripe for ${ord.shopify_order_number}`);
     }
 
-    // Payment status
     if (session.payment_status === 'paid' && (!ord.payment_status || ord.payment_status !== 'paid')) {
       result.payment_status = 'paid';
     }
-
-    // Total price
     if (session.amount_total && !ord.total_price) {
       result.total_price = session.amount_total / 100;
     }
-
-    // Payment intent ID
     if (session.payment_intent?.id && !ord.stripe_payment_intent_id) {
       result.stripe_payment_intent_id = session.payment_intent.id;
     }
 
-    // Delivery date — read from session metadata (CA stores it there)
     const meta = session.metadata || {};
     const deliveryDate = meta.selected_delivery_date || meta.requested_delivery_date || meta.delivery_date;
     if (deliveryDate && !ord.requested_delivery_date) {
@@ -98,29 +79,43 @@ async function hydrateFromStripe(ord) {
       result.selected_delivery_date  = deliveryDate;
       result.assigned_delivery_date  = deliveryDate;
       result.delivery_window_label   = meta.delivery_window_label || '5 PM – 8 PM';
-      // Resolve production date (day before on a valid production day)
-      const PRODUCTION_DAYS_DOW = { 2: true, 5: true, 6: true };
-      const d = new Date(deliveryDate + 'T00:00:00');
-      for (let i = 1; i <= 7; i++) {
-        const check = new Date(d);
-        check.setDate(d.getDate() - i);
-        if (PRODUCTION_DAYS_DOW[check.getDay()]) {
-          result.production_date = check.toISOString().split('T')[0];
-          break;
-        }
-      }
-      if (!result.production_date) {
-        const fallback = new Date(d);
-        fallback.setDate(d.getDate() - 1);
-        result.production_date = fallback.toISOString().split('T')[0];
-      }
-      console.log(`[PULL-ORDERS] Hydrated delivery_date=${deliveryDate} production_date=${result.production_date} from Stripe metadata`);
+      result.production_date = deriveProductionDate(deliveryDate);
     }
-
   } catch (err) {
     console.log(`[PULL-ORDERS] Stripe hydration failed for ${ord.customer_email}: ${err.message}`);
   }
   return result;
+}
+
+// ── WRITE-DIFF GUARD ─────────────────────────────────────────────────────────
+// Returns true if incoming CA order has materially changed vs the hub record.
+// Only these fields can trigger a write — all other fields are ignored.
+const DIFF_FIELDS = [
+  'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code',
+  'customer_name', 'customer_phone', 'customer_notes',
+  'payment_status', 'fulfillment_status',
+  'line_items',
+  'total_price',
+  'tags',
+];
+
+function hasMaterialChange(incoming, hubOrder) {
+  for (const field of DIFF_FIELDS) {
+    const inVal = JSON.stringify(incoming[field] ?? null);
+    const hubVal = JSON.stringify(hubOrder[field] ?? null);
+    if (field === 'total_price') {
+      // Numeric tolerance: ignore sub-cent differences
+      const diff = Math.abs((incoming[field] || 0) - (hubOrder[field] || 0));
+      if (diff > 0.01) return true;
+      continue;
+    }
+    if (field === 'line_items' || field === 'tags') {
+      if (inVal !== hubVal && incoming[field]?.length > 0) return true;
+      continue;
+    }
+    if (inVal !== hubVal && (incoming[field] ?? '') !== '') return true;
+  }
+  return false;
 }
 
 Deno.serve(async (req) => {
@@ -128,41 +123,29 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     let body = {};
     try { body = await req.json(); } catch (_) {}
-    const { date } = body;
 
     if (!CUSTOMER_APP_API || !SYNC_SECRET) {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
-    // ── CONCURRENCY LOCK: bail if another pull ran within the last 90 seconds ──
-    // This prevents race conditions when a manual click fires simultaneously with the scheduler.
+    // ── CONCURRENCY LOCK: bail if another pull ran within last 10 minutes ──────
+    // Extended from 3 min to 10 min — at 4-hour cadence this prevents any race conditions.
     const recentLogs = await base44.asServiceRole.entities.OrderSyncLog.filter(
-      { sync_source: 'pullOrdersFromCustomerApp' }, '-sync_timestamp', 1
+      { sync_source: 'pullOrdersFromCustomerApp', event_type: 'pull_summary' },
+      '-sync_timestamp', 1
     );
-    if (recentLogs && recentLogs.length > 0) {
-      const lastRun = new Date(recentLogs[0].sync_timestamp).getTime();
-      const secondsAgo = (Date.now() - lastRun) / 1000;
-      if (secondsAgo < 180) {
-        console.log(`[PULL-ORDERS] Skipping — another pull ran ${Math.round(secondsAgo)}s ago (concurrency lock)`);
+    if (recentLogs?.length > 0) {
+      const secondsAgo = (Date.now() - new Date(recentLogs[0].sync_timestamp).getTime()) / 1000;
+      if (secondsAgo < 600) {
+        console.log(`[PULL-ORDERS] Skipping — another pull ran ${Math.round(secondsAgo)}s ago`);
         return Response.json({ status: 'skipped', reason: 'concurrency_lock', last_run_seconds_ago: Math.round(secondsAgo) });
       }
     }
-    // Write a lock entry immediately so any concurrent run will see it
-    await base44.asServiceRole.entities.OrderSyncLog.create({
-      sync_timestamp: new Date().toISOString(),
-      sync_source: 'pullOrdersFromCustomerApp',
-      event_type: 'pull_start',
-      action: 'lock_acquired',
-      success: true,
-    });
 
-    // Fetch all orders from customer app
+    // ── FETCH ALL ORDERS FROM CUSTOMER APP ────────────────────────────────────
     const response = await fetch(`${CUSTOMER_APP_API}/functions/getAllOrdersForSync`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SYNC_SECRET}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${SYNC_SECRET}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: SYNC_SECRET }),
     });
 
@@ -172,24 +155,18 @@ Deno.serve(async (req) => {
     }
 
     let data;
-    try {
-      data = await response.json();
-    } catch (parseErr) {
+    try { data = await response.json(); } catch (parseErr) {
       console.error('[PULL-ORDERS] JSON parse error:', parseErr.message);
       return Response.json({ status: 'success', count: 0, results: [], warning: 'Invalid JSON response' });
     }
 
     let orders = Array.isArray(data.orders) ? data.orders : (Array.isArray(data) ? data : []);
-    
-    // Fetch subscription orders if available
-    // NOTE: getSubscriptionOrdersForSync uses CUSTOMER_APP_SYNC_SECRET (same as SYNC_SECRET here) — intentional per architecture
+
+    // Fetch subscription orders
     try {
       const subResponse = await fetch(`${CUSTOMER_APP_API}/functions/getSubscriptionOrdersForSync`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SYNC_SECRET}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Authorization': `Bearer ${SYNC_SECRET}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: SYNC_SECRET }),
       });
       if (subResponse.ok) {
@@ -202,13 +179,16 @@ Deno.serve(async (req) => {
       console.error('[PULL-ORDERS] Subscription fetch error:', err.message);
     }
 
-    // IMPORTANT: Do NOT re-add Stripe webhook orders from hub to orders list.
-    // Stripe orders already in the hub (from stripeCheckoutWebhook) should NOT be
-    // overwritten by incomplete subscription data from the customer app.
-    // Only sync orders that originate from the customer app's subscription endpoint.
-
     if (!Array.isArray(orders) || orders.length === 0) {
-      console.log(`[PULL-ORDERS] No orders found`);
+      console.log(`[PULL-ORDERS] No orders found — writing summary log and exiting`);
+      await base44.asServiceRole.entities.OrderSyncLog.create({
+        sync_timestamp: new Date().toISOString(),
+        sync_source: 'pullOrdersFromCustomerApp',
+        event_type: 'pull_summary',
+        action: 'skipped',
+        reason: 'no_orders_from_ca',
+        success: true,
+      });
       return Response.json({ status: 'success', count: 0, results: [] });
     }
 
@@ -217,164 +197,130 @@ Deno.serve(async (req) => {
     for (const ord of orders) {
       const orderId = ord.shopify_order_id || ord.id;
       if (!orderId) continue;
-      
       const existing = seenOrderIds.get(orderId);
       if (!existing || new Date(ord.created_date || 0) > new Date(existing.created_date || 0)) {
         seenOrderIds.set(orderId, ord);
       }
     }
     orders = Array.from(seenOrderIds.values());
-    console.log(`[PULL-ORDERS] Deduplicated to ${orders.length} unique orders from customer app`);
+    console.log(`[PULL-ORDERS] Processing ${orders.length} unique orders from customer app`);
 
-    // Pre-load all existing hub orders indexed by shopify_order_id — avoids per-order DB lookups in safeSyncOrderUpdate
+    // ── PRE-LOAD HUB INDEX ────────────────────────────────────────────────────
     const existingOrders = await base44.asServiceRole.entities.ShopifyOrder.list('-created_date', 500);
     const existingByOrderId = new Map();
     const existingByOrderNumber = new Map();
-    // Secondary index: email + 10-min time bucket → catches ghost duplicates with different IDs
     const existingByEmailTimeBucket = new Map();
     for (const o of existingOrders) {
       if (o.shopify_order_id) existingByOrderId.set(o.shopify_order_id, o);
       if (o.shopify_order_number) existingByOrderNumber.set(o.shopify_order_number, o);
-      // Use customer_order_date OR created_date as fallback — some old orders have null customer_order_date
       const dateForBucket = o.customer_order_date || o.created_date;
       if (o.customer_email && dateForBucket) {
-        const bucket = Math.floor(new Date(dateForBucket).getTime() / (24 * 60 * 60 * 1000)); // 24-hour bucket
+        const bucket = Math.floor(new Date(dateForBucket).getTime() / (24 * 60 * 60 * 1000));
         existingByEmailTimeBucket.set(`${o.customer_email}__${bucket}`, o);
       }
     }
-    console.log(`[PULL-ORDERS] Loaded ${existingOrders.length} existing hub orders for change detection`);
+    console.log(`[PULL-ORDERS] Loaded ${existingOrders.length} existing hub orders`);
 
-    // Upsert orders into hub ShopifyOrder entity
-    const results = [];
+    // ── PROCESS ORDERS ────────────────────────────────────────────────────────
+    const stats = { processed: 0, created: 0, updated: 0, skipped_no_change: 0, skipped_excluded: 0, skipped_dedup: 0, failed: 0 };
     const processedIds = new Set();
 
     for (let ord of orders) {
       const orderId = ord.shopify_order_id || ord.id;
+      stats.processed++;
       try {
-
-        // Skip if we've already processed this ID in this sync
         if (processedIds.has(orderId)) {
-          results.push({ order_id: orderId, action: 'skipped', reason: 'duplicate_in_batch' });
+          stats.skipped_dedup++;
           continue;
         }
         processedIds.add(orderId);
 
         let hubOrder = existingByOrderId.get(orderId);
 
-        // Secondary dedup: match by order number (catches orders where app used internal ID but hub has same order number)
-        // This is the PRIMARY protection against the customer app sending different IDs for the same order
+        // Match by order number if not found by ID
         if (!hubOrder && ord.shopify_order_number) {
           const byNumber = existingByOrderNumber.get(ord.shopify_order_number);
           if (byNumber) {
-            console.log(`[PULL-ORDERS] Matched by order number ${ord.shopify_order_number} (ID ${orderId} vs hub ${byNumber.shopify_order_id}) — treating as same order`);
+            console.log(`[PULL-ORDERS] Matched by order number ${ord.shopify_order_number}`);
             hubOrder = byNumber;
           }
         }
 
-        // Tertiary dedup: email + day bucket — ONLY for subscription orders where no Stripe session ID is present.
-        // One-time/checkout orders MUST have unique Stripe session or payment intent IDs — NEVER dedupe those by email.
-        // Same customer CAN place multiple one-time orders on the same day. Email alone is NOT an idempotency key.
-        const isOneTimeWithStripeId = (ord.stripe_checkout_session_id || ord.stripe_payment_intent_id);
+        // Ghost duplicate check for subscription orders (no Stripe session ID)
+        const isOneTimeWithStripeId = ord.stripe_checkout_session_id || ord.stripe_payment_intent_id;
         if (!hubOrder && !isOneTimeWithStripeId && ord.customer_email && (ord.created_date || ord.order_date)) {
           const orderDate = ord.created_date || ord.order_date;
           const bucket = Math.floor(new Date(orderDate).getTime() / (24 * 60 * 60 * 1000));
           const bucketMatch = existingByEmailTimeBucket.get(`${ord.customer_email}__${bucket}`);
           if (bucketMatch) {
-            console.log(`[PULL-ORDERS] Ghost duplicate (subscription) detected for ${ord.customer_email} (ID ${orderId} vs hub ${bucketMatch.shopify_order_id}) — skipping`);
-            results.push({ order_id: orderId, action: 'skipped', reason: 'ghost_duplicate_by_email_day' });
+            stats.skipped_dedup++;
             continue;
           }
         }
 
-        // ── STRIPE HYDRATION: fill missing CA fields before quality checks ──────
-        // Only trigger for one-time orders with a Stripe session ID where address is blank.
-        // Subscription orders use a different hydration path (rebuildAllSubscriptionOrders).
-        const needsHydration = ord.stripe_checkout_session_id &&
-          !ord.stripe_subscription_id &&
-          (!ord.address_line1 || !ord.line_items || ord.line_items.length === 0 || !ord.requested_delivery_date);
-
-        if (needsHydration && !hubOrder) {
-          const hydrated = await hydrateFromStripe(ord);
-          if (Object.keys(hydrated).length > 0) {
-            ord = { ...ord, ...hydrated };
-            console.log(`[PULL-ORDERS] Stripe hydration applied for ${orderId}: ${Object.keys(hydrated).join(', ')}`);
-          }
-        }
-
-        // Build customer name — try payload first, then existing hub record, then Stripe (last resort only if truly missing)
-        let customerName = ord.customer_name ||
-          (ord.first_name || ord.last_name ? `${ord.first_name || ''} ${ord.last_name || ''}`.trim() : null) ||
-          ord.full_name || null;
-
-        // Use existing hub name if we already have one — avoid Stripe API call
-        if (!customerName && hubOrder?.customer_name) {
-          customerName = hubOrder.customer_name;
-        }
-
-        // GUARDRAIL: If the hub order is already refunded/cancelled/excluded, never re-activate it
+        // ── GUARDRAIL: Skip refunded/cancelled/excluded/manual_override orders ──
         if (hubOrder) {
-          const hubIsExcluded =
+          const isExcluded =
             hubOrder.payment_status === 'refunded' ||
             hubOrder.production_status === 'canceled' ||
             hubOrder.production_status === 'cancelled' ||
             (Array.isArray(hubOrder.tags) && hubOrder.tags.includes('excluded'));
-          if (hubIsExcluded) {
-            console.log(`[PULL-ORDERS] Skipping ${hubOrder.shopify_order_number} — already marked refunded/cancelled/excluded in Hub. Will not reactivate.`);
-            results.push({ order_id: orderId, action: 'skipped', reason: 'already_excluded_in_hub' });
+          if (isExcluded) {
+            stats.skipped_excluded++;
+            continue;
+          }
+          if (hubOrder.manual_override === true) {
+            stats.skipped_excluded++;
             continue;
           }
         }
 
-        // GUARDRAIL: If the hub order has manual_override=true, skip the write entirely.
-        // An admin has manually set status fields that must not be overwritten by CA sync.
-        // Only Stripe refund/cancel events (via stripeCheckoutWebhook) can override this.
-        if (hubOrder?.manual_override === true) {
-          console.log(`[PULL-ORDERS] Skipping ${hubOrder.shopify_order_number} — manual_override=true set by ${hubOrder.manual_override_by || 'admin'}. Customer App sync will not overwrite.`);
-          results.push({ order_id: orderId, action: 'skipped', reason: 'manual_override_active' });
-          continue;
+        // ── STRIPE HYDRATION: fill missing fields for new orders ───────────────
+        const needsHydration = ord.stripe_checkout_session_id &&
+          !ord.stripe_subscription_id &&
+          (!ord.address_line1 || !ord.line_items || ord.line_items.length === 0 || !ord.requested_delivery_date);
+        if (needsHydration && !hubOrder) {
+          const hydrated = await hydrateFromStripe(ord);
+          if (Object.keys(hydrated).length > 0) {
+            ord = { ...ord, ...hydrated };
+          }
         }
 
-        // Skip write if order already exists in hub and nothing meaningful has changed
-        // CRITICAL: Do NOT include sync_status/last_sync_at in this check — they change every run
-        // and would prevent the no-change skip, causing a recalculate storm on every poll.
+        let customerName = ord.customer_name ||
+          (ord.first_name || ord.last_name ? `${ord.first_name || ''} ${ord.last_name || ''}`.trim() : null) ||
+          ord.full_name || null;
+        if (!customerName && hubOrder?.customer_name) {
+          customerName = hubOrder.customer_name;
+        }
+
+        // ── WRITE-DIFF GUARD: skip if nothing material changed ─────────────────
         if (hubOrder) {
-          const incomingAddress = ord.address_line1 || '';
-          const hubAddress = hubOrder.address_line1 || '';
-          const incomingItems = JSON.stringify(ord.line_items || ord.items || []);
-          const hubItems = JSON.stringify(hubOrder.line_items || []);
-          const incomingNotes = ord.customer_notes || ord.notes || '';
-          const hubNotes = hubOrder.customer_notes || '';
-          const incomingTotal = ord.total_price || ord.total || 0;
-          const hubTotal = hubOrder.total_price || 0;
-          const incomingPhone = ord.customer_phone || '';
-          const hubPhone = hubOrder.customer_phone || '';
-
-          const unchanged =
-            incomingAddress === hubAddress &&
-            incomingItems === hubItems &&
-            incomingNotes === hubNotes &&
-            Math.abs(incomingTotal - hubTotal) < 0.01 &&
-            incomingPhone === hubPhone &&
-            (!customerName || customerName === hubOrder.customer_name);
-
-          if (unchanged) {
-            results.push({ order_id: orderId, action: 'skipped', reason: 'no_changes' });
+          const incoming = {
+            address_line1: ord.address_line1 || '',
+            address_line2: ord.address_line2 || '',
+            address_city: ord.address_city || '',
+            address_state: ord.address_state || '',
+            address_postal_code: ord.address_postal_code || '',
+            customer_name: customerName || '',
+            customer_phone: ord.customer_phone || '',
+            customer_notes: ord.customer_notes || ord.notes || '',
+            payment_status: ord.payment_status || 'pending',
+            fulfillment_status: ord.fulfillment_status || null,
+            line_items: ord.line_items && ord.line_items.length > 0 ? ord.line_items : (ord.items || []),
+            total_price: ord.total_price || ord.total || 0,
+            tags: ord.tags || [],
+          };
+          if (!hasMaterialChange(incoming, hubOrder)) {
+            stats.skipped_no_change++;
             continue;
           }
         }
 
-        // If this is a new order (no hubOrder), use 'rebuild_subscriptions' source which
-        // allows shopify_order_id + shopify_order_number through field ownership.
-        // For updates to existing orders, use 'customer_app' source (address/notes/items only).
         const writeSource = hubOrder ? 'customer_app' : 'rebuild_subscriptions';
-
-        // When matched by order number to a different hub record, use internal_id so safeSyncOrderUpdate
-        // finds and updates the CORRECT existing record instead of creating a new one.
         const matchBy = hubOrder && hubOrder.shopify_order_id !== orderId
           ? { internal_id: hubOrder.id }
           : { shopify_order_id: orderId };
 
-        // Route ALL writes through safeSyncOrderUpdate — it enforces all protections
         const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
           incomingData: {
             shopify_order_id: orderId,
@@ -388,7 +334,6 @@ Deno.serve(async (req) => {
             requested_delivery_date: ord.requested_delivery_date || ord.delivery_date || '',
             selected_delivery_date: ord.selected_delivery_date || null,
             assigned_delivery_date: ord.assigned_delivery_date || null,
-            // Derive production_date from assigned_delivery_date if not provided
             production_date: ord.production_date || (ord.assigned_delivery_date ? deriveProductionDate(ord.assigned_delivery_date) : null) || (ord.selected_delivery_date ? deriveProductionDate(ord.selected_delivery_date) : null),
             delivery_window_label: ord.delivery_window_label || null,
             payment_status: ord.payment_status || 'pending',
@@ -417,19 +362,34 @@ Deno.serve(async (req) => {
         });
 
         const action = safeResult?.data?.action || 'unknown';
-        results.push({ order_id: orderId, action, reason: safeResult?.data?.status });
-        } catch (err) {
+        if (action === 'created') stats.created++;
+        else if (action === 'updated') stats.updated++;
+        else stats.skipped_no_change++;
+
+      } catch (err) {
         console.error(`[PULL-ORDERS] Failed to sync order ${orderId}:`, err.message);
-        results.push({
-         order_id: orderId,
-         action: 'failed',
-         error: err.message,
-        });
-        }
+        stats.failed++;
+      }
     }
 
-    console.log(`[PULL-ORDERS] Synced ${results.length} orders from customer app`);
-    return Response.json({ status: 'success', count: results.length, results });
+    // ── SINGLE SUMMARY LOG ENTRY (replaces per-order spam) ────────────────────
+    await base44.asServiceRole.entities.OrderSyncLog.create({
+      sync_timestamp: new Date().toISOString(),
+      sync_source: 'pullOrdersFromCustomerApp',
+      event_type: 'pull_summary',
+      action: (stats.created + stats.updated) > 0 ? 'updated' : 'skipped',
+      reason: `created=${stats.created} updated=${stats.updated} skipped_no_change=${stats.skipped_no_change} skipped_excluded=${stats.skipped_excluded} skipped_dedup=${stats.skipped_dedup} failed=${stats.failed}`,
+      success: stats.failed === 0,
+      fields_updated: [`total_processed:${stats.processed}`],
+    });
+
+    console.log(`[PULL-ORDERS] Done. created=${stats.created} updated=${stats.updated} skipped_no_change=${stats.skipped_no_change} excluded=${stats.skipped_excluded} dedup=${stats.skipped_dedup} failed=${stats.failed}`);
+    return Response.json({
+      status: 'success',
+      count: stats.processed,
+      stats,
+    });
+
   } catch (error) {
     console.error('[PULL-ORDERS] Error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
