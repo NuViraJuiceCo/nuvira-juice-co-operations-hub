@@ -161,29 +161,56 @@ function hasMaterialChange(incoming, hubOrder) {
   return changedFields.length > 0;
 }
 
+// ── HARD 4-HOUR CADENCE LOCK (module-level, shared across invocations) ────────
+// This in-memory timestamp survives as long as the isolate is warm.
+// Combined with the DB check below it provides defense-in-depth.
+let _lastSuccessfulRunAt = 0;
+
+const HARD_LOCK_SECONDS = 14400; // 4 hours — no caller can bypass this
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     let body = {};
     try { body = await req.json(); } catch (_) {}
 
-    if (!CUSTOMER_APP_API || !SYNC_SECRET) {
-      return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
+    // ── HARD CADENCE LOCK — executes before ANY reads/writes/API calls ────────
+    // Step 1: In-memory check (free, zero credits)
+    const nowMs = Date.now();
+    const secondsSinceMemoryLock = (nowMs - _lastSuccessfulRunAt) / 1000;
+    if (_lastSuccessfulRunAt > 0 && secondsSinceMemoryLock < HARD_LOCK_SECONDS) {
+      console.log(`[PULL-ORDERS] HARD LOCK (memory): last run ${Math.round(secondsSinceMemoryLock)}s ago — skipping`);
+      return Response.json({
+        status: 'skipped',
+        reason: 'cadence_lock',
+        skipped_due_to_cadence_lock: true,
+        last_run_seconds_ago: Math.round(secondsSinceMemoryLock),
+        lock_seconds: HARD_LOCK_SECONDS,
+      });
     }
 
-    // ── CONCURRENCY LOCK: bail if another pull ran within last 3.5 hours ──────
-    // 3.5-hour lock (12600s) = hard defense against scheduler drift at 4-hour cadence.
-    // If the scheduler fires early or a second instance starts, this blocks it.
+    // Step 2: DB check — authoritative cross-isolate lock (one cheap read)
     const recentLogs = await base44.asServiceRole.entities.OrderSyncLog.filter(
-      { sync_source: 'pullOrdersFromCustomerApp', event_type: 'pull_summary' },
+      { sync_source: 'pullOrdersFromCustomerApp', event_type: 'pull_summary', success: true },
       '-sync_timestamp', 1
     );
     if (recentLogs?.length > 0) {
-      const secondsAgo = (Date.now() - new Date(recentLogs[0].sync_timestamp).getTime()) / 1000;
-      if (secondsAgo < 12600) {
-        console.log(`[PULL-ORDERS] Skipping — another pull ran ${Math.round(secondsAgo)}s ago (lock: 12600s)`);
-        return Response.json({ status: 'skipped', reason: 'concurrency_lock', last_run_seconds_ago: Math.round(secondsAgo) });
+      const secondsAgo = (nowMs - new Date(recentLogs[0].sync_timestamp).getTime()) / 1000;
+      if (secondsAgo < HARD_LOCK_SECONDS) {
+        console.log(`[PULL-ORDERS] HARD LOCK (DB): last successful run ${Math.round(secondsAgo)}s ago — skipping`);
+        return Response.json({
+          status: 'skipped',
+          reason: 'cadence_lock',
+          skipped_due_to_cadence_lock: true,
+          last_run_seconds_ago: Math.round(secondsAgo),
+          lock_seconds: HARD_LOCK_SECONDS,
+        });
       }
+    }
+    // ── END HARD LOCK ─────────────────────────────────────────────────────────
+
+    if (!CUSTOMER_APP_API || !SYNC_SECRET) {
+      return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
     // ── FETCH ALL ORDERS FROM CUSTOMER APP ────────────────────────────────────
@@ -439,8 +466,9 @@ Deno.serve(async (req) => {
     }
 
     // ── SINGLE SUMMARY LOG ENTRY ──────────────────────────────────────────────
-    // success=true as long as the run completed — individual order failures are
-    // tracked in stats.failed but do not mark the whole pull as failed.
+    // Write the summary log ONLY after completing real work.
+    // success=true is required — the DB lock query filters on success:true to find
+    // the last genuine run timestamp and skip blocked calls.
     const anyWrites = (stats.created + stats.updated) > 0;
     await base44.asServiceRole.entities.OrderSyncLog.create({
       sync_timestamp: new Date().toISOString(),
@@ -451,6 +479,9 @@ Deno.serve(async (req) => {
       success: true,
       fields_updated: [`total_processed:${stats.processed}`, `writes:${stats.created + stats.updated}`],
     });
+
+    // Update the in-memory lock so warm isolates skip immediately without a DB read
+    _lastSuccessfulRunAt = Date.now();
 
     console.log(`[PULL-ORDERS] Done. created=${stats.created} updated=${stats.updated} skipped_no_change=${stats.skipped_no_change} excluded=${stats.skipped_excluded} dedup=${stats.skipped_dedup} failed=${stats.failed}`);
     return Response.json({
