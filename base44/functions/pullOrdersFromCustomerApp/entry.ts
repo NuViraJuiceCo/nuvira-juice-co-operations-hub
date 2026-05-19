@@ -88,8 +88,9 @@ async function hydrateFromStripe(ord) {
 }
 
 // ── WRITE-DIFF GUARD ─────────────────────────────────────────────────────────
-// Returns true if incoming CA order has materially changed vs the hub record.
-// Only these fields can trigger a write — all other fields are ignored.
+// Returns true ONLY if a material field genuinely changed.
+// Normalizes null/undefined/empty-string, trims strings, sorts arrays,
+// and uses numeric tolerance for prices — eliminating phantom writes.
 const DIFF_FIELDS = [
   'address_line1', 'address_line2', 'address_city', 'address_state', 'address_postal_code',
   'customer_name', 'customer_phone', 'customer_notes',
@@ -99,23 +100,65 @@ const DIFF_FIELDS = [
   'tags',
 ];
 
-function hasMaterialChange(incoming, hubOrder) {
-  for (const field of DIFF_FIELDS) {
-    const inVal = JSON.stringify(incoming[field] ?? null);
-    const hubVal = JSON.stringify(hubOrder[field] ?? null);
-    if (field === 'total_price') {
-      // Numeric tolerance: ignore sub-cent differences
-      const diff = Math.abs((incoming[field] || 0) - (hubOrder[field] || 0));
-      if (diff > 0.01) return true;
-      continue;
-    }
-    if (field === 'line_items' || field === 'tags') {
-      if (inVal !== hubVal && incoming[field]?.length > 0) return true;
-      continue;
-    }
-    if (inVal !== hubVal && (incoming[field] ?? '') !== '') return true;
+// Normalize a value to a canonical comparable form
+function normalizeVal(field, val) {
+  // Treat null, undefined, and empty string as equivalent
+  if (val === null || val === undefined || val === '') return '';
+
+  if (field === 'total_price') {
+    return parseFloat(val) || 0;
   }
-  return false;
+
+  if (field === 'tags') {
+    if (!Array.isArray(val) || val.length === 0) return '';
+    return [...val].sort().join('|');
+  }
+
+  if (field === 'line_items') {
+    if (!Array.isArray(val) || val.length === 0) return '';
+    // Stable hash: sort by title, then serialize title+quantity only (ignore price drift)
+    return [...val]
+      .sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+      .map(i => `${(i.title || '').toLowerCase().trim()}:${i.quantity || 0}`)
+      .join('|');
+  }
+
+  // String fields: trim whitespace, lowercase for address comparisons
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    // Address fields: normalize case to prevent "123 Main St" vs "123 main st" false writes
+    if (['address_line1','address_line2','address_city','address_state','address_postal_code'].includes(field)) {
+      return trimmed.toLowerCase();
+    }
+    return trimmed;
+  }
+
+  return val;
+}
+
+function hasMaterialChange(incoming, hubOrder) {
+  const changedFields = [];
+  for (const field of DIFF_FIELDS) {
+    const inNorm = normalizeVal(field, incoming[field]);
+    const hubNorm = normalizeVal(field, hubOrder[field]);
+
+    if (field === 'total_price') {
+      if (Math.abs((inNorm || 0) - (hubNorm || 0)) > 0.01) {
+        changedFields.push(field);
+      }
+      continue;
+    }
+
+    // Only flag a change if incoming actually has a non-empty value
+    // (don't treat "CA sends empty" as a change from "Hub has value")
+    if (inNorm !== '' && inNorm !== hubNorm) {
+      changedFields.push(field);
+    }
+  }
+  if (changedFields.length > 0) {
+    console.log(`[PULL-ORDERS] Material change detected: ${changedFields.join(', ')}`);
+  }
+  return changedFields.length > 0;
 }
 
 Deno.serve(async (req) => {
@@ -128,16 +171,17 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
     }
 
-    // ── CONCURRENCY LOCK: bail if another pull ran within last 30 minutes ──────
-    // 30-min lock aligns with 4-hour schedule and prevents double-firing.
+    // ── CONCURRENCY LOCK: bail if another pull ran within last 3.5 hours ──────
+    // 3.5-hour lock (12600s) = hard defense against scheduler drift at 4-hour cadence.
+    // If the scheduler fires early or a second instance starts, this blocks it.
     const recentLogs = await base44.asServiceRole.entities.OrderSyncLog.filter(
       { sync_source: 'pullOrdersFromCustomerApp', event_type: 'pull_summary' },
       '-sync_timestamp', 1
     );
     if (recentLogs?.length > 0) {
       const secondsAgo = (Date.now() - new Date(recentLogs[0].sync_timestamp).getTime()) / 1000;
-      if (secondsAgo < 1800) {
-        console.log(`[PULL-ORDERS] Skipping — another pull ran ${Math.round(secondsAgo)}s ago`);
+      if (secondsAgo < 12600) {
+        console.log(`[PULL-ORDERS] Skipping — another pull ran ${Math.round(secondsAgo)}s ago (lock: 12600s)`);
         return Response.json({ status: 'skipped', reason: 'concurrency_lock', last_run_seconds_ago: Math.round(secondsAgo) });
       }
     }
@@ -224,6 +268,10 @@ Deno.serve(async (req) => {
     // ── PROCESS ORDERS ────────────────────────────────────────────────────────
     const stats = { processed: 0, created: 0, updated: 0, skipped_no_change: 0, skipped_excluded: 0, skipped_dedup: 0, failed: 0 };
     const processedIds = new Set();
+    // Safety cap: never create more than 3 new OrderReviewQueue records per pull run.
+    // Prevents a data anomaly from flooding the queue with duplicates.
+    let queueCreationsThisRun = 0;
+    const MAX_QUEUE_CREATIONS_PER_RUN = 3;
 
     for (let ord of orders) {
       const orderId = ord.shopify_order_id || ord.id;
@@ -321,6 +369,15 @@ Deno.serve(async (req) => {
           ? { internal_id: hubOrder.id }
           : { shopify_order_id: orderId };
 
+        // ── QUEUE CAP GUARD: for new orders only, check queue cap ─────────────
+        // If we've already created MAX_QUEUE_CREATIONS_PER_RUN new queue entries
+        // this run, skip creating new orders (they'd likely be quarantined anyway).
+        if (!hubOrder && queueCreationsThisRun >= MAX_QUEUE_CREATIONS_PER_RUN) {
+          console.log(`[PULL-ORDERS] Queue cap reached (${MAX_QUEUE_CREATIONS_PER_RUN}) — skipping new-order creation for ${orderId}`);
+          stats.skipped_no_change++;
+          continue;
+        }
+
         const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
           incomingData: {
             shopify_order_id: orderId,
@@ -362,9 +419,18 @@ Deno.serve(async (req) => {
         });
 
         const action = safeResult?.data?.action || 'unknown';
-        if (action === 'created') stats.created++;
-        else if (action === 'updated') stats.updated++;
-        else stats.skipped_no_change++;
+        const safeStatus = safeResult?.data?.status || 'unknown';
+        if (action === 'created') {
+          stats.created++;
+        } else if (action === 'updated') {
+          stats.updated++;
+        } else if (safeStatus === 'rejected') {
+          // Rejected = likely quarantined to OrderReviewQueue
+          queueCreationsThisRun++;
+          stats.skipped_no_change++;
+        } else {
+          stats.skipped_no_change++;
+        }
 
       } catch (err) {
         console.error(`[PULL-ORDERS] Failed to sync order ${orderId}:`, err.message);
@@ -381,7 +447,7 @@ Deno.serve(async (req) => {
       sync_source: 'pullOrdersFromCustomerApp',
       event_type: 'pull_summary',
       action: anyWrites ? 'updated' : 'skipped',
-      reason: `created=${stats.created} updated=${stats.updated} skipped_no_change=${stats.skipped_no_change} skipped_excluded=${stats.skipped_excluded} skipped_dedup=${stats.skipped_dedup} failed=${stats.failed}`,
+      reason: `created=${stats.created} updated=${stats.updated} skipped_no_change=${stats.skipped_no_change} skipped_excluded=${stats.skipped_excluded} skipped_dedup=${stats.skipped_dedup} failed=${stats.failed} queue_created=${queueCreationsThisRun}`,
       success: true,
       fields_updated: [`total_processed:${stats.processed}`, `writes:${stats.created + stats.updated}`],
     });
