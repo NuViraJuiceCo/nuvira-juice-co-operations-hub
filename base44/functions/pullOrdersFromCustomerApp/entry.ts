@@ -185,10 +185,11 @@ Deno.serve(async (req) => {
     } else {
       // ── HARD CADENCE LOCK — executes before ANY reads/writes/API calls ────────
       // Step 1: In-memory check (free, zero credits)
+      // _lastSuccessfulRunAt is only set by natural scheduled runs, not manual force pulls.
       const nowMs = Date.now();
       const secondsSinceMemoryLock = (nowMs - _lastSuccessfulRunAt) / 1000;
       if (_lastSuccessfulRunAt > 0 && secondsSinceMemoryLock < HARD_LOCK_SECONDS) {
-        console.log(`[PULL-ORDERS] HARD LOCK (memory): last run ${Math.round(secondsSinceMemoryLock)}s ago — skipping`);
+        console.log(`[PULL-ORDERS] HARD LOCK (memory): last scheduled run ${Math.round(secondsSinceMemoryLock)}s ago — skipping`);
         return Response.json({
           status: 'skipped',
           reason: 'cadence_lock',
@@ -199,15 +200,17 @@ Deno.serve(async (req) => {
       }
 
       // Step 2: DB check — authoritative cross-isolate lock (one cheap read)
+      // IMPORTANT: Only look at SCHEDULED runs (event_type='pull_summary_scheduled'), NOT manual/forced runs.
+      // Manual force pulls must NOT reset the scheduled cadence clock.
       const nowMs2 = Date.now();
       const recentLogs = await base44.asServiceRole.entities.OrderSyncLog.filter(
-        { sync_source: 'pullOrdersFromCustomerApp', event_type: 'pull_summary', success: true },
+        { sync_source: 'pullOrdersFromCustomerApp', event_type: 'pull_summary_scheduled', success: true },
         '-sync_timestamp', 1
       );
       if (recentLogs?.length > 0) {
         const secondsAgo = (nowMs2 - new Date(recentLogs[0].sync_timestamp).getTime()) / 1000;
         if (secondsAgo < HARD_LOCK_SECONDS) {
-          console.log(`[PULL-ORDERS] HARD LOCK (DB): last successful run ${Math.round(secondsAgo)}s ago — skipping`);
+          console.log(`[PULL-ORDERS] HARD LOCK (DB): last scheduled run ${Math.round(secondsAgo)}s ago — skipping`);
           return Response.json({
             status: 'skipped',
             reason: 'cadence_lock',
@@ -539,22 +542,25 @@ Deno.serve(async (req) => {
     }
 
     // ── SINGLE SUMMARY LOG ENTRY ──────────────────────────────────────────────
-    // Write the summary log ONLY after completing real work.
-    // success=true is required — the DB lock query filters on success:true to find
-    // the last genuine run timestamp and skip blocked calls.
+    // Write event_type='pull_summary_scheduled' for natural runs — this is what the DB lock queries.
+    // Write event_type='pull_summary_manual' for forced runs — these do NOT reset the cadence clock.
+    // This separation ensures manual validation pulls don't delay the next natural scheduled pull.
     const anyWrites = (stats.created + stats.updated) > 0;
+    const summaryEventType = isForced ? 'pull_summary_manual' : 'pull_summary_scheduled';
     await base44.asServiceRole.entities.OrderSyncLog.create({
       sync_timestamp: new Date().toISOString(),
       sync_source: 'pullOrdersFromCustomerApp',
-      event_type: 'pull_summary',
+      event_type: summaryEventType,
       action: anyWrites ? 'updated' : 'skipped',
       reason: `created=${stats.created} updated=${stats.updated} skipped_no_change=${stats.skipped_no_change} skipped_excluded=${stats.skipped_excluded} skipped_dedup=${stats.skipped_dedup} failed=${stats.failed} queue_created=${queueCreationsThisRun}`,
       success: true,
       fields_updated: [`total_processed:${stats.processed}`, `writes:${stats.created + stats.updated}`],
     });
 
-    // Update the in-memory lock so warm isolates skip immediately without a DB read
-    _lastSuccessfulRunAt = Date.now();
+    // Only update in-memory lock for natural scheduled runs — manual force pulls don't reset it
+    if (!isForced) {
+      _lastSuccessfulRunAt = Date.now();
+    }
 
     console.log(`[PULL-ORDERS] Done. created=${stats.created} updated=${stats.updated} skipped_no_change=${stats.skipped_no_change} excluded=${stats.skipped_excluded} dedup=${stats.skipped_dedup} failed=${stats.failed}`);
     return Response.json({
