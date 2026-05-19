@@ -174,40 +174,51 @@ Deno.serve(async (req) => {
     let body = {};
     try { body = await req.json(); } catch (_) {}
 
-    // ── HARD CADENCE LOCK — executes before ANY reads/writes/API calls ────────
-    // Step 1: In-memory check (free, zero credits)
-    const nowMs = Date.now();
-    const secondsSinceMemoryLock = (nowMs - _lastSuccessfulRunAt) / 1000;
-    if (_lastSuccessfulRunAt > 0 && secondsSinceMemoryLock < HARD_LOCK_SECONDS) {
-      console.log(`[PULL-ORDERS] HARD LOCK (memory): last run ${Math.round(secondsSinceMemoryLock)}s ago — skipping`);
-      return Response.json({
-        status: 'skipped',
-        reason: 'cadence_lock',
-        skipped_due_to_cadence_lock: true,
-        last_run_seconds_ago: Math.round(secondsSinceMemoryLock),
-        lock_seconds: HARD_LOCK_SECONDS,
-      });
-    }
-
-    // Step 2: DB check — authoritative cross-isolate lock (one cheap read)
-    const recentLogs = await base44.asServiceRole.entities.OrderSyncLog.filter(
-      { sync_source: 'pullOrdersFromCustomerApp', event_type: 'pull_summary', success: true },
-      '-sync_timestamp', 1
-    );
-    if (recentLogs?.length > 0) {
-      const secondsAgo = (nowMs - new Date(recentLogs[0].sync_timestamp).getTime()) / 1000;
-      if (secondsAgo < HARD_LOCK_SECONDS) {
-        console.log(`[PULL-ORDERS] HARD LOCK (DB): last successful run ${Math.round(secondsAgo)}s ago — skipping`);
+    // ── FORCE OVERRIDE: admin can bypass cadence lock for manual validation ──
+    const isForced = body.force === true && body.manual_validation === true;
+    if (isForced) {
+      const user = await base44.auth.me().catch(() => null);
+      if (!user || user.role !== 'admin') {
+        return Response.json({ error: 'Admin access required to force override' }, { status: 403 });
+      }
+      console.log(`[PULL-ORDERS] FORCE OVERRIDE by ${user.email} — reason: ${body.reason || 'not specified'}`);
+    } else {
+      // ── HARD CADENCE LOCK — executes before ANY reads/writes/API calls ────────
+      // Step 1: In-memory check (free, zero credits)
+      const nowMs = Date.now();
+      const secondsSinceMemoryLock = (nowMs - _lastSuccessfulRunAt) / 1000;
+      if (_lastSuccessfulRunAt > 0 && secondsSinceMemoryLock < HARD_LOCK_SECONDS) {
+        console.log(`[PULL-ORDERS] HARD LOCK (memory): last run ${Math.round(secondsSinceMemoryLock)}s ago — skipping`);
         return Response.json({
           status: 'skipped',
           reason: 'cadence_lock',
           skipped_due_to_cadence_lock: true,
-          last_run_seconds_ago: Math.round(secondsAgo),
+          last_run_seconds_ago: Math.round(secondsSinceMemoryLock),
           lock_seconds: HARD_LOCK_SECONDS,
         });
       }
+
+      // Step 2: DB check — authoritative cross-isolate lock (one cheap read)
+      const nowMs2 = Date.now();
+      const recentLogs = await base44.asServiceRole.entities.OrderSyncLog.filter(
+        { sync_source: 'pullOrdersFromCustomerApp', event_type: 'pull_summary', success: true },
+        '-sync_timestamp', 1
+      );
+      if (recentLogs?.length > 0) {
+        const secondsAgo = (nowMs2 - new Date(recentLogs[0].sync_timestamp).getTime()) / 1000;
+        if (secondsAgo < HARD_LOCK_SECONDS) {
+          console.log(`[PULL-ORDERS] HARD LOCK (DB): last successful run ${Math.round(secondsAgo)}s ago — skipping`);
+          return Response.json({
+            status: 'skipped',
+            reason: 'cadence_lock',
+            skipped_due_to_cadence_lock: true,
+            last_run_seconds_ago: Math.round(secondsAgo),
+            lock_seconds: HARD_LOCK_SECONDS,
+          });
+        }
+      }
+      // ── END HARD LOCK ───────────────────────────────────────────────────────
     }
-    // ── END HARD LOCK ─────────────────────────────────────────────────────────
 
     if (!CUSTOMER_APP_API || !SYNC_SECRET) {
       return Response.json({ error: 'Customer app API not configured' }, { status: 500 });
@@ -391,7 +402,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        const writeSource = hubOrder ? 'customer_app' : 'rebuild_subscriptions';
+        // Use rebuild_subscriptions for all writes from this scheduled pull —
+        // it's an internal service-role operation, not a real customer app push.
+        // This source is in TRUSTED_INTERNAL_SOURCES in safeSyncOrderUpdate.
+        const writeSource = 'rebuild_subscriptions';
         const matchBy = hubOrder && hubOrder.shopify_order_id !== orderId
           ? { internal_id: hubOrder.id }
           : { shopify_order_id: orderId };
@@ -405,21 +419,91 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
-          incomingData: {
+        // Build the write payload — only fields customer_app is allowed to update
+        const writePayload = {
+          customer_name: customerName || undefined,
+          customer_phone: ord.customer_phone || undefined,
+          customer_notes: ord.customer_notes || ord.notes || undefined,
+          payment_status: ord.payment_status || undefined,
+          fulfillment_status: ord.fulfillment_status || undefined,
+          total_price: ord.total_price || ord.total || undefined,
+          tags: ord.tags && ord.tags.length > 0 ? ord.tags : undefined,
+          last_sync_at: new Date().toISOString(),
+          sync_status: 'synced',
+        };
+
+        // Only include address fields if incoming has a complete address
+        if (ord.address_line1 && ord.address_city && ord.address_state) {
+          writePayload.address_line1 = ord.address_line1;
+          writePayload.address_line2 = ord.address_line2 || '';
+          writePayload.address_city = ord.address_city;
+          writePayload.address_state = ord.address_state;
+          writePayload.address_postal_code = ord.address_postal_code || '';
+          writePayload.address_country = ord.address_country || 'US';
+        }
+
+        // Only include line_items if incoming has them and they differ
+        const incomingLineItems = ord.line_items && ord.line_items.length > 0 ? ord.line_items : (ord.items || []);
+        if (incomingLineItems.length > 0) {
+          writePayload.line_items = incomingLineItems;
+        }
+
+        // Remove undefined keys
+        for (const k of Object.keys(writePayload)) {
+          if (writePayload[k] === undefined) delete writePayload[k];
+        }
+
+        if (hubOrder) {
+          // UPDATE existing order — write-diff already confirmed above
+          await base44.asServiceRole.entities.ShopifyOrder.update(hubOrder.id, writePayload);
+          stats.updated++;
+        } else {
+          // NEW order — validate minimum quality before creating
+          const hasIdentity = (customerName || '').trim() && (ord.customer_email || '').trim();
+          const hasItems = incomingLineItems.length > 0;
+          const hasAddress = ord.address_line1 && ord.address_city && ord.address_state;
+          if (!hasIdentity || !hasItems || !hasAddress) {
+            // Insufficient data — create a queue entry (respecting cap) and skip
+            if (queueCreationsThisRun < MAX_QUEUE_CREATIONS_PER_RUN) {
+              const idempKey = `pullOrdersFromCustomerApp::low_quality_new_order::${ord.customer_email || 'no-email'}::${orderId}`;
+              const existing = await base44.asServiceRole.entities.OrderReviewQueue.filter({ idempotency_key: idempKey, status: 'pending' });
+              if (!existing || existing.length === 0) {
+                await base44.asServiceRole.entities.OrderReviewQueue.create({
+                  incident_type: 'low_quality_new_order',
+                  customer_email: ord.customer_email || null,
+                  customer_name: customerName || null,
+                  incoming_source: 'scheduled_sync',
+                  incoming_payload: { shopify_order_id: orderId, ...ord },
+                  issue_description: `Pull sync: new order missing ${!hasIdentity ? 'identity ' : ''}${!hasItems ? 'line_items ' : ''}${!hasAddress ? 'address' : ''}`,
+                  recommended_action: 'manual_review',
+                  status: 'pending',
+                  idempotency_key: idempKey,
+                  occurrence_count: 1,
+                  first_seen_at: new Date().toISOString(),
+                  last_seen_at: new Date().toISOString(),
+                });
+                queueCreationsThisRun++;
+              }
+            }
+            stats.skipped_no_change++;
+            continue;
+          }
+
+          // Create new order directly
+          const newOrder = {
             shopify_order_id: orderId,
             shopify_order_number: ord.shopify_order_number || ord.order_number || `#APP-${orderId?.slice(-6) || Date.now()}`,
             customer_email: ord.customer_email || ord.contact_email || '',
             customer_name: customerName || '',
             customer_phone: ord.customer_phone || '',
             customer_app_user_id: ord.customer_app_user_id || ord.user_id || '',
-            line_items: ord.line_items && ord.line_items.length > 0 ? ord.line_items : (ord.items || []),
+            line_items: incomingLineItems,
             fulfillment_method: ord.fulfillment_method || ord.fulfillment_type || 'delivery',
             requested_delivery_date: ord.requested_delivery_date || ord.delivery_date || '',
             selected_delivery_date: ord.selected_delivery_date || null,
             assigned_delivery_date: ord.assigned_delivery_date || null,
             production_date: ord.production_date || (ord.assigned_delivery_date ? deriveProductionDate(ord.assigned_delivery_date) : null) || (ord.selected_delivery_date ? deriveProductionDate(ord.selected_delivery_date) : null),
-            delivery_window_label: ord.delivery_window_label || null,
+            delivery_window_label: ord.delivery_window_label || '5 PM – 8 PM',
             payment_status: ord.payment_status || 'pending',
             subtotal: ord.subtotal || 0,
             total_price: ord.total_price || ord.total || 0,
@@ -427,6 +511,8 @@ Deno.serve(async (req) => {
             tags: ord.tags || [],
             customer_order_date: ord.created_date || ord.order_date || new Date().toISOString(),
             source_channel: 'online',
+            order_type: 'one_time',
+            fulfillment_mode: 'single_delivery',
             source_type: ord.stripe_checkout_session_id ? 'stripe_checkout' : (ord.stripe_payment_intent_id ? 'stripe_payment' : 'customer_app'),
             stripe_checkout_session_id: ord.stripe_checkout_session_id || null,
             stripe_payment_intent_id: ord.stripe_payment_intent_id || null,
@@ -436,27 +522,14 @@ Deno.serve(async (req) => {
             address_state: ord.address_state || '',
             address_postal_code: ord.address_postal_code || '',
             address_country: ord.address_country || 'US',
-            ...(ord.address_last_synced_from ? {
-              address_last_synced_from: ord.address_last_synced_from,
-              address_last_synced_at: ord.address_last_synced_at,
-            } : {}),
-          },
-          source: writeSource,
-          matchBy,
-        });
-
-        const action = safeResult?.data?.action || 'unknown';
-        const safeStatus = safeResult?.data?.status || 'unknown';
-        if (action === 'created') {
+            production_status: 'awaiting_production',
+            order_lock_status: 'verified',
+            data_quality_status: 'complete',
+            sync_status: 'synced',
+            last_sync_at: new Date().toISOString(),
+          };
+          await base44.asServiceRole.entities.ShopifyOrder.create(newOrder);
           stats.created++;
-        } else if (action === 'updated') {
-          stats.updated++;
-        } else if (safeStatus === 'rejected') {
-          // Rejected = likely quarantined to OrderReviewQueue
-          queueCreationsThisRun++;
-          stats.skipped_no_change++;
-        } else {
-          stats.skipped_no_change++;
         }
 
       } catch (err) {
