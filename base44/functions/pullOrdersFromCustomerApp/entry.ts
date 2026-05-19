@@ -269,11 +269,12 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.OrderSyncLog.create({
         sync_timestamp: new Date().toISOString(),
         sync_source: 'pullOrdersFromCustomerApp',
-        event_type: 'pull_summary',
+        event_type: isForced ? 'pull_summary_manual' : 'pull_summary_scheduled',
         action: 'skipped',
         reason: 'no_orders_from_ca',
         success: true,
       });
+      if (!isForced) _lastSuccessfulRunAt = Date.now();
       return Response.json({ status: 'success', count: 0, results: [] });
     }
 
@@ -404,14 +405,6 @@ Deno.serve(async (req) => {
             continue;
           }
         }
-
-        // Use rebuild_subscriptions for all writes from this scheduled pull —
-        // it's an internal service-role operation, not a real customer app push.
-        // This source is in TRUSTED_INTERNAL_SOURCES in safeSyncOrderUpdate.
-        const writeSource = 'rebuild_subscriptions';
-        const matchBy = hubOrder && hubOrder.shopify_order_id !== orderId
-          ? { internal_id: hubOrder.id }
-          : { shopify_order_id: orderId };
 
         // ── QUEUE CAP GUARD: for new orders only, check queue cap ─────────────
         // If we've already created MAX_QUEUE_CREATIONS_PER_RUN new queue entries
