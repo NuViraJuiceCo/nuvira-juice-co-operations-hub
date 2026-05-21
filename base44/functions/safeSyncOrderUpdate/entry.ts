@@ -55,7 +55,7 @@ const FIELD_OWNERSHIP = {
     'address_postal_code', 'address_country', 'customer_notes',
     'requested_delivery_date', 'selected_delivery_date', 'assigned_delivery_date',
     'production_date', 'delivery_window_label', 'delivery_notes', 'fulfillment_method',
-    'line_items', 'total_price', 'subtotal', 'tags', 'sync_status', 'last_sync_at',
+    'line_items', 'total_price', 'subtotal', 'delivery_fee', 'tags', 'sync_status', 'last_sync_at',
     'shopify_order_number', 'payment_status', 'stripe_checkout_session_id', 'stripe_payment_intent_id',
     'stripe_customer_id', 'source_channel', 'source_type', 'order_type', 'fulfillment_mode',
     'customer_order_date', 'production_status', 'data_quality_status',
@@ -584,7 +584,7 @@ Deno.serve(async (req) => {
 
     // ── STEP 8: PRESERVE CRITICAL EXISTING FIELDS IF INCOMING IS EMPTY ──────
      if (existingOrder) {
-       const preserveIfEmpty = ['customer_name', 'customer_phone', 'fulfillments', 'internal_notes', 'assigned_delivery_date', 'production_date', 'selected_delivery_date', 'delivery_window_label', 'production_status', 'order_lock_status', 'total_price', 'subtotal', 'manual_override', 'manual_override_at', 'manual_override_by', 'audit_trail'];
+       const preserveIfEmpty = ['customer_name', 'customer_phone', 'fulfillments', 'internal_notes', 'assigned_delivery_date', 'production_date', 'selected_delivery_date', 'delivery_window_label', 'production_status', 'order_lock_status', 'total_price', 'subtotal', 'delivery_fee', 'manual_override', 'manual_override_at', 'manual_override_by', 'audit_trail'];
        for (const field of preserveIfEmpty) {
          const incomingVal = incomingData[field];
          const existingVal = existingOrder[field];

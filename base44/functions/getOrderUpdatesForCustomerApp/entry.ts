@@ -66,6 +66,8 @@ Deno.serve(async (req) => {
         delivery_photo_url: order.delivery_photo_url || null,
         delivery_drop_location: order.delivery_drop_location || null,
         total: order.total_price,
+        subtotal: order.subtotal || 0,
+        delivery_fee: order.delivery_fee || 0,
         fulfillment_type: order.fulfillment_method,
         estimated_delivery_date: order.assigned_delivery_date,
         assigned_delivery_date: order.assigned_delivery_date || null,
