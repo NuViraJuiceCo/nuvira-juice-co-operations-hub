@@ -101,21 +101,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Customer-facing email notification ─────────────────────────────────
-    // Send delivery confirmation email. Fire-and-forget — delivery is already confirmed.
-    // Note: Customer App visibility is handled via polling getOrderUpdatesForCustomerApp,
-    // which now exposes delivered_at, delivery_photo_url, and fulfillment_status.
-    const customerEmail = task.customer_email;
-    const orderNumber = task.order_number || task.id;
-
-    if (customerEmail) {
-      base44.integrations.Core.SendEmail({
-        to: customerEmail,
-        subject: `Your NuVira order ${orderNumber ? '#' + orderNumber : ''} has been delivered! 🥤`,
-        body: `Hi ${task.customer_name || 'there'}!\n\nGreat news — your order has been delivered${drop_location ? ` and left at: ${drop_location}` : ' to your address'}.\n\nDelivered: ${new Date(ts).toLocaleString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium', timeStyle: 'short' })} CT\n\nThank you for choosing NuVira!\n\nThe NuVira Team`,
-      }).catch(err => console.error('[RECORD-DELIVERY] Delivery email failed (non-critical):', err.message));
-      console.log(`[RECORD-DELIVERY] Delivery confirmation email dispatched to ${customerEmail}`);
-    }
+    // Customer App owns customer-facing delivery notifications. Hub only writes
+    // operational delivery state/proof so duplicate customer emails cannot fire.
+    console.log('[RECORD-DELIVERY] Customer delivery email skipped; Customer App owns delivery notifications');
 
     return Response.json({
       status: 'success',

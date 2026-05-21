@@ -142,17 +142,8 @@ Deno.serve(async (req) => {
     // Log the driver action
     await base44.asServiceRole.entities.RepairAuditLog.create(auditLog);
 
-    // If delivered, send confirmation email to customer
-    if (action === 'delivered' && order.customer_email) {
-      try {
-        await base44.integrations.Core.SendEmail({
-          to: order.customer_email,
-          subject: `Your NuVira order #${order_number} has been delivered! 🥤`,
-          body: `Hi ${order.customer_name || 'there'}!\n\nYour order has been delivered to: ${delivery_drop_location || 'your address'}.\n\n${delivery_notes ? `Delivery notes: ${delivery_notes}\n\n` : ''}If you have any issues, please contact us.\n\nThank you for choosing NuVira!\n\nThe NuVira Team`,
-        });
-      } catch (emailError) {
-        console.warn(`[DRIVER-UPDATE] Failed to send delivery confirmation email: ${emailError.message}`);
-      }
+    if (action === 'delivered') {
+      console.log('[DRIVER-UPDATE] Customer delivery email skipped; Customer App owns delivery notifications');
     }
 
     return Response.json({
