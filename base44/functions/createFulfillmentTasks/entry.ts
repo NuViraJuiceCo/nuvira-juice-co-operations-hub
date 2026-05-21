@@ -1,108 +1,31 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-/**
- * CREATE FULFILLMENT TASKS
- * 
- * When subscription orders are created, generate corresponding FulfillmentTask records
- * for the Driver Portal.
- * 
- * One FulfillmentTask per weekly delivery order.
- */
+const DISABLED_MESSAGE = 'createFulfillmentTasks is disabled. Fulfillment tasks must originate from the approved subscription gateway path.';
+const REPLACEMENT = 'customerAppEventPublicGateway';
 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    const user = await base44.auth.me().catch(() => null);
 
-    if (!user || user.role !== 'admin') {
+    if (!user) {
+      return Response.json({ error: 'Authentication required' }, { status: 401 });
+    }
+
+    if (user.role !== 'admin') {
       return Response.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    const body = await req.json().catch(() => ({}));
-    const { stripe_subscription_id } = body;
-
-    if (!stripe_subscription_id) {
-      return Response.json({ error: 'stripe_subscription_id required' }, { status: 400 });
-    }
-
-    // Get all orders for this subscription
-    const orders = await base44.asServiceRole.entities.ShopifyOrder.filter({
-      stripe_subscription_id: stripe_subscription_id,
-    });
-
-    if (!orders || orders.length === 0) {
-      return Response.json({
-        success: true,
-        tasks_created: 0,
-        message: 'No orders found for this subscription',
-      });
-    }
-
-    const createdTasks = [];
-
-    for (const order of orders) {
-      if (!order.fulfillments || order.fulfillments.length === 0) {
-        continue; // Skip orders without fulfillments
-      }
-
-      // Check if tasks already exist for this order to avoid duplicates
-      const existingTasks = await base44.asServiceRole.entities.FulfillmentTask.filter({
-        order_id: order.id,
-      });
-
-      if (existingTasks && existingTasks.length > 0) {
-        console.log(`[CREATE-FULFILLMENT-TASKS] Tasks already exist for order ${order.id}, skipping`);
-        continue;
-      }
-
-      for (const fulfillment of order.fulfillments) {
-        try {
-          // Build items summary from WEEKLY fulfillment items, NOT parent monthly totals
-          const itemsSummary = (fulfillment.items && fulfillment.items.length > 0
-            ? fulfillment.items
-            : order.line_items || [])
-            .map(item => `${item.quantity}x ${item.title}`)
-            .join(', ');
-
-          const deliveryDate = fulfillment.delivery_date || new Date().toISOString().split('T')[0];
-
-          // Create FulfillmentTask
-          const task = await base44.asServiceRole.entities.FulfillmentTask.create({
-            customer_name: order.customer_name || 'Unknown',
-            fulfillment_type: 'Delivery',
-            time_window: '17:00 - 20:00', // NuVira delivery window: 5 PM – 8 PM
-            status: 'Unassigned',
-            scheduled_date: deliveryDate,
-            assigned_delivery_date: deliveryDate, // Explicit field for Driver Portal routing
-            address: `${fulfillment.address_line1 || ''}, ${fulfillment.address_city || ''}, ${fulfillment.address_state || ''}`.replace(/^,\s*/, '').replace(/,\s*$/, ''),
-            assigned_driver: null,
-            items_summary: itemsSummary,
-            order_id: order.id,
-          });
-
-          createdTasks.push({
-            task_id: task.id,
-            order_id: order.id,
-            fulfillment_number: fulfillment.fulfillment_number,
-            delivery_date: fulfillment.delivery_date,
-            customer_name: order.customer_name,
-          });
-        } catch (err) {
-          console.error(`[CREATE-FULFILLMENT-TASKS] Failed to create task for order ${order.id}, fulfillment ${fulfillment.fulfillment_number}:`, err.message);
-        }
-      }
-    }
+    console.log('[createFulfillmentTasks] Disabled legacy fulfillment task creator requested');
 
     return Response.json({
-      success: true,
-      subscription_id: stripe_subscription_id,
-      orders_scanned: orders.length,
-      tasks_created: createdTasks.length,
-      tasks: createdTasks,
-      timestamp: new Date().toISOString(),
-    });
+      deprecated: true,
+      mutated: false,
+      replacement: REPLACEMENT,
+      message: DISABLED_MESSAGE,
+    }, { status: 410 });
   } catch (error) {
-    console.error('[CREATE-FULFILLMENT-TASKS]', error.message);
+    console.error('[createFulfillmentTasks] Error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
