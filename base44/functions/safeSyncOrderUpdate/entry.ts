@@ -560,6 +560,25 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Customer App can initialize these fields when creating the Hub mirror, but
+    // existing Hub orders own operational/control state after creation.
+    if (existingOrder && source === 'customer_app') {
+      const blockedOpsFields = ['production_status', 'order_lock_status', 'data_quality_status'];
+      const blockedByOpsGuard = [];
+
+      for (const field of blockedOpsFields) {
+        if (field in incomingData) {
+          delete incomingData[field];
+          blockedByOpsGuard.push(field);
+        }
+      }
+
+      if (blockedByOpsGuard.length > 0) {
+        fieldsRejected.push(...blockedByOpsGuard);
+        console.log(`[safeSyncOrderUpdate] customer_app operational ownership guard blocked fields: ${blockedByOpsGuard.join(', ')}`);
+      }
+    }
+
     // ── STEP 6: FIELD OWNERSHIP FILTER ──────────────────────────────────────
     const fieldsFiltered = [];
     if (allowedFields !== null) {
