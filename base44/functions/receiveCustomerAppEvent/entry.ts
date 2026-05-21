@@ -481,7 +481,7 @@ Deno.serve(async (req) => {
 
       // Resolve delivery/production dates from multiple possible field names
       const resolvedDeliveryDate = orderData.assigned_delivery_date || orderData.selected_delivery_date || orderData.delivery_date || null;
-      const resolvedProductionDate = orderData.production_date || null;
+      const resolvedProductionDate = orderData.production_date || orderData.assigned_production_day || null;
 
       // Build fulfillments array so production_date is available to FulfillmentTask auto-create
       // and to recalculateProductionBatches. Items are decomposed items if provided, else line_items.
@@ -518,6 +518,7 @@ Deno.serve(async (req) => {
         line_items: resolvedLineItems,
         total_price: resolvedTotal,
         subtotal: orderData.subtotal || resolvedTotal,
+        delivery_fee: orderData.delivery_fee || 0,
         payment_status: 'paid',
         fulfillment_method: orderData.fulfillment_method || 'delivery',
         fulfillment_mode: 'single_delivery',
