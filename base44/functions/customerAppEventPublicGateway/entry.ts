@@ -37,6 +37,7 @@ Deno.serve(async (req) => {
     const data = body.data || body;
     const customer_email = body.customer_email || data.customer_email;
     const stripe_subscription_id = body.stripe_subscription_id || data.stripe_subscription_id;
+    const normalizedScheduleSource = normalizeSubscriptionScheduleSource(data.final_schedule_source);
 
     // ── Sanitized diagnostic logging (no secrets) ──────────────────────────────
     const authHeader = req.headers.get('Authorization') || '';
@@ -119,16 +120,22 @@ Deno.serve(async (req) => {
     const WIN_WED = '5:00 PM – 8:00 PM';
     const WIN_SAT = '12:00 PM – 3:00 PM';
 
+    function normalizeSubscriptionScheduleSource(source) {
+      if (source === 'central_engine' || source === 'subscription_renewal') {
+        return 'subscription_renewal';
+      }
+      return null;
+    }
+
     function p5GetDow(dateStr) {
       const [y, m, d] = dateStr.split('-').map(Number);
       return new Date(y, m - 1, d).getDay();
     }
     function p5ValidateFulfillments(fulfillments) {
       const errors = [];
-      // Only validate if payload explicitly signals central_engine scheduling
+      // Only validate if payload explicitly signals subscription schedule-engine output.
       // (legacy CA payloads without final_schedule_source are allowed through for backward compat)
-      const isCentralEngine = data.final_schedule_source === 'central_engine';
-      if (!isCentralEngine) return errors; // skip validation for non-central-engine payloads
+      if (normalizedScheduleSource !== 'subscription_renewal') return errors;
 
       fulfillments.forEach((f, idx) => {
         const fn = f.fulfillment_number || idx + 1;
@@ -286,7 +293,7 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    // ── Phase 5: Validate schedule before processing (central_engine payloads only) ──
+    // ── Phase 5: Validate schedule before processing (subscription schedule-engine payloads only) ──
     if (fulfillmentsToCreate.length > 0) {
       const scheduleErrors = p5ValidateFulfillments(fulfillmentsToCreate);
       if (scheduleErrors.length > 0) {
@@ -444,7 +451,7 @@ Deno.serve(async (req) => {
         assigned_delivery_date: firstSchedDate,
         delivery_window_label: orderDeliveryWindow,
         // ── Phase 5 schedule fields ──
-        schedule_source: data.final_schedule_source || null,
+        schedule_source: normalizedScheduleSource,
         schedule_reason: data.schedule_reason || null,
         total_price: 0,
         subtotal: 0,
@@ -513,7 +520,7 @@ Deno.serve(async (req) => {
           fulfillment_number: fulfNum,
           plan_name: data.plan_name || null,
           production_date: fulfillment.production_date || null,
-          schedule_source: data.final_schedule_source || null,
+          schedule_source: normalizedScheduleSource,
           notes: `Subscription: ${stripe_subscription_id} | Fulfillment #${fulfNum}/${fulfillmentsToCreate.length}`,
         });
 
