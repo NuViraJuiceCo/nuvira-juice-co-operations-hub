@@ -130,7 +130,12 @@ Deno.serve(async (req) => {
       performed_by: actorEmail,
       source: 'customer_app_admin',
       request_id: requestId,
-      after: { note_appended: true },
+      after: {
+        note_appended: true,
+        request_id: requestId,
+        source: 'customer_app_admin',
+        actor_role: actorRole,
+      },
       reason: 'Admin internal note from Customer App',
     };
 
