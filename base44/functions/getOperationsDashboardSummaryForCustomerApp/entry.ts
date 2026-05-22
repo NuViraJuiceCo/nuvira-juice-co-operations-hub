@@ -7,8 +7,8 @@ const DEFAULT_PRESET = 'last_7_days';
 const ORDER_QUERY_LIMIT = 1000;
 const INVENTORY_QUERY_LIMIT = 201;
 const ALERT_QUERY_LIMIT = 201;
-const TASK_QUERY_LIMIT_PER_DATE = 201;
-const BATCH_QUERY_LIMIT_PER_DATE = 201;
+const TASK_QUERY_LIMIT = 1000;
+const BATCH_QUERY_LIMIT = 1000;
 const ACTIVE_ALERT_STATUSES = ['unread', 'read', 'acknowledged'];
 
 function todayChicagoDate() {
@@ -179,22 +179,11 @@ function isCompletedTask(task) {
 }
 
 async function readProductionSummary(base44, dates) {
-  const batchesById = new Map();
-  let truncated = false;
+  const dateSet = new Set(dates);
+  const allBatches = await base44.asServiceRole.entities.ProductionBatch.list('-production_date', BATCH_QUERY_LIMIT);
+  const truncated = (allBatches || []).length >= BATCH_QUERY_LIMIT;
+  const batches = (allBatches || []).filter(batch => dateSet.has(datePart(batch.production_date)));
 
-  for (const productionDate of dates) {
-    const batches = await base44.asServiceRole.entities.ProductionBatch.filter(
-      { production_date: productionDate },
-      'product_name',
-      BATCH_QUERY_LIMIT_PER_DATE,
-    );
-    if ((batches || []).length >= BATCH_QUERY_LIMIT_PER_DATE) truncated = true;
-    for (const batch of batches || []) {
-      if (batch?.id) batchesById.set(batch.id, batch);
-    }
-  }
-
-  const batches = [...batchesById.values()];
   return {
     summary: {
       batch_count: batches.length,
@@ -206,32 +195,28 @@ async function readProductionSummary(base44, dates) {
 }
 
 async function readDeliverySummary(base44, dateFrom, dateTo, today) {
-  const dates = new Set([...enumerateDates(dateFrom, dateTo), today, addDays(today, 1)]);
   const tasksById = new Map();
-  let truncated = false;
 
   const addTasks = (tasks) => {
-    if ((tasks || []).length >= TASK_QUERY_LIMIT_PER_DATE) truncated = true;
     for (const task of tasks || []) {
       if (task?.id) tasksById.set(task.id, task);
     }
   };
 
-  for (const deliveryDate of dates) {
-    addTasks(await base44.asServiceRole.entities.FulfillmentTask.filter(
-      { scheduled_date: deliveryDate },
-      'time_window',
-      TASK_QUERY_LIMIT_PER_DATE,
-    ));
-    addTasks(await base44.asServiceRole.entities.FulfillmentTask.filter(
-      { delivery_date: deliveryDate },
-      'time_window',
-      TASK_QUERY_LIMIT_PER_DATE,
-    ));
-  }
+  const scheduledTasks = await base44.asServiceRole.entities.FulfillmentTask.list('-scheduled_date', TASK_QUERY_LIMIT);
+  const deliveryDateTasks = await base44.asServiceRole.entities.FulfillmentTask.list('-delivery_date', TASK_QUERY_LIMIT);
+  addTasks(scheduledTasks);
+  addTasks(deliveryDateTasks);
 
-  const tasks = [...tasksById.values()];
   const tomorrow = addDays(today, 1);
+  const relevantDates = new Set([...enumerateDates(dateFrom, dateTo), today, tomorrow]);
+  const tasks = [...tasksById.values()].filter(task => {
+    const scheduledDate = datePart(task.scheduled_date);
+    const deliveryDate = datePart(task.delivery_date);
+    return relevantDates.has(scheduledDate) || relevantDates.has(deliveryDate);
+  });
+  const truncated = (scheduledTasks || []).length >= TASK_QUERY_LIMIT || (deliveryDateTasks || []).length >= TASK_QUERY_LIMIT;
+
   return {
     summary: {
       today_stops: tasks.filter(task => datePart(task.scheduled_date || task.delivery_date) === today).length,
