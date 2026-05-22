@@ -15,6 +15,24 @@ const EQUIPMENT_STATUS_SEVERITY = {
   maintenance: 1,
   operational: 2,
 };
+const SAFE_SHIFT_LABELS = new Set([
+  'morning',
+  'afternoon',
+  'evening',
+  'night',
+  'day',
+  'weekend',
+  'weekday',
+  'mon-fri',
+  'monday-friday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+]);
 
 function normalizeText(value) {
   return (value || '').toString().trim();
@@ -68,13 +86,21 @@ function safeTags(resource) {
   return Array.isArray(resource.tags) ? resource.tags.map(normalizeText).filter(Boolean) : [];
 }
 
+function isSafeShiftLabel(value) {
+  const text = normalizeText(value);
+  const lower = normalizeLower(text);
+  if (!text) return false;
+
+  if (SAFE_SHIFT_LABELS.has(lower)) return true;
+  if (/^shift:\s*[a-z0-9\s:-]{1,60}$/i.test(text)) return true;
+  if (/^(mon|tue|wed|thu|fri|sat|sun)(day)?\s*-\s*(mon|tue|wed|thu|fri|sat|sun)(day)?$/i.test(text)) return true;
+  if (/^\d{1,2}(:\d{2})?\s*(AM|PM)\s*-\s*\d{1,2}(:\d{2})?\s*(AM|PM)$/i.test(text)) return true;
+
+  return false;
+}
+
 function firstSafeTeamShift(resource) {
-  const tags = safeTags(resource);
-  const statusTags = new Set([...TEAM_STATUSES, ...EQUIPMENT_STATUSES]);
-  const shift = tags.find(tag => {
-    const lower = normalizeLower(tag);
-    return !statusTags.has(lower) && !lower.startsWith('lastservice:') && !lower.startsWith('last service:');
-  });
+  const shift = safeTags(resource).find(isSafeShiftLabel);
   return safeInline(shift, 80);
 }
 
