@@ -3,7 +3,7 @@ import {
   LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, LogOut,
   ShoppingCart, Factory, Truck, CalendarDays, Package, Users,
   ShieldCheck, Wrench, CalendarCheck, Handshake, ClipboardList,
-  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings, Gift, Activity, FlaskConical, Zap, AlertCircle, Bell, MapPin,
+  ShoppingBag, Route, UserCog, ScrollText, FileBarChart, X, Settings, Gift, FlaskConical, AlertCircle, Bell, MapPin,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
@@ -20,7 +20,6 @@ const navGroups = [
       { path: "/fulfillment", label: "Fulfillment", icon: Truck },
       { path: "/inventory", label: "Inventory", icon: Package },
       { path: "/loyalty-admin", label: "Loyalty Dashboard", icon: Gift },
-      { path: "/operations-manager", label: "Operations Manager", icon: Activity },
       { path: "/orders", label: "Orders", icon: ShoppingCart },
       { path: "/partnerships", label: "Partnerships", icon: Handshake },
       { path: "/prod-scheduler", label: "Prod. Scheduler", icon: ClipboardList },
@@ -42,7 +41,6 @@ const navGroups = [
       { path: "/report-scheduler", label: "Reports", icon: FileBarChart },
       { path: "/settings", label: "Settings", icon: Settings },
       { path: "/users", label: "User Management", icon: UserCog },
-      { path: "/stripe-repair", label: "Stripe Recovery", icon: Zap },
       { path: "/pos-validation", label: "POS Validation", icon: Route },
     ],
   },
