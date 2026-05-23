@@ -5,8 +5,8 @@ import { useRef } from "react";
 import {
   CalendarDays, CalendarCheck, Truck, FlaskConical, ClipboardList,
   ShieldCheck, Package, ShoppingBag, Gift, Handshake, BarChart3,
-  Activity, Wrench, LogOut, ChevronRight, X, Users, ScrollText,
-  FileBarChart, Settings, Zap, AlertCircle, Bell,
+  Wrench, LogOut, ChevronRight, X, Users, ScrollText,
+  FileBarChart, Settings, AlertCircle, Bell,
 } from "lucide-react";
 
 const sections = [
@@ -41,12 +41,10 @@ const sections = [
     title: "System",
     items: [
       { label: "Alerts & Notifications", route: "/alerts", icon: Bell, description: "View and manage system alerts" },
-      { label: "Operations Manager", route: "/operations-manager", icon: Activity, description: "Internal operations controls" },
       { label: "Resources", route: "/resources", icon: Wrench, description: "Guides, references, and internal docs" },
       { label: "Settings", route: "/settings", icon: Settings, description: "App and account preferences" },
       { label: "Audit Logs", route: "/audit-logs", icon: ScrollText, description: "Review system and admin activity" },
       { label: "Order Review Queue", route: "/order-review-queue", icon: AlertCircle, description: "Review flagged or pending orders" },
-      { label: "Stripe Recovery", route: "/stripe-repair", icon: Zap, description: "Repair and recover Stripe data" },
       { label: "User Management", route: "/users", icon: Users, description: "Manage admin and staff accounts" },
       { label: "Reports", route: "/report-scheduler", icon: FileBarChart, description: "Scheduled and generated reports" },
     ],

@@ -1,10 +1,8 @@
-import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/AuthContext";
-import {
-  User, Bell, BookOpen, Activity, Settings, LogOut, ChevronRight,
-} from "lucide-react";
+import { Bell, Settings, LogOut, ChevronRight } from "lucide-react";
 
 const menuItems = [
   {
@@ -13,12 +11,6 @@ const menuItems = [
     icon: Bell,
     route: null,
     action: "notifications",
-  },
-  {
-    label: "System Status",
-    description: "Stripe, Customer App, and Hub health",
-    icon: Activity,
-    route: "/operations-manager",
   },
   {
     label: "Settings",
