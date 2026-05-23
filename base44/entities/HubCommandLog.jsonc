@@ -1,0 +1,110 @@
+{
+  "name": "HubCommandLog",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Caller-supplied idempotency key for the command request"
+    },
+    "command": {
+      "type": "string",
+      "description": "Stable command name, e.g. ops_alert_status_update"
+    },
+    "target_type": {
+      "type": "string",
+      "description": "Entity type targeted by the command, e.g. HubAlert"
+    },
+    "target_id": {
+      "type": "string",
+      "description": "Entity ID targeted by the command"
+    },
+    "action": {
+      "type": "string",
+      "description": "Command action, e.g. acknowledge, resolve, dismiss"
+    },
+    "source": {
+      "type": "string",
+      "description": "Command source, e.g. customer_app_admin"
+    },
+    "actor_email": {
+      "type": "string",
+      "description": "Email of the admin or system actor that requested the command"
+    },
+    "actor_role": {
+      "type": "string",
+      "description": "Role of the actor that requested the command"
+    },
+    "previous_status": {
+      "type": "string",
+      "description": "Target status before the command, when applicable"
+    },
+    "new_status": {
+      "type": "string",
+      "description": "Target status after the command, when applicable"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "skipped",
+        "rejected",
+        "error"
+      ],
+      "description": "Execution result for this command log entry"
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Safe error code for rejected or failed commands"
+    },
+    "details": {
+      "type": "object",
+      "description": "Sanitized small metadata object only. Do not store raw payloads, auth headers, secrets, provider payloads, customer PII, stack traces, raw alert messages, or full raw records."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp recorded by the command endpoint when the command was handled"
+    }
+  },
+  "required": [
+    "request_id",
+    "command",
+    "target_type",
+    "target_id",
+    "action",
+    "source",
+    "status"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "operations_staff"
+          ]
+        }
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": {
+          "$in": [
+            "admin",
+            "operations_staff"
+          ]
+        }
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
