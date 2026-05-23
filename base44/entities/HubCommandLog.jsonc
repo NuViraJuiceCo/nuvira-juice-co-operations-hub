@@ -4,7 +4,7 @@
   "properties": {
     "request_id": {
       "type": "string",
-      "description": "Caller-supplied idempotency key for the command request"
+      "description": "Caller-supplied idempotency key for the command request. Future command endpoints use this with command and target_id."
     },
     "command": {
       "type": "string",
