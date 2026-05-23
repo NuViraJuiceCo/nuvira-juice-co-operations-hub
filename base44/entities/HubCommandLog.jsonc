@@ -2,104 +2,136 @@
   "name": "HubCommandLog",
   "type": "object",
   "properties": {
-    "request_id": {
+    "command_id": {
       "type": "string",
-      "description": "Caller-supplied idempotency key for the command request. Future command endpoints use this with command and target_id."
+      "description": "Unique idempotency key for this command (e.g. UUID or deterministic hash)"
     },
-    "command": {
+    "command_type": {
       "type": "string",
-      "description": "Stable command name, e.g. ops_alert_status_update"
+      "description": "The type/name of the command being executed (e.g. cancel_order, update_address, refund_subscription)"
     },
-    "target_type": {
+    "command_source": {
       "type": "string",
-      "description": "Entity type targeted by the command, e.g. HubAlert"
-    },
-    "target_id": {
-      "type": "string",
-      "description": "Entity ID targeted by the command"
-    },
-    "action": {
-      "type": "string",
-      "description": "Command action, e.g. acknowledge, resolve, dismiss"
-    },
-    "source": {
-      "type": "string",
-      "description": "Command source, e.g. customer_app_admin"
-    },
-    "actor_email": {
-      "type": "string",
-      "description": "Email of the admin or system actor that requested the command"
-    },
-    "actor_role": {
-      "type": "string",
-      "description": "Role of the actor that requested the command"
-    },
-    "previous_status": {
-      "type": "string",
-      "description": "Target status before the command, when applicable"
-    },
-    "new_status": {
-      "type": "string",
-      "description": "Target status after the command, when applicable"
+      "enum": [
+        "customer_app",
+        "admin_ui",
+        "backend_function",
+        "stripe_webhook",
+        "shopify_webhook",
+        "scheduled_automation",
+        "system"
+      ],
+      "description": "Origin system that issued the command"
     },
     "status": {
       "type": "string",
       "enum": [
+        "pending",
+        "processing",
         "success",
+        "failed",
         "skipped",
-        "rejected",
-        "error"
+        "rejected"
       ],
-      "description": "Execution result for this command log entry"
+      "default": "pending",
+      "description": "Current execution status of the command"
+    },
+    "target_entity": {
+      "type": "string",
+      "description": "The entity type this command targets (e.g. ShopifyOrder, FulfillmentTask, ProductionBatch)"
+    },
+    "target_id": {
+      "type": "string",
+      "description": "The internal ID of the target record"
+    },
+    "target_display_id": {
+      "type": "string",
+      "description": "Human-readable identifier of the target (e.g. order number, batch_id)"
+    },
+    "actor_email": {
+      "type": "string",
+      "description": "Email of the user, admin, or system actor who issued the command"
+    },
+    "actor_role": {
+      "type": "string",
+      "description": "Role of the actor at time of command (e.g. admin, driver, system)"
+    },
+    "actor_type": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user",
+        "system",
+        "webhook",
+        "automation"
+      ],
+      "description": "Category of actor that issued the command"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Input payload or metadata sent with the command"
+    },
+    "result": {
+      "type": "object",
+      "description": "Execution result data returned after processing the command"
     },
     "error_code": {
       "type": "string",
-      "description": "Safe error code for rejected or failed commands"
+      "description": "Machine-readable error code if the command failed"
     },
-    "details_summary": {
+    "error_message": {
       "type": "string",
-      "description": "Sanitized summary only. Do not store raw payloads, secrets, auth headers, provider payloads, customer PII, stack traces, or full raw records."
+      "description": "Human-readable error message if the command failed or was rejected"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Deduplication key to prevent replay of the same command (source::command_type::target_id)"
+    },
+    "idempotent_skipped": {
+      "type": "boolean",
+      "default": false,
+      "description": "True if this log entry was created because the command was already processed (idempotent replay)"
+    },
+    "submitted_at": {
+      "type": "string",
+      "description": "ISO timestamp when the command was received/submitted"
+    },
+    "started_at": {
+      "type": "string",
+      "description": "ISO timestamp when execution began"
+    },
+    "completed_at": {
+      "type": "string",
+      "description": "ISO timestamp when execution completed (success or failure)"
+    },
+    "duration_ms": {
+      "type": "number",
+      "description": "Execution duration in milliseconds"
+    },
+    "function_name": {
+      "type": "string",
+      "description": "Backend function that processed this command (e.g. receiveCustomerAppEvent)"
+    },
+    "related_stripe_event_id": {
+      "type": "string",
+      "description": "Stripe event ID if this command was triggered by a Stripe webhook"
+    },
+    "related_order_id": {
+      "type": "string",
+      "description": "ShopifyOrder internal ID if this command is order-related"
+    },
+    "related_order_number": {
+      "type": "string",
+      "description": "Human-readable order number (e.g. #1042)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional context or admin notes about this command execution"
     }
   },
   "required": [
-    "request_id",
-    "command",
-    "target_type",
-    "target_id",
-    "action",
-    "source",
+    "command_type",
+    "command_source",
     "status"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "operations_staff"
-          ]
-        }
-      }
-    },
-    "read": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "operations_staff"
-          ]
-        }
-      }
-    },
-    "update": {
-      "user_condition": {
-        "role": "admin"
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }
