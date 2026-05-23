@@ -4,6 +4,7 @@ const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 const COMMAND = 'ops_alert_status_update';
 const TARGET_TYPE = 'HubAlert';
 const SOURCE = 'customer_app_admin';
+const COMMAND_SOURCE = 'customer_app';
 const MAX_NOTE_LENGTH = 500;
 const MAX_TEXT_LENGTH = 120;
 
@@ -184,31 +185,60 @@ function evaluateTransition(previousStatus, action) {
 }
 
 function idempotencyKey(requestId, alertId) {
-  return `${SOURCE}:${COMMAND}:${TARGET_TYPE}:${alertId}:${requestId}`;
+  return requestId;
+}
+
+function commandId(requestId, alertId, action) {
+  return `${COMMAND}:${TARGET_TYPE}:${alertId}:${action}:${requestId}`;
 }
 
 async function findExistingCommandLog(base44, requestId, alertId) {
-  const candidates = [];
-  const byCommandId = await base44.asServiceRole.entities.HubCommandLog.filter(
-    { command_id: requestId, target_id: alertId },
-    '-created_date',
-    20,
-  ).catch(() => []);
-  candidates.push(...(byCommandId || []));
-
-  const byIdempotencyKey = await base44.asServiceRole.entities.HubCommandLog.filter(
+  const candidates = await base44.asServiceRole.entities.HubCommandLog.filter(
     { idempotency_key: idempotencyKey(requestId, alertId) },
     '-created_date',
     20,
   ).catch(() => []);
-  candidates.push(...(byIdempotencyKey || []));
 
-  return candidates.find(log => (
-    (log.command_type === COMMAND || log.command === COMMAND) &&
-    (log.target_entity === TARGET_TYPE || log.target_type === TARGET_TYPE) &&
+  return (candidates || []).find(log => (
+    log.command_type === COMMAND &&
+    log.target_entity === TARGET_TYPE &&
     log.target_id === alertId &&
-    (log.command_id === requestId || log.request_id === requestId || log.idempotency_key === idempotencyKey(requestId, alertId))
+    log.idempotency_key === requestId
   )) || null;
+}
+
+function buildNotes({
+  requestId,
+  action,
+  previousStatus,
+  newStatus,
+  detailsSummary,
+  resolutionNote,
+}) {
+  return JSON.stringify({
+    action: sanitizeText(action, 40),
+    previous_status: sanitizeText(previousStatus, 40),
+    new_status: sanitizeText(newStatus, 40),
+    source: SOURCE,
+    request_id: sanitizeText(requestId, 160),
+    resolution_note_summary: sanitizeText(resolutionNote, 160) || null,
+    details_summary: sanitizeText(detailsSummary, 200) || null,
+  });
+}
+
+function parseNotesMetadata(notes) {
+  try {
+    const parsed = JSON.parse(normalizeText(notes));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return {
+      action: sanitizeText(parsed.action, 40),
+      previous_status: sanitizeText(parsed.previous_status, 40),
+      new_status: sanitizeText(parsed.new_status, 40),
+      request_id: sanitizeText(parsed.request_id, 160),
+    };
+  } catch {
+    return {};
+  }
 }
 
 function buildLogPayload({
@@ -222,34 +252,29 @@ function buildLogPayload({
   status,
   errorCode,
   detailsSummary,
+  resolutionNote,
   timestamp,
   durationMs,
 }) {
-  const safeDetails = sanitizeText(detailsSummary, 240);
-  const logStatus = status === 'error' ? 'failed' : status;
-
-  return {
-    // Contract fields for the command pattern.
-    request_id: requestId,
-    command: COMMAND,
-    target_type: TARGET_TYPE,
-    target_id: alertId,
+  const safeNotes = buildNotes({
+    requestId,
     action,
-    source: SOURCE,
+    previousStatus,
+    newStatus,
+    detailsSummary,
+    resolutionNote,
+  });
+  const liveStatus = status === 'error' ? 'failed' : status;
+  return {
+    command_id: commandId(requestId, alertId, action),
+    command_type: COMMAND,
+    command_source: COMMAND_SOURCE,
+    status: liveStatus,
+    target_entity: TARGET_TYPE,
+    target_id: alertId,
+    target_display_id: alertId,
     actor_email: actorEmail,
     actor_role: actorRole,
-    previous_status: previousStatus || null,
-    new_status: newStatus || null,
-    status,
-    error_code: errorCode || null,
-    details_summary: safeDetails,
-
-    // Current live HubCommandLog compatibility fields.
-    command_id: requestId,
-    command_type: COMMAND,
-    command_source: 'customer_app',
-    target_entity: TARGET_TYPE,
-    target_display_id: alertId,
     actor_type: 'admin',
     idempotency_key: idempotencyKey(requestId, alertId),
     idempotent_skipped: status === 'skipped',
@@ -258,43 +283,14 @@ function buildLogPayload({
     completed_at: timestamp,
     duration_ms: durationMs,
     function_name: 'updateOpsAlertStatusForCustomerApp',
-    notes: safeDetails,
-    error_message: errorCode ? safeDetails : null,
-
-    // If the live schema uses the newer enum without "error", this preserves write compatibility.
-    command_status: logStatus,
+    notes: safeNotes,
+    error_code: errorCode || null,
+    error_message: errorCode ? sanitizeText(detailsSummary, 200) : null,
   };
 }
 
 async function createCommandLog(base44, payload) {
-  const compatiblePayload = {
-    command_id: payload.command_id,
-    command_type: payload.command_type,
-    command_source: payload.command_source,
-    status: payload.status === 'error' ? 'failed' : payload.status,
-    target_entity: payload.target_entity,
-    target_id: payload.target_id,
-    target_display_id: payload.target_display_id,
-    actor_email: payload.actor_email,
-    actor_role: payload.actor_role,
-    actor_type: payload.actor_type,
-    error_code: payload.error_code,
-    error_message: payload.error_message,
-    idempotency_key: payload.idempotency_key,
-    idempotent_skipped: payload.idempotent_skipped,
-    submitted_at: payload.submitted_at,
-    started_at: payload.started_at,
-    completed_at: payload.completed_at,
-    duration_ms: payload.duration_ms,
-    function_name: payload.function_name,
-    notes: payload.notes,
-  };
-
-  try {
-    await base44.asServiceRole.entities.HubCommandLog.create(payload);
-  } catch (error) {
-    await base44.asServiceRole.entities.HubCommandLog.create(compatiblePayload);
-  }
+  await base44.asServiceRole.entities.HubCommandLog.create(payload);
 }
 
 function buildAlertUpdate(action, actorEmail, timestamp, resolutionNote) {
@@ -388,14 +384,15 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const existingLog = await findExistingCommandLog(base44, requestId, alertId);
     if (existingLog) {
-      const existingStatus = normalizeLower(existingLog.status || existingLog.command_status);
-      const previousStatus = normalizeLower(existingLog.previous_status);
-      const newStatus = normalizeLower(existingLog.new_status) || previousStatus || null;
+      const existingStatus = normalizeLower(existingLog.status);
+      const existingMetadata = parseNotesMetadata(existingLog.notes);
+      const previousStatus = normalizeLower(existingMetadata.previous_status);
+      const newStatus = normalizeLower(existingMetadata.new_status) || previousStatus || null;
 
       if (IDEMPOTENT_SUCCESS_STATUSES.has(existingStatus)) {
         return Response.json(safeCommandResponse({
           alertId,
-          action,
+          action: existingMetadata.action || action,
           previousStatus,
           status: newStatus,
           requestId,
@@ -446,6 +443,7 @@ Deno.serve(async (req) => {
         status: 'rejected',
         errorCode: transition.errorCode,
         detailsSummary: transition.message,
+        resolutionNote: null,
         timestamp,
         durationMs: Date.now() - startTime,
       }));
@@ -474,6 +472,7 @@ Deno.serve(async (req) => {
         status: 'skipped',
         errorCode: null,
         detailsSummary: 'Command already applied; no alert update performed',
+        resolutionNote,
         timestamp,
         durationMs: Date.now() - startTime,
       }));
@@ -506,6 +505,7 @@ Deno.serve(async (req) => {
         status: 'success',
         errorCode: null,
         detailsSummary: `Ops alert ${action} applied from Customer App admin`,
+        resolutionNote,
         timestamp,
         durationMs: Date.now() - startTime,
       }));
@@ -521,6 +521,7 @@ Deno.serve(async (req) => {
         status: 'error',
         errorCode: 'update_failed',
         detailsSummary: 'Ops alert command failed during update',
+        resolutionNote: null,
         timestamp,
         durationMs: Date.now() - startTime,
       })).catch(() => null);
