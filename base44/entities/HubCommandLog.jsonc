@@ -56,14 +56,9 @@
       "type": "string",
       "description": "Safe error code for rejected or failed commands"
     },
-    "details": {
-      "type": "object",
-      "description": "Sanitized small metadata object only. Do not store raw payloads, auth headers, secrets, provider payloads, customer PII, stack traces, raw alert messages, or full raw records."
-    },
-    "created_at": {
+    "details_summary": {
       "type": "string",
-      "format": "date-time",
-      "description": "ISO timestamp recorded by the command endpoint when the command was handled"
+      "description": "Sanitized summary only. Do not store raw payloads, secrets, auth headers, provider payloads, customer PII, stack traces, or full raw records."
     }
   },
   "required": [
