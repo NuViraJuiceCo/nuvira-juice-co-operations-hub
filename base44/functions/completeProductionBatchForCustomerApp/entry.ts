@@ -458,18 +458,20 @@ async function findProductionBatch(base44, productionBatchId) {
 
 function evaluateFakeGate(batch, productionBatchId) {
   const failures = [];
+  const orderSources = Array.isArray(batch?.order_sources) ? batch.order_sources : [];
   if (!APPROVED_FAKE_BATCH_ID) failures.push('fake_batch_not_configured');
   if (APPROVED_FAKE_BATCH_ID && productionBatchId !== APPROVED_FAKE_BATCH_ID) failures.push('batch_id_not_allowlisted');
   if (APPROVED_FAKE_BATCH_DISPLAY_ID && normalizeSingleLine(batch?.batch_id) !== APPROVED_FAKE_BATCH_DISPLAY_ID) {
     failures.push('batch_display_id_not_allowlisted');
   }
   if (batch?.is_locked === true) failures.push('batch_locked');
+  if (orderSources.length > 0) failures.push('order_sources_out_of_scope');
   if (hasManualSources(batch)) failures.push('manual_sources_out_of_scope');
   if (hasMeaningfulFieldValue(batch?.related_orders)) failures.push('linked_orders_present');
   if (hasOperationalLinkageRisk(batch)) failures.push('operational_linkage_blocked');
   if (hasComplianceFinalization(batch)) failures.push('compliance_finalization_present');
   if (hasProofDropRisk(batch)) failures.push('proof_drop_out_of_scope');
-  if (hasSecretAuthRisk(batch?.order_sources)) failures.push('secret_or_auth_field_present');
+  if (hasSecretAuthRisk(orderSources)) failures.push('secret_or_auth_field_present');
   return failures;
 }
 
