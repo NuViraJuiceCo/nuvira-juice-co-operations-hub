@@ -84,6 +84,33 @@ const PROOF_DROP_KEY_TERMS = [
   'delivery_proof',
 ];
 
+const OPERATIONAL_LINKAGE_KEY_TERMS = [
+  'fulfillment_task',
+  'task_id',
+  'task_ids',
+  'linked_task',
+  'order_id',
+  'order_ids',
+  'shopify_order',
+  'customer_app_order',
+  'purchase_order',
+  'inventory',
+  'stock',
+  'supplier',
+  'po_id',
+  'batch_order',
+  'review_queue',
+  'customer',
+  'email',
+  'phone',
+  'address',
+  'stripe',
+  'shopify',
+  'provider',
+  'payment',
+  'subscription',
+];
+
 const COMPLIANCE_FINALIZATION_FIELDS = new Set([
   'compliance_log_id',
   'ccp_log_id',
@@ -98,6 +125,11 @@ const SAFE_PROVIDER_PAYMENT_KEYS = new Set([
   'production_status',
   'payment_status',
   'batch_id',
+]);
+
+const SAFE_OPERATIONAL_LINKAGE_KEYS = new Set([
+  'batch_id',
+  'source_type',
 ]);
 
 function normalizeText(value) {
@@ -248,6 +280,52 @@ function hasUnsafeProviderPaymentFields(batch) {
 
 function hasProofOrDropFields(batch) {
   return findUnsafeFieldKeys(batch, { terms: PROOF_DROP_KEY_TERMS }).length > 0;
+}
+
+function allowsExactFakeManualLink({ key, normalized, value, parent }) {
+  if (normalized.compact !== 'orderid') return false;
+  if (normalizeLower(parent?.source_type) !== 'manual_internal_batch') return false;
+  return Boolean(APPROVED_FAKE_MANUAL_BATCH_ID) &&
+    normalizeSingleLine(value) === APPROVED_FAKE_MANUAL_BATCH_ID;
+}
+
+function allowsSafeFakeManualMarker({ normalized, value, parent }) {
+  if (normalizeLower(parent?.source_type) !== 'manual_internal_batch') return false;
+  if (!['customername', 'batchname', 'displayname'].includes(normalized.compact)) return false;
+  return isFakeText(value);
+}
+
+function findOperationalLinkageKeys(source, depth = 0, parent = null) {
+  if (!source || typeof source !== 'object') return [];
+  if (Array.isArray(source)) {
+    return source.flatMap((item) => findOperationalLinkageKeys(item, depth, parent));
+  }
+
+  return Object.entries(source).reduce((keys, [key, value]) => {
+    if (!hasMeaningfulFieldValue(value)) return keys;
+    const normalized = normalizeFieldKey(key);
+    const isSafeKey = SAFE_OPERATIONAL_LINKAGE_KEYS.has(normalized.snake) ||
+      SAFE_OPERATIONAL_LINKAGE_KEYS.has(normalized.compact);
+    const isAllowedFakeManualLink = allowsExactFakeManualLink({ key, normalized, value, parent: source });
+    const isAllowedFakeManualMarker = allowsSafeFakeManualMarker({ key, normalized, value, parent: source });
+
+    if (
+      !isSafeKey &&
+      !isAllowedFakeManualLink &&
+      !isAllowedFakeManualMarker &&
+      fieldKeyMatchesTerms(key, OPERATIONAL_LINKAGE_KEY_TERMS)
+    ) {
+      keys.push(normalized.snake || 'unknown_field');
+    }
+    if (typeof value === 'object' && depth < 2) {
+      keys.push(...findOperationalLinkageKeys(value, depth + 1, source));
+    }
+    return keys;
+  }, []);
+}
+
+function hasOperationalLinkage(batch) {
+  return findOperationalLinkageKeys(batch).length > 0;
 }
 
 function hasComplianceFinalization(batch) {
@@ -405,7 +483,7 @@ async function findProductionBatch(base44, productionBatchId) {
 }
 
 function isCoherentInProduction(batch) {
-  return normalizeLower(batch?.status) === 'in_production' &&
+  return normalizeSingleLine(batch?.status) === 'in_production' &&
     Boolean(normalizeSingleLine(batch?.actual_start_time));
 }
 
@@ -422,6 +500,7 @@ function evaluateFakeGate(batch, productionBatchId) {
   if (hasNonManualOrderSources(batch)) failures.push('real_order_sources_present');
   if (hasCustomerDataInSources(sources)) failures.push('customer_data_present');
   if (hasMeaningfulFieldValue(batch?.related_orders)) failures.push('linked_shopify_orders_present');
+  if (hasOperationalLinkage(batch)) failures.push('operational_linkage_blocked');
   if (hasComplianceFinalization(batch)) failures.push('compliance_finalization_present');
   if (isBlockedDemand(batch)) failures.push('blocked_batch_state');
   if (hasUnsafeProviderPaymentFields(batch)) failures.push('provider_payment_fields_present');
@@ -449,7 +528,6 @@ function evaluateFakeGate(batch, productionBatchId) {
 
 function evaluateTransition(batch) {
   const previousStatus = normalizeSingleLine(batch?.status);
-  const normalizedStatus = normalizeLower(previousStatus);
 
   if (isCoherentInProduction(batch)) {
     return {
@@ -473,24 +551,24 @@ function evaluateTransition(batch) {
     };
   }
 
-  if (!normalizedStatus || BLOCKED_STATUSES.has(normalizedStatus)) {
+  if (!previousStatus || BLOCKED_STATUSES.has(previousStatus)) {
     return {
       allowed: false,
       skipped: false,
       previousStatus,
       newStatus: previousStatus || null,
-      errorCode: 'invalid_batch_status',
+      errorCode: 'invalid_status_transition',
       message: 'Batch status cannot be started through this command',
     };
   }
 
-  if (!ALLOWED_STATUSES.has(normalizedStatus)) {
+  if (!ALLOWED_STATUSES.has(previousStatus)) {
     return {
       allowed: false,
       skipped: false,
       previousStatus,
       newStatus: previousStatus || null,
-      errorCode: 'invalid_batch_status',
+      errorCode: 'non_canonical_status_blocked',
       message: 'Batch status cannot be started through this command',
     };
   }
