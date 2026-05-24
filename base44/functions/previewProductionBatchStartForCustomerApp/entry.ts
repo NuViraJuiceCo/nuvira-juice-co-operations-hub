@@ -53,6 +53,11 @@ const CUSTOMER_DATA_KEY_TERMS = [
   'longitude',
   'latitude',
   'geo',
+  'raw_payload',
+  'payload',
+  'raw_order',
+  'order_payload',
+  'customer_payload',
 ];
 
 const UNSAFE_CUSTOMER_CONTEXT_KEY_TERMS = [
@@ -162,6 +167,80 @@ const SAFE_PROVIDER_PAYMENT_KEYS = new Set([
   'production_status',
   'payment_status',
   'batch_id',
+]);
+
+const PRODUCTION_METADATA_SAFE_KEYS = new Set([
+  'action',
+  'actual_units',
+  'actualunits',
+  'assigned_to',
+  'assignedto',
+  'audit_trail',
+  'audittrail',
+  'batch_date',
+  'batchdate',
+  'batch_id',
+  'batchid',
+  'batch_name',
+  'batchname',
+  'bottle_count',
+  'bottlecount',
+  'completed_by',
+  'completedby',
+  'created_by',
+  'createdby',
+  'created_date',
+  'createddate',
+  'formula_name',
+  'formulaname',
+  'from_status',
+  'fromstatus',
+  'item_name',
+  'itemname',
+  'new_status',
+  'newstatus',
+  'operator_email',
+  'operatoremail',
+  'operator_name',
+  'operatorname',
+  'operator_role',
+  'operatorrole',
+  'planned_units',
+  'plannedunits',
+  'previous_status',
+  'previousstatus',
+  'product_category',
+  'productcategory',
+  'product_name',
+  'productname',
+  'production_date',
+  'productiondate',
+  'recipe_name',
+  'recipename',
+  'request_id',
+  'requestid',
+  'started_by',
+  'startedby',
+  'status',
+  'target_units',
+  'targetunits',
+  'timestamp',
+  'to_status',
+  'tostatus',
+  'total_units',
+  'totalunits',
+  'unit',
+  'unit_size',
+  'unitsize',
+  'unit_type',
+  'unittype',
+  'units',
+  'updated_by',
+  'updatedby',
+  'updated_date',
+  'updateddate',
+  'verified_by',
+  'verifiedby',
 ]);
 
 function normalizeText(value) {
@@ -319,25 +398,25 @@ function buildSafeOrderSourceSummaries(orderSources) {
 function hasUnexpectedCustomerData(batch) {
   const batchWithoutKnownSources = { ...batch };
   delete batchWithoutKnownSources.order_sources;
+  delete batchWithoutKnownSources.audit_trail;
   return findUnsafeFieldKeys(batchWithoutKnownSources, {
     terms: CUSTOMER_DATA_KEY_TERMS,
+    safeKeys: PRODUCTION_METADATA_SAFE_KEYS,
+  }).length > 0;
+}
+
+function hasUnsafeAuditTrailCustomerData(auditTrail) {
+  return findUnsafeFieldKeys(auditTrail, {
+    terms: CUSTOMER_DATA_KEY_TERMS,
     safeKeys: new Set([
-      'batch_id',
-      'batchid',
-      'product_name',
-      'productname',
-      'product_category',
-      'productcategory',
-      'production_date',
-      'productiondate',
-      'assigned_to',
-      'assignedto',
-      'started_by',
-      'startedby',
-      'completed_by',
-      'completedby',
-      'verified_by',
-      'verifiedby',
+      ...PRODUCTION_METADATA_SAFE_KEYS,
+      'actor',
+      'actor_email',
+      'actoremail',
+      'actor_name',
+      'actorname',
+      'actor_role',
+      'actorrole',
     ]),
   }).length > 0;
 }
@@ -450,13 +529,16 @@ function buildPreview({ batch, productionBatchId, expectedBatchId, expectedStatu
   const linkedOrderCount = Array.isArray(batch?.related_orders) ? batch.related_orders.length : 0;
   const linkedTaskCount = Array.isArray(batch?.fulfillment_task_ids) ? batch.fulfillment_task_ids.length : 0;
   const unexpectedCustomerDataPresent = hasUnexpectedCustomerData(batch);
+  const unsafeAuditTrailCustomerDataPresent = hasUnsafeAuditTrailCustomerData(batch?.audit_trail);
   const unsafeOrderSourceCustomerDataPresent = hasUnsafeOrderSourceCustomerData(batch?.order_sources);
   const orderSourceSecretOrAuthPresent = hasOrderSourceSecretOrAuthFields(batch?.order_sources);
   const customerContextPresent = orderSourceSummary.orderSourcesCount > 0 && (
     safeOrderSourceSummaries.length > 0 ||
     orderSourceSummary.orderNumberCount > 0
   );
-  const customerDataBlocking = unexpectedCustomerDataPresent || unsafeOrderSourceCustomerDataPresent;
+  const customerDataBlocking = unexpectedCustomerDataPresent ||
+    unsafeAuditTrailCustomerDataPresent ||
+    unsafeOrderSourceCustomerDataPresent;
 
   if (expectedBatchId && expectedBatchId !== batchDisplayId) blockers.push('batch_id_mismatch');
   if (expectedStatus && expectedStatus !== currentStatus) blockers.push('expected_status_mismatch');
