@@ -702,10 +702,6 @@ Deno.serve(async (req) => {
     }
 
     const previousStatus = normalizeSingleLine(batch.status);
-    if (expectedStatus && expectedStatus !== previousStatus) {
-      return Response.json({ error: 'expected_status does not match target batch', error_code: 'expected_status_mismatch' }, { status: 409 });
-    }
-
     const existingLog = await findExistingCommandLog(base44, requestId, productionBatchId);
     if (existingLog) {
       const existingStatus = normalizeLower(existingLog.status);
@@ -766,6 +762,10 @@ Deno.serve(async (req) => {
         error: 'Fake/test batch gate failed',
         error_code: 'fake_test_gate_failed',
       }, { status: 409 });
+    }
+
+    if (expectedStatus && expectedStatus !== previousStatus) {
+      return Response.json({ error: 'expected_status does not match target batch', error_code: 'expected_status_mismatch' }, { status: 409 });
     }
 
     const transition = evaluateTransition(batch);
