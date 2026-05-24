@@ -4,6 +4,9 @@ const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 const APPROVED_FAKE_BATCH_ID = (Deno.env.get('G16C1_FAKE_PRODUCTION_BATCH_ID') || '').trim();
 const APPROVED_FAKE_BATCH_DISPLAY_ID = (Deno.env.get('G16C1_FAKE_PRODUCTION_BATCH_BATCH_ID') || '').trim();
 const APPROVED_FAKE_MANUAL_BATCH_ID = (Deno.env.get('G16C1_FAKE_MANUAL_PRODUCTION_BATCH_ID') || '').trim();
+const REAL_START_ENABLED = (Deno.env.get('ENABLE_REAL_PRODUCTION_BATCH_START') || '').trim().toLowerCase() === 'true';
+const REAL_START_ALLOWED_EMAILS = Deno.env.get('REAL_PRODUCTION_START_ALLOWED_EMAILS') || '';
+const REAL_START_BATCH_ALLOWLIST = Deno.env.get('REAL_PRODUCTION_START_BATCH_ALLOWLIST') || '';
 
 const COMMAND = 'production_batch_start';
 const TARGET_TYPE = 'ProductionBatch';
@@ -49,6 +52,78 @@ const CUSTOMER_DATA_KEY_TERMS = [
   'longitude',
   'latitude',
   'geo',
+];
+
+const UNSAFE_CUSTOMER_CONTEXT_KEY_TERMS = [
+  'customer_phone',
+  'contact_phone',
+  'phone',
+  'address',
+  'shipping_address',
+  'billing_address',
+  'street',
+  'city',
+  'state',
+  'zip',
+  'postal',
+  'lat',
+  'lng',
+  'longitude',
+  'latitude',
+  'geo',
+  'raw_payload',
+  'payload',
+  'raw_order',
+  'order_payload',
+  'customer_payload',
+  'provider_payload',
+];
+
+const UNEXPECTED_CUSTOMER_KEY_TERMS = [
+  'customer_email',
+  'customer_name',
+  'customer_phone',
+  'contact_email',
+  'contact_name',
+  'contact_phone',
+  'recipient',
+  'phone',
+  'address',
+  'shipping_address',
+  'billing_address',
+  'street',
+  'city',
+  'state',
+  'zip',
+  'postal',
+  'lat',
+  'lng',
+  'longitude',
+  'latitude',
+  'geo',
+  'raw_payload',
+  'payload',
+  'raw_order',
+  'order_payload',
+  'customer_payload',
+  'provider_payload',
+];
+
+const SECRET_AUTH_KEY_TERMS = [
+  'secret',
+  'token',
+  'api_key',
+  'apikey',
+  'auth',
+  'authorization',
+  'bearer',
+  'credential',
+  'password',
+  'private_key',
+  'access_key',
+  'refresh_token',
+  'session_token',
+  'webhook_secret',
 ];
 
 const PROVIDER_PAYMENT_KEY_TERMS = [
@@ -111,6 +186,16 @@ const OPERATIONAL_LINKAGE_KEY_TERMS = [
   'subscription',
 ];
 
+const RECALCULATION_KEY_TERMS = [
+  'recalc',
+  'recalculate',
+  'recalculation',
+  'stale',
+  'needs_recalc',
+  'demand_pending',
+  'pending_recalc',
+];
+
 const COMPLIANCE_FINALIZATION_FIELDS = new Set([
   'compliance_log_id',
   'ccp_log_id',
@@ -130,6 +215,74 @@ const SAFE_PROVIDER_PAYMENT_KEYS = new Set([
 const SAFE_OPERATIONAL_LINKAGE_KEYS = new Set([
   'batch_id',
   'source_type',
+]);
+
+const REAL_ORDER_SOURCE_SAFE_KEYS = new Set([
+  'batch_id',
+  'batchid',
+  'customer_email',
+  'customeremail',
+  'customer_name',
+  'customername',
+  'fulfillment_method',
+  'fulfillmentmethod',
+  'fulfillment_type',
+  'fulfillmenttype',
+  'order_id',
+  'orderid',
+  'order_number',
+  'ordernumber',
+  'order_type',
+  'ordertype',
+  'quantity',
+  'source_type',
+  'sourcetype',
+]);
+
+const REAL_BATCH_METADATA_SAFE_KEYS = new Set([
+  'action',
+  'actual_units',
+  'actualunits',
+  'assigned_to',
+  'assignedto',
+  'audit_trail',
+  'audittrail',
+  'batch_date',
+  'batchdate',
+  'batch_id',
+  'batchid',
+  'created_by',
+  'createdby',
+  'created_date',
+  'createddate',
+  'id',
+  'is_locked',
+  'islocked',
+  'name',
+  'notes',
+  'order_sources',
+  'ordersources',
+  'performed_by',
+  'performedby',
+  'planned_units',
+  'plannedunits',
+  'product_category',
+  'productcategory',
+  'product_name',
+  'productname',
+  'production_date',
+  'productiondate',
+  'production_status',
+  'productionstatus',
+  'quantity',
+  'source_type',
+  'sourcetype',
+  'status',
+  'timestamp',
+  'unit',
+  'units',
+  'updated_date',
+  'updateddate',
 ]);
 
 function normalizeText(value) {
@@ -197,6 +350,42 @@ function normalizeSource(value) {
   const source = normalizeLower(value || SOURCE);
   if (source !== SOURCE) throw new Error('source must be customer_app_admin');
   return source;
+}
+
+function parseEmailAllowlist(raw) {
+  return new Set((raw || '')
+    .split(',')
+    .map((email) => normalizeLower(email))
+    .filter(Boolean));
+}
+
+function parseRealBatchAllowlist(raw) {
+  return (raw || '')
+    .split(',')
+    .map((entry) => normalizeSingleLine(entry))
+    .filter(Boolean)
+    .map((entry) => {
+      const separator = entry.indexOf(':');
+      if (separator <= 0 || separator === entry.length - 1) return null;
+      return {
+        productionBatchId: entry.slice(0, separator).trim(),
+        batchDisplayId: entry.slice(separator + 1).trim(),
+      };
+    })
+    .filter(Boolean);
+}
+
+function isActorAllowedForRealStart(actorEmail, actorRole) {
+  if (normalizeLower(actorRole) !== 'admin') return false;
+  const allowedEmails = parseEmailAllowlist(REAL_START_ALLOWED_EMAILS);
+  return allowedEmails.has(normalizeLower(actorEmail));
+}
+
+function findRealBatchAllowlistMatch(productionBatchId, batchDisplayId) {
+  return parseRealBatchAllowlist(REAL_START_BATCH_ALLOWLIST).some((entry) => (
+    entry.productionBatchId === productionBatchId &&
+    entry.batchDisplayId === batchDisplayId
+  ));
 }
 
 function findUnsupportedBodyKey(body) {
@@ -271,6 +460,36 @@ function hasCustomerDataInSources(orderSources) {
   }).length > 0;
 }
 
+function hasUnsafeRealOrderSourceCustomerData(orderSources) {
+  return findUnsafeFieldKeys(orderSources, {
+    terms: UNSAFE_CUSTOMER_CONTEXT_KEY_TERMS,
+    safeKeys: REAL_ORDER_SOURCE_SAFE_KEYS,
+  }).length > 0;
+}
+
+function hasUnsafeUnexpectedCustomerData(batch) {
+  const batchWithoutKnownSources = { ...batch };
+  delete batchWithoutKnownSources.order_sources;
+  delete batchWithoutKnownSources.audit_trail;
+  return findUnsafeFieldKeys(batchWithoutKnownSources, {
+    terms: UNEXPECTED_CUSTOMER_KEY_TERMS,
+    safeKeys: REAL_BATCH_METADATA_SAFE_KEYS,
+  }).length > 0;
+}
+
+function hasUnsafeAuditTrailCustomerData(auditTrail) {
+  return findUnsafeFieldKeys(auditTrail, {
+    terms: UNEXPECTED_CUSTOMER_KEY_TERMS,
+    safeKeys: REAL_BATCH_METADATA_SAFE_KEYS,
+  }).length > 0;
+}
+
+function hasSecretOrAuthFields(source) {
+  return findUnsafeFieldKeys(source, {
+    terms: SECRET_AUTH_KEY_TERMS,
+  }).length > 0;
+}
+
 function hasUnsafeProviderPaymentFields(batch) {
   return findUnsafeFieldKeys(batch, {
     terms: PROVIDER_PAYMENT_KEY_TERMS,
@@ -328,6 +547,29 @@ function hasOperationalLinkage(batch) {
   return findOperationalLinkageKeys(batch).length > 0;
 }
 
+function hasRealOperationalLinkage(batch) {
+  const batchWithoutKnownSources = { ...batch };
+  delete batchWithoutKnownSources.order_sources;
+  return findUnsafeFieldKeys(batchWithoutKnownSources, {
+    terms: OPERATIONAL_LINKAGE_KEY_TERMS,
+    safeKeys: SAFE_OPERATIONAL_LINKAGE_KEYS,
+  }).length > 0 || hasMeaningfulFieldValue(batch?.related_orders);
+}
+
+function hasInventoryPoLinkage(batch) {
+  const batchWithoutKnownSources = { ...batch };
+  delete batchWithoutKnownSources.order_sources;
+  return findUnsafeFieldKeys(batchWithoutKnownSources, {
+    terms: ['inventory', 'purchase_order', 'po_id', 'supplier', 'stock'],
+  }).length > 0;
+}
+
+function hasRecalculationRisk(batch) {
+  return findUnsafeFieldKeys(batch, {
+    terms: RECALCULATION_KEY_TERMS,
+  }).length > 0;
+}
+
 function hasComplianceFinalization(batch) {
   return [...COMPLIANCE_FINALIZATION_FIELDS].some((field) => hasMeaningfulFieldValue(batch?.[field]));
 }
@@ -379,6 +621,9 @@ function buildNotes({
   startedAt,
   linkedManualBatchPresent,
   linkedManualBatchUpdatedCount,
+  fakeTestOnly = true,
+  realStartEnabled = false,
+  realBatchAllowlisted = false,
 }) {
   return JSON.stringify({
     previous_status: sanitizeMetadataValue(previousStatus, 40) || null,
@@ -388,7 +633,9 @@ function buildNotes({
     request_id: sanitizeMetadataValue(requestId, 160),
     linked_manual_batch_present: linkedManualBatchPresent === true,
     linked_manual_batch_updated_count: Number(linkedManualBatchUpdatedCount) || 0,
-    fake_test_only: true,
+    fake_test_only: fakeTestOnly === true,
+    real_start_enabled: realStartEnabled === true,
+    real_batch_allowlisted: realBatchAllowlisted === true,
   });
 }
 
@@ -400,6 +647,9 @@ function parseNotesMetadata(notes) {
       previous_status: sanitizeMetadataValue(parsed.previous_status, 40) || null,
       new_status: sanitizeMetadataValue(parsed.new_status, 40) || null,
       started_at: sanitizeMetadataValue(parsed.started_at, 60) || null,
+      fake_test_only: parsed.fake_test_only === true,
+      real_start_enabled: parsed.real_start_enabled === true,
+      real_batch_allowlisted: parsed.real_batch_allowlisted === true,
     };
   } catch {
     return {};
@@ -422,6 +672,9 @@ function buildLogPayload({
   detailsSummary,
   timestamp,
   durationMs,
+  fakeTestOnly,
+  realStartEnabled,
+  realBatchAllowlisted,
 }) {
   return {
     command_id: commandId(requestId, productionBatchId),
@@ -448,6 +701,9 @@ function buildLogPayload({
       startedAt,
       linkedManualBatchPresent,
       linkedManualBatchUpdatedCount,
+      fakeTestOnly,
+      realStartEnabled,
+      realBatchAllowlisted,
     }),
     error_code: errorCode || null,
     error_message: errorCode ? sanitizeText(detailsSummary, 200) : null,
@@ -526,10 +782,204 @@ function evaluateFakeGate(batch, productionBatchId) {
   };
 }
 
-function evaluateTransition(batch) {
+function evaluateRealGate({
+  batch,
+  productionBatchId,
+  batchDisplayId,
+  expectedBatchDisplayId,
+  expectedStatus,
+  previousStatus,
+  actorEmail,
+  actorRole,
+}) {
+  if (!REAL_START_ENABLED) {
+    return {
+      passed: false,
+      errorCode: 'real_start_not_enabled',
+      statusCode: 409,
+      message: 'Real production batch start is not enabled',
+      realBatchAllowlisted: false,
+    };
+  }
+
+  if (!isActorAllowedForRealStart(actorEmail, actorRole)) {
+    return {
+      passed: false,
+      errorCode: 'actor_not_allowed',
+      statusCode: 403,
+      message: 'Actor is not allowed to start real production batches',
+      realBatchAllowlisted: false,
+    };
+  }
+
+  if (!expectedBatchDisplayId || expectedBatchDisplayId !== batchDisplayId) {
+    return {
+      passed: false,
+      errorCode: 'batch_id_mismatch',
+      statusCode: 409,
+      message: 'batch_id does not match target batch',
+      realBatchAllowlisted: false,
+    };
+  }
+
+  const realBatchAllowlisted = findRealBatchAllowlistMatch(productionBatchId, batchDisplayId);
+  if (!realBatchAllowlisted) {
+    return {
+      passed: false,
+      errorCode: 'batch_not_allowlisted',
+      statusCode: 409,
+      message: 'Production batch is not allowlisted for real start',
+      realBatchAllowlisted: false,
+    };
+  }
+
+  if (!expectedStatus || expectedStatus !== previousStatus) {
+    return {
+      passed: false,
+      errorCode: 'expected_status_mismatch',
+      statusCode: 409,
+      message: 'expected_status does not match target batch',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (batch?.is_locked === true) {
+    return {
+      passed: false,
+      errorCode: 'batch_locked',
+      statusCode: 409,
+      message: 'Locked batches cannot be started through this command',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (hasComplianceFinalization(batch)) {
+    return {
+      passed: false,
+      errorCode: 'compliance_finalization_present',
+      statusCode: 409,
+      message: 'Batch has compliance finalization fields',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (manualSources(batch).length > 0) {
+    return {
+      passed: false,
+      errorCode: 'manual_sources_out_of_scope',
+      statusCode: 409,
+      message: 'Manual-linked batches are out of scope for real start',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (hasRealOperationalLinkage(batch)) {
+    return {
+      passed: false,
+      errorCode: 'operational_linkage_blocked',
+      statusCode: 409,
+      message: 'Batch has operational linkage outside the real-start v1 scope',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (hasInventoryPoLinkage(batch)) {
+    return {
+      passed: false,
+      errorCode: 'inventory_po_linkage_present',
+      statusCode: 409,
+      message: 'Inventory or purchase order linkage is out of scope',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (hasProofOrDropFields(batch)) {
+    return {
+      passed: false,
+      errorCode: 'proof_drop_out_of_scope',
+      statusCode: 409,
+      message: 'Proof/drop fields are out of scope',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (hasUnsafeProviderPaymentFields(batch)) {
+    return {
+      passed: false,
+      errorCode: 'provider_payment_fields_present',
+      statusCode: 409,
+      message: 'Provider or payment fields are out of scope',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (
+    hasUnsafeUnexpectedCustomerData(batch) ||
+    hasUnsafeAuditTrailCustomerData(batch?.audit_trail) ||
+    hasUnsafeRealOrderSourceCustomerData(batch?.order_sources)
+  ) {
+    return {
+      passed: false,
+      errorCode: 'customer_data_present',
+      statusCode: 409,
+      message: 'Unsafe customer data is out of scope',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (hasSecretOrAuthFields(batch)) {
+    return {
+      passed: false,
+      errorCode: 'secret_or_auth_field_present',
+      statusCode: 409,
+      message: 'Secret or auth-like fields are out of scope',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (hasRecalculationRisk(batch)) {
+    return {
+      passed: false,
+      errorCode: 'recalculation_risk',
+      statusCode: 409,
+      message: 'Batch has recalculation risk',
+      realBatchAllowlisted,
+    };
+  }
+
+  if (isBlockedDemand(batch)) {
+    return {
+      passed: false,
+      errorCode: 'blocked_batch_state',
+      statusCode: 409,
+      message: 'Batch has a blocked demand state',
+      realBatchAllowlisted,
+    };
+  }
+
+  return {
+    passed: true,
+    errorCode: null,
+    statusCode: 200,
+    message: null,
+    realBatchAllowlisted,
+  };
+}
+
+function evaluateTransition(batch, { allowAlreadyInProductionSkip = true } = {}) {
   const previousStatus = normalizeSingleLine(batch?.status);
 
   if (isCoherentInProduction(batch)) {
+    if (!allowAlreadyInProductionSkip) {
+      return {
+        allowed: false,
+        skipped: false,
+        previousStatus,
+        newStatus: 'in_production',
+        errorCode: 'idempotency_conflict',
+        message: 'Batch is already in production for a different request_id',
+      };
+    }
     return {
       allowed: true,
       skipped: true,
@@ -619,6 +1069,9 @@ function safeResponse({
   skipped,
   updatedAt,
   linkedManualBatchUpdatedCount,
+  fakeTestOnly = true,
+  realStartEnabled = false,
+  realBatchAllowlisted = false,
 }) {
   return {
     success: true,
@@ -632,7 +1085,9 @@ function safeResponse({
     updated_at: updatedAt || null,
     linked_manual_batch_updated: Number(linkedManualBatchUpdatedCount) > 0,
     linked_manual_batch_updated_count: Number(linkedManualBatchUpdatedCount) || 0,
-    fake_test_only: true,
+    fake_test_only: fakeTestOnly === true,
+    real_start_enabled: realStartEnabled === true,
+    real_batch_allowlisted: realBatchAllowlisted === true,
   };
 }
 
@@ -683,13 +1138,6 @@ Deno.serve(async (req) => {
       return Response.json({ error: error.message, error_code: 'invalid_input' }, { status: 400 });
     }
 
-    if (!APPROVED_FAKE_BATCH_ID) {
-      return Response.json({
-        error: 'Fake production batch allowlist is not configured',
-        error_code: 'fake_batch_not_configured',
-      }, { status: 409 });
-    }
-
     const base44 = createClientFromRequest(req);
     const batch = await findProductionBatch(base44, productionBatchId);
     if (!batch) {
@@ -697,6 +1145,8 @@ Deno.serve(async (req) => {
     }
 
     const batchDisplayId = normalizeSingleLine(batch.batch_id);
+    const isFakeTarget = Boolean(APPROVED_FAKE_BATCH_ID) && productionBatchId === APPROVED_FAKE_BATCH_ID;
+    const isRealTarget = !isFakeTarget;
     if (expectedBatchDisplayId && expectedBatchDisplayId !== batchDisplayId) {
       return Response.json({ error: 'batch_id does not match target batch', error_code: 'batch_id_mismatch' }, { status: 409 });
     }
@@ -717,9 +1167,13 @@ Deno.serve(async (req) => {
           skipped: true,
           updatedAt: existingLog.completed_at || existingLog.updated_date || null,
           linkedManualBatchUpdatedCount: 0,
+          fakeTestOnly: metadata.fake_test_only !== false && isFakeTarget,
+          realStartEnabled: metadata.real_start_enabled === true || (isRealTarget && REAL_START_ENABLED),
+          realBatchAllowlisted: metadata.real_batch_allowlisted === true ||
+            (isRealTarget && findRealBatchAllowlistMatch(productionBatchId, batchDisplayId)),
         }));
       }
-      if (isCoherentInProduction(batch)) {
+      if (isFakeTarget && isCoherentInProduction(batch)) {
         return Response.json(safeResponse({
           productionBatchId,
           batchDisplayId,
@@ -730,6 +1184,9 @@ Deno.serve(async (req) => {
           skipped: true,
           updatedAt: batch.updated_date || null,
           linkedManualBatchUpdatedCount: 0,
+          fakeTestOnly: true,
+          realStartEnabled: false,
+          realBatchAllowlisted: false,
         }));
       }
       return Response.json({
@@ -738,37 +1195,89 @@ Deno.serve(async (req) => {
       }, { status: 409 });
     }
 
-    const fakeGate = evaluateFakeGate(batch, productionBatchId);
-    if (!fakeGate.passed) {
-      const now = new Date().toISOString();
-      await createCommandLog(base44, buildLogPayload({
-        requestId,
+    let fakeTestOnly = true;
+    let realBatchAllowlisted = false;
+
+    if (isFakeTarget) {
+      const fakeGate = evaluateFakeGate(batch, productionBatchId);
+      if (!fakeGate.passed) {
+        const now = new Date().toISOString();
+        await createCommandLog(base44, buildLogPayload({
+          requestId,
+          productionBatchId,
+          batchDisplayId,
+          actorEmail,
+          actorRole,
+          previousStatus,
+          newStatus: previousStatus,
+          startedAt: null,
+          linkedManualBatchPresent: manualSources(batch).length > 0,
+          linkedManualBatchUpdatedCount: 0,
+          status: 'rejected',
+          errorCode: fakeGate.failures.includes('fake_batch_not_configured') ? 'fake_batch_not_configured' : 'fake_test_gate_failed',
+          detailsSummary: fakeGate.failures.join(', '),
+          timestamp: now,
+          durationMs: Date.now() - startTime,
+          fakeTestOnly: true,
+          realStartEnabled: false,
+          realBatchAllowlisted: false,
+        })).catch(() => null);
+        return Response.json({
+          error: fakeGate.failures.includes('fake_batch_not_configured')
+            ? 'Fake production batch allowlist is not configured'
+            : 'Fake/test batch gate failed',
+          error_code: fakeGate.failures.includes('fake_batch_not_configured')
+            ? 'fake_batch_not_configured'
+            : 'fake_test_gate_failed',
+        }, { status: 409 });
+      }
+    } else {
+      fakeTestOnly = false;
+      const realGate = evaluateRealGate({
+        batch,
         productionBatchId,
         batchDisplayId,
+        expectedBatchDisplayId,
+        expectedStatus,
+        previousStatus,
         actorEmail,
         actorRole,
-        previousStatus,
-        newStatus: previousStatus,
-        startedAt: null,
-        linkedManualBatchPresent: manualSources(batch).length > 0,
-        linkedManualBatchUpdatedCount: 0,
-        status: 'rejected',
-        errorCode: 'fake_test_gate_failed',
-        detailsSummary: fakeGate.failures.join(', '),
-        timestamp: now,
-        durationMs: Date.now() - startTime,
-      })).catch(() => null);
-      return Response.json({
-        error: 'Fake/test batch gate failed',
-        error_code: 'fake_test_gate_failed',
-      }, { status: 409 });
+      });
+      realBatchAllowlisted = realGate.realBatchAllowlisted === true;
+      if (!realGate.passed) {
+        const now = new Date().toISOString();
+        await createCommandLog(base44, buildLogPayload({
+          requestId,
+          productionBatchId,
+          batchDisplayId,
+          actorEmail,
+          actorRole,
+          previousStatus,
+          newStatus: previousStatus,
+          startedAt: null,
+          linkedManualBatchPresent: manualSources(batch).length > 0,
+          linkedManualBatchUpdatedCount: 0,
+          status: 'rejected',
+          errorCode: realGate.errorCode,
+          detailsSummary: realGate.message,
+          timestamp: now,
+          durationMs: Date.now() - startTime,
+          fakeTestOnly: false,
+          realStartEnabled: REAL_START_ENABLED,
+          realBatchAllowlisted,
+        })).catch(() => null);
+        return Response.json({
+          error: realGate.message,
+          error_code: realGate.errorCode,
+        }, { status: realGate.statusCode });
+      }
     }
 
-    if (expectedStatus && expectedStatus !== previousStatus) {
+    if (isFakeTarget && expectedStatus && expectedStatus !== previousStatus) {
       return Response.json({ error: 'expected_status does not match target batch', error_code: 'expected_status_mismatch' }, { status: 409 });
     }
 
-    const transition = evaluateTransition(batch);
+    const transition = evaluateTransition(batch, { allowAlreadyInProductionSkip: isFakeTarget });
     if (!transition.allowed) {
       const now = new Date().toISOString();
       await createCommandLog(base44, buildLogPayload({
@@ -787,6 +1296,9 @@ Deno.serve(async (req) => {
         detailsSummary: transition.message,
         timestamp: now,
         durationMs: Date.now() - startTime,
+        fakeTestOnly,
+        realStartEnabled: !fakeTestOnly && REAL_START_ENABLED,
+        realBatchAllowlisted,
       })).catch(() => null);
       return Response.json({
         error: transition.message,
@@ -812,6 +1324,9 @@ Deno.serve(async (req) => {
         detailsSummary: null,
         timestamp: now,
         durationMs: Date.now() - startTime,
+        fakeTestOnly,
+        realStartEnabled: !fakeTestOnly && REAL_START_ENABLED,
+        realBatchAllowlisted,
       }));
       return Response.json(safeResponse({
         productionBatchId,
@@ -823,6 +1338,9 @@ Deno.serve(async (req) => {
         skipped: true,
         updatedAt: now,
         linkedManualBatchUpdatedCount: 0,
+        fakeTestOnly,
+        realStartEnabled: !fakeTestOnly && REAL_START_ENABLED,
+        realBatchAllowlisted,
       }));
     }
 
@@ -843,7 +1361,9 @@ Deno.serve(async (req) => {
       audit_trail: auditTrail,
     });
 
-    const manualResult = await updateLinkedManualBatch(base44, batch, now);
+    const manualResult = isFakeTarget
+      ? await updateLinkedManualBatch(base44, batch, now)
+      : { present: false, updatedCount: 0 };
 
     await createCommandLog(base44, buildLogPayload({
       requestId,
@@ -861,6 +1381,9 @@ Deno.serve(async (req) => {
       detailsSummary: null,
       timestamp: now,
       durationMs: Date.now() - startTime,
+      fakeTestOnly,
+      realStartEnabled: !fakeTestOnly && REAL_START_ENABLED,
+      realBatchAllowlisted,
     }));
 
     return Response.json(safeResponse({
@@ -873,6 +1396,9 @@ Deno.serve(async (req) => {
       skipped: false,
       updatedAt: now,
       linkedManualBatchUpdatedCount: manualResult.updatedCount,
+      fakeTestOnly,
+      realStartEnabled: !fakeTestOnly && REAL_START_ENABLED,
+      realBatchAllowlisted,
     }));
   } catch (error) {
     console.error(`[${FUNCTION_NAME}]`, sanitizeText(error?.message || 'Unexpected error', 200));
