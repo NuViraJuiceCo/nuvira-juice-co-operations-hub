@@ -3,6 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 
 const MAX_TEXT_LENGTH = 120;
+const SAFE_ORDER_SOURCE_SUMMARY_LIMIT = 10;
 const ALLOWED_STATUSES = new Set(['planned', 'ready_for_production']);
 const TERMINAL_STATUSES = new Set(['completed_pending_verification', 'verified_logged', 'archived']);
 const ALLOWED_BODY_KEYS = new Set([
@@ -52,6 +53,31 @@ const CUSTOMER_DATA_KEY_TERMS = [
   'longitude',
   'latitude',
   'geo',
+];
+
+const UNSAFE_CUSTOMER_CONTEXT_KEY_TERMS = [
+  'phone',
+  'address',
+  'shipping',
+  'billing',
+  'street',
+  'city',
+  'state',
+  'zip',
+  'postal',
+  'apartment',
+  'unit',
+  'lat',
+  'lng',
+  'longitude',
+  'latitude',
+  'geo',
+  'raw_payload',
+  'payload',
+  'raw_order',
+  'order_payload',
+  'customer_payload',
+  'provider_payload',
 ];
 
 const PROVIDER_PAYMENT_KEY_TERMS = [
@@ -136,6 +162,18 @@ function normalizeLower(value) {
 function sanitizeText(value, maxLength = MAX_TEXT_LENGTH) {
   const text = normalizeSingleLine(value)
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted email]')
+    .replace(/\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b/g, '[redacted phone]')
+    .replace(/\b\d{1,6}\s+[A-Za-z0-9.'-]+(?:\s+[A-Za-z0-9.'-]+){0,5}\s+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Court|Ct|Circle|Cir|Way|Place|Pl)\b/gi, '[redacted address]')
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, '[redacted auth]')
+    .replace(/\b(?:sk|pk|rk|whsec|ghp|github_pat|xoxb|xoxp|shpat|secret|token|api[_-]?key)[A-Za-z0-9:_-]{8,}\b/gi, '[redacted secret]')
+    .replace(/\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\b/g, '[redacted token]');
+
+  if (!text) return '';
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}...` : text;
+}
+
+function sanitizeAdminPreviewText(value, maxLength = MAX_TEXT_LENGTH) {
+  const text = normalizeSingleLine(value)
     .replace(/\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b/g, '[redacted phone]')
     .replace(/\b\d{1,6}\s+[A-Za-z0-9.'-]+(?:\s+[A-Za-z0-9.'-]+){0,5}\s+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Court|Ct|Circle|Cir|Way|Place|Pl)\b/gi, '[redacted address]')
     .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, '[redacted auth]')
@@ -241,6 +279,26 @@ function countOrderSources(orderSources) {
   };
 }
 
+function buildSafeOrderSourceSummaries(orderSources) {
+  const sources = Array.isArray(orderSources) ? orderSources : [];
+  return sources.slice(0, SAFE_ORDER_SOURCE_SUMMARY_LIMIT).map((source) => {
+    const summary = {};
+    const sourceType = sanitizeAdminPreviewText(source?.source_type, 80);
+    const orderNumber = sanitizeAdminPreviewText(source?.order_number, 80);
+    const customerName = sanitizeAdminPreviewText(source?.customer_name, 100);
+    const customerEmail = sanitizeAdminPreviewText(source?.customer_email, 120);
+    const fulfillmentType = sanitizeAdminPreviewText(source?.fulfillment_type || source?.fulfillment_method || source?.order_type, 80);
+
+    if (sourceType) summary.source_type = sourceType;
+    if (orderNumber) summary.order_number = orderNumber;
+    if (customerName) summary.customer_name = customerName;
+    if (customerEmail) summary.customer_email = customerEmail;
+    if (fulfillmentType) summary.fulfillment_type = fulfillmentType;
+
+    return summary;
+  }).filter((summary) => Object.keys(summary).length > 0);
+}
+
 function hasUnexpectedCustomerData(batch) {
   const batchWithoutKnownSources = { ...batch };
   delete batchWithoutKnownSources.order_sources;
@@ -267,9 +325,9 @@ function hasUnexpectedCustomerData(batch) {
   }).length > 0;
 }
 
-function hasUnsafeOrderSourcePii(orderSources) {
+function hasUnsafeOrderSourceCustomerData(orderSources) {
   return findUnsafeFieldKeys(orderSources, {
-    terms: CUSTOMER_DATA_KEY_TERMS,
+    terms: UNSAFE_CUSTOMER_CONTEXT_KEY_TERMS,
     safeKeys: new Set([
       'customer_email',
       'customeremail',
@@ -281,8 +339,12 @@ function hasUnsafeOrderSourcePii(orderSources) {
       'orderid',
       'source_type',
       'sourcetype',
-      'source_item',
-      'sourceitem',
+      'fulfillment_type',
+      'fulfillmenttype',
+      'fulfillment_method',
+      'fulfillmentmethod',
+      'order_type',
+      'ordertype',
       'quantity',
     ]),
   }).length > 0;
@@ -358,11 +420,19 @@ function buildPreview({ batch, productionBatchId, expectedBatchId, expectedStatu
   const batchDisplayId = normalizeSingleLine(batch?.batch_id);
   const currentStatus = normalizeSingleLine(batch?.status);
   const orderSourceSummary = countOrderSources(batch?.order_sources);
+  const safeOrderSourceSummaries = buildSafeOrderSourceSummaries(batch?.order_sources);
   const complianceFinalizationPresent = hasComplianceFinalization(batch);
   const inventoryPoLinkagePresent = hasInventoryPoLinkage(batch);
   const recalculationRisk = hasRecalculationRisk(batch);
   const linkedOrderCount = Array.isArray(batch?.related_orders) ? batch.related_orders.length : 0;
   const linkedTaskCount = Array.isArray(batch?.fulfillment_task_ids) ? batch.fulfillment_task_ids.length : 0;
+  const unexpectedCustomerDataPresent = hasUnexpectedCustomerData(batch);
+  const unsafeOrderSourceCustomerDataPresent = hasUnsafeOrderSourceCustomerData(batch?.order_sources);
+  const customerContextPresent = orderSourceSummary.orderSourcesCount > 0 && (
+    safeOrderSourceSummaries.length > 0 ||
+    orderSourceSummary.orderNumberCount > 0
+  );
+  const customerDataBlocking = unexpectedCustomerDataPresent || unsafeOrderSourceCustomerDataPresent;
 
   if (expectedBatchId && expectedBatchId !== batchDisplayId) blockers.push('batch_id_mismatch');
   if (expectedStatus && expectedStatus !== currentStatus) blockers.push('expected_status_mismatch');
@@ -376,12 +446,16 @@ function buildPreview({ batch, productionBatchId, expectedBatchId, expectedStatu
   if (hasOperationalLinkage(batch)) blockers.push('operational_linkage_blocked');
   if (hasProofOrDropFields(batch)) blockers.push('proof_drop_out_of_scope');
   if (hasUnsafeProviderPaymentFields(batch)) blockers.push('provider_payment_fields_present');
-  if (hasUnexpectedCustomerData(batch) || hasUnsafeOrderSourcePii(batch?.order_sources)) blockers.push('customer_data_present');
+  if (customerDataBlocking) blockers.push('customer_data_present');
   if (recalculationRisk) blockers.push('recalculation_risk');
   if (hasPriorLifecycleConflict(batch)) blockers.push('prior_lifecycle_conflict');
 
   if (orderSourceSummary.orderSourcesCount > 0) {
     warnings.push('order_sources_summarized_only');
+  }
+
+  if (customerContextPresent && !customerDataBlocking) {
+    warnings.push('customer_context_allowed_for_preview');
   }
 
   return {
@@ -395,6 +469,11 @@ function buildPreview({ batch, productionBatchId, expectedBatchId, expectedStatu
     order_sources_count: orderSourceSummary.orderSourcesCount,
     order_source_type_counts: orderSourceSummary.sourceTypeCounts,
     order_number_count: orderSourceSummary.orderNumberCount,
+    customer_context_present: customerContextPresent,
+    customer_context_allowed_for_preview: customerContextPresent && !customerDataBlocking,
+    order_sources_preview_allowed: orderSourceSummary.orderSourcesCount > 0 && !customerDataBlocking,
+    customer_data_blocking: customerDataBlocking,
+    safe_order_source_summaries: safeOrderSourceSummaries,
     manual_source_count: orderSourceSummary.manualSourceCount,
     linked_task_count: linkedTaskCount,
     linked_order_count: linkedOrderCount,
