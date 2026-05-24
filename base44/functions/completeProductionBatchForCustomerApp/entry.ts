@@ -3,6 +3,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 const APPROVED_FAKE_BATCH_ID = (Deno.env.get('G17C1_FAKE_COMPLETE_PRODUCTION_BATCH_ID') || '').trim();
 const APPROVED_FAKE_BATCH_DISPLAY_ID = (Deno.env.get('G17C1_FAKE_COMPLETE_PRODUCTION_BATCH_BATCH_ID') || '').trim();
+const REAL_COMPLETE_ENABLED = (Deno.env.get('ENABLE_REAL_PRODUCTION_BATCH_COMPLETE') || '').trim().toLowerCase() === 'true';
+const REAL_COMPLETE_ALLOWED_EMAILS = Deno.env.get('REAL_PRODUCTION_COMPLETE_ALLOWED_EMAILS') || '';
+const REAL_COMPLETE_BATCH_ALLOWLIST = Deno.env.get('REAL_PRODUCTION_COMPLETE_BATCH_ALLOWLIST') || '';
 
 const COMMAND = 'production_batch_complete';
 const TARGET_TYPE = 'ProductionBatch';
@@ -82,6 +85,25 @@ const OPERATIONAL_LINKAGE_KEY_TERMS = [
   'subscription',
 ];
 
+const PROVIDER_PAYMENT_KEY_TERMS = [
+  'stripe',
+  'shopify',
+  'payment_intent',
+  'checkout_session',
+  'session_id',
+  'subscription_id',
+  'provider',
+  'external_id',
+  'gateway',
+  'transaction',
+  'charge',
+  'invoice',
+  'payment_method',
+  'processor',
+  'fulfillment_provider',
+  'payment',
+];
+
 const PROOF_DROP_KEY_TERMS = [
   'proof',
   'photo',
@@ -111,6 +133,39 @@ const SECRET_AUTH_KEY_TERMS = [
   'refresh_token',
   'session_token',
   'webhook_secret',
+];
+
+const UNSAFE_CUSTOMER_CONTEXT_KEY_TERMS = [
+  'phone',
+  'address',
+  'shipping',
+  'billing',
+  'street',
+  'city',
+  'state',
+  'zip',
+  'postal',
+  'lat',
+  'lng',
+  'longitude',
+  'latitude',
+  'geo',
+  'raw_payload',
+  'payload',
+  'raw_order',
+  'order_payload',
+  'customer_payload',
+  'provider_payload',
+];
+
+const RECALCULATION_KEY_TERMS = [
+  'recalc',
+  'recalculate',
+  'recalculation',
+  'stale',
+  'needs_recalc',
+  'demand_pending',
+  'pending_recalc',
 ];
 
 const SAFE_OPERATIONAL_KEYS = new Set([
@@ -192,6 +247,42 @@ function normalizeSource(value) {
   const source = normalizeLower(value || SOURCE);
   if (source !== SOURCE) throw new Error('source must be customer_app_admin');
   return source;
+}
+
+function parseEmailAllowlist(raw) {
+  return new Set((raw || '')
+    .split(',')
+    .map((email) => normalizeLower(email))
+    .filter(Boolean));
+}
+
+function parseRealBatchAllowlist(raw) {
+  return (raw || '')
+    .split(',')
+    .map((entry) => normalizeSingleLine(entry))
+    .filter(Boolean)
+    .map((entry) => {
+      const separator = entry.indexOf(':');
+      if (separator <= 0 || separator === entry.length - 1) return null;
+      return {
+        productionBatchId: entry.slice(0, separator).trim(),
+        batchDisplayId: entry.slice(separator + 1).trim(),
+      };
+    })
+    .filter(Boolean);
+}
+
+function isActorAllowedForRealComplete(actorEmail, actorRole) {
+  if (normalizeLower(actorRole) !== 'admin') return false;
+  const allowedEmails = parseEmailAllowlist(REAL_COMPLETE_ALLOWED_EMAILS);
+  return allowedEmails.has(normalizeLower(actorEmail));
+}
+
+function findRealBatchAllowlistMatch(productionBatchId, batchDisplayId) {
+  return parseRealBatchAllowlist(REAL_COMPLETE_BATCH_ALLOWLIST).some((entry) => (
+    entry.productionBatchId === productionBatchId &&
+    entry.batchDisplayId === batchDisplayId
+  ));
 }
 
 function normalizeFieldKey(key) {
@@ -307,8 +398,28 @@ function hasProofDropRisk(batch) {
   return findUnsafeFieldKeys(batch, PROOF_DROP_KEY_TERMS).length > 0;
 }
 
+function hasProviderPaymentRisk(batch) {
+  const shallow = { ...batch };
+  delete shallow.order_sources;
+  delete shallow.audit_trail;
+  return findUnsafeFieldKeys(shallow, PROVIDER_PAYMENT_KEY_TERMS, SAFE_OPERATIONAL_KEYS).length > 0 ||
+    findUnsafeFieldKeys(batch?.order_sources || [], PROVIDER_PAYMENT_KEY_TERMS, SAFE_OPERATIONAL_KEYS).length > 0;
+}
+
 function hasSecretAuthRisk(source) {
   return findUnsafeFieldKeys(source, SECRET_AUTH_KEY_TERMS).length > 0;
+}
+
+function hasUnsafeCustomerContextRisk(batch) {
+  const shallow = { ...batch };
+  delete shallow.order_sources;
+  delete shallow.audit_trail;
+  return findUnsafeFieldKeys(shallow, UNSAFE_CUSTOMER_CONTEXT_KEY_TERMS, SAFE_OPERATIONAL_KEYS).length > 0 ||
+    findUnsafeFieldKeys(batch?.order_sources || [], UNSAFE_CUSTOMER_CONTEXT_KEY_TERMS, SAFE_OPERATIONAL_KEYS).length > 0;
+}
+
+function hasRecalculationRisk(batch) {
+  return findUnsafeFieldKeys(batch, RECALCULATION_KEY_TERMS, SAFE_OPERATIONAL_KEYS).length > 0;
 }
 
 function commandId(requestId, batchId) {
@@ -321,6 +432,8 @@ function buildNotes({
   newStatus,
   completedAt,
   fakeTestOnly = true,
+  realCompleteEnabled = false,
+  realBatchAllowlisted = false,
 }) {
   return JSON.stringify({
     previous_status: sanitizeText(previousStatus, 40) || null,
@@ -329,6 +442,8 @@ function buildNotes({
     source: SOURCE,
     request_id: sanitizeText(requestId, 160),
     fake_test_only: fakeTestOnly === true,
+    real_complete_enabled: realCompleteEnabled === true,
+    real_batch_allowlisted: realBatchAllowlisted === true,
     verification_excluded: true,
     side_effects_excluded: true,
   });
@@ -343,6 +458,8 @@ function parseNotesMetadata(notes) {
       new_status: sanitizeText(parsed.new_status, 40) || null,
       completed_at: sanitizeText(parsed.completed_at, 60) || null,
       fake_test_only: parsed.fake_test_only === true,
+      real_complete_enabled: parsed.real_complete_enabled === true,
+      real_batch_allowlisted: parsed.real_batch_allowlisted === true,
     };
   } catch {
     return {};
@@ -360,6 +477,8 @@ function safeResponse({
   skipped = false,
   updatedAt,
   fakeTestOnly = true,
+  realCompleteEnabled = false,
+  realBatchAllowlisted = false,
 }) {
   return {
     success: success === true,
@@ -372,6 +491,8 @@ function safeResponse({
     skipped: skipped === true,
     updated_at: updatedAt || null,
     fake_test_only: fakeTestOnly === true,
+    real_complete_enabled: realCompleteEnabled === true,
+    real_batch_allowlisted: realBatchAllowlisted === true,
     verification_excluded: true,
     linked_manual_batch_updated: false,
     linked_manual_batch_updated_count: 0,
@@ -400,6 +521,9 @@ function buildLogPayload({
   detailsSummary,
   timestamp,
   durationMs,
+  fakeTestOnly,
+  realCompleteEnabled,
+  realBatchAllowlisted,
 }) {
   return {
     command_id: commandId(requestId, productionBatchId),
@@ -424,7 +548,9 @@ function buildLogPayload({
       previousStatus,
       newStatus,
       completedAt,
-      fakeTestOnly: true,
+      fakeTestOnly,
+      realCompleteEnabled,
+      realBatchAllowlisted,
     }),
     error_code: errorCode || null,
     error_message: errorCode ? sanitizeText(detailsSummary, 200) : null,
@@ -476,6 +602,59 @@ function evaluateFakeGate(batch, productionBatchId) {
   if (hasProofDropRisk(batch)) failures.push('proof_drop_out_of_scope');
   if (hasSecretAuthRisk(orderSources)) failures.push('secret_or_auth_field_present');
   return failures;
+}
+
+function evaluateRealGate({
+  batch,
+  productionBatchId,
+  requestBatchId,
+  expectedStatus,
+  actorEmail,
+  actorRole,
+}) {
+  const failures = [];
+  const currentStatus = normalizeSingleLine(batch?.status);
+  const batchDisplayId = normalizeSingleLine(batch?.batch_id);
+
+  if (!REAL_COMPLETE_ENABLED) failures.push('real_complete_not_enabled');
+  if (!isActorAllowedForRealComplete(actorEmail, actorRole)) failures.push('actor_not_allowed');
+  if (!requestBatchId) failures.push('batch_id_required');
+  if (requestBatchId && requestBatchId !== batchDisplayId) failures.push('batch_id_mismatch');
+  if (!findRealBatchAllowlistMatch(productionBatchId, batchDisplayId)) failures.push('batch_not_allowlisted');
+  if (!expectedStatus) failures.push('expected_status_required');
+  if (expectedStatus && expectedStatus !== currentStatus) failures.push('expected_status_mismatch');
+  if (currentStatus !== 'in_production') failures.push('invalid_status_transition');
+  if (!normalizeSingleLine(batch?.actual_start_time)) failures.push('incoherent_batch_state');
+  if (batch?.is_locked === true) failures.push('batch_locked');
+  if (hasComplianceFinalization(batch)) failures.push('compliance_finalization_present');
+  if (hasManualSources(batch)) failures.push('manual_sources_out_of_scope');
+  if (hasOperationalLinkageRisk(batch)) failures.push('operational_linkage_blocked');
+  if (hasProofDropRisk(batch)) failures.push('proof_drop_out_of_scope');
+  if (hasProviderPaymentRisk(batch)) failures.push('provider_payment_fields_present');
+  if (hasSecretAuthRisk(batch)) failures.push('secret_or_auth_field_present');
+  if (hasUnsafeCustomerContextRisk(batch)) failures.push('unsafe_customer_context_present');
+  if (hasRecalculationRisk(batch)) failures.push('recalculation_risk');
+  if (TERMINAL_OR_BLOCKED_STATUSES.has(currentStatus)) failures.push('terminal_status_blocked');
+
+  return [...new Set(failures)];
+}
+
+function statusForRealGateFailure(failures) {
+  if (!failures.includes('real_complete_not_enabled') && failures.includes('actor_not_allowed')) return 403;
+  return 409;
+}
+
+function errorCodeForRealGateFailure(failures) {
+  const priority = [
+    'real_complete_not_enabled',
+    'actor_not_allowed',
+    'batch_not_allowlisted',
+    'batch_id_required',
+    'batch_id_mismatch',
+    'expected_status_required',
+    'expected_status_mismatch',
+  ];
+  return priority.find((code) => failures.includes(code)) || failures[0] || 'real_complete_gate_failed';
 }
 
 function normalizeCompletionInput(body) {
@@ -579,23 +758,44 @@ Deno.serve(async (req) => {
         requestId,
         skipped: true,
         updatedAt: sanitizeText(existingLog.completed_at || existingLog.updated_date, 80) || null,
-        fakeTestOnly: true,
+        fakeTestOnly: metadata.fake_test_only !== false,
+        realCompleteEnabled: metadata.real_complete_enabled === true,
+        realBatchAllowlisted: metadata.real_batch_allowlisted === true,
       }));
     }
     if (existingLog) {
       return Response.json(safeError('Conflicting idempotency record exists', 'idempotency_conflict'), { status: 409 });
     }
 
-    if (!requestBatchId || requestBatchId !== normalizeSingleLine(batch.batch_id)) {
-      return Response.json(safeError('batch_id does not match target batch', 'batch_id_mismatch'), { status: 409 });
+    const fakeGateFailures = evaluateFakeGate(batch, productionBatchId);
+    const realBatchAllowlisted = findRealBatchAllowlistMatch(productionBatchId, normalizeSingleLine(batch.batch_id));
+    let fakeTestOnly = true;
+    let realCompleteEnabled = false;
+
+    if (fakeGateFailures.length > 0) {
+      const realGateFailures = evaluateRealGate({
+        batch,
+        productionBatchId,
+        requestBatchId,
+        expectedStatus,
+        actorEmail,
+        actorRole,
+      });
+
+      if (realGateFailures.length > 0) {
+        const errorCode = errorCodeForRealGateFailure(realGateFailures);
+        return Response.json(
+          safeError('Real complete gate failed', errorCode),
+          { status: statusForRealGateFailure(realGateFailures) },
+        );
+      }
+
+      fakeTestOnly = false;
+      realCompleteEnabled = true;
     }
 
-    const fakeGateFailures = evaluateFakeGate(batch, productionBatchId);
-    if (fakeGateFailures.includes('fake_batch_not_configured')) {
-      return Response.json(safeError('Fake complete batch allowlist is not configured', 'fake_batch_not_configured'), { status: 409 });
-    }
-    if (fakeGateFailures.length > 0) {
-      return Response.json(safeError('Fake/test gate failed', 'fake_test_gate_failed'), { status: 409 });
+    if (!requestBatchId || requestBatchId !== normalizeSingleLine(batch.batch_id)) {
+      return Response.json(safeError('batch_id does not match target batch', 'batch_id_mismatch'), { status: 409 });
     }
 
     if (!expectedStatus || expectedStatus !== normalizeSingleLine(batch.status)) {
@@ -623,7 +823,9 @@ Deno.serve(async (req) => {
       after: { status: 'completed_pending_verification' },
       source: SOURCE,
       request_id: requestId,
-      fake_test_only: true,
+      fake_test_only: fakeTestOnly,
+      real_complete_enabled: realCompleteEnabled,
+      real_batch_allowlisted: realBatchAllowlisted,
       verification_excluded: true,
     };
 
@@ -665,6 +867,9 @@ Deno.serve(async (req) => {
         status: 'processing',
         timestamp: submittedAt,
         durationMs,
+        fakeTestOnly,
+        realCompleteEnabled,
+        realBatchAllowlisted,
       }));
     } catch {
       return Response.json(safeError('Command audit could not be created', 'command_log_failed'), { status: 500 });
@@ -685,6 +890,9 @@ Deno.serve(async (req) => {
         status: 'success',
         timestamp: submittedAt,
         durationMs,
+        fakeTestOnly,
+        realCompleteEnabled,
+        realBatchAllowlisted,
       }));
     } catch {
       return Response.json(safeError('Batch completed but command audit was not finalized', 'command_log_update_failed'), { status: 500 });
@@ -700,7 +908,9 @@ Deno.serve(async (req) => {
       requestId,
       skipped: false,
       updatedAt: now,
-      fakeTestOnly: true,
+      fakeTestOnly,
+      realCompleteEnabled,
+      realBatchAllowlisted,
     }));
   } catch {
     console.error('[completeProductionBatchForCustomerApp] Error');
