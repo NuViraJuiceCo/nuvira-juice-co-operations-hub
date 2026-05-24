@@ -52,7 +52,12 @@ const PROVIDER_PAYMENT_KEY_TERMS = [
   'processor',
   'fulfillment_provider',
 ];
-const CONTACT_ADDRESS_KEY_TERMS = [
+const CUSTOMER_DATA_KEY_TERMS = [
+  'email',
+  'contact',
+  'customer',
+  'recipient',
+  'name',
   'phone',
   'address',
   'shipping',
@@ -69,8 +74,19 @@ const CONTACT_ADDRESS_KEY_TERMS = [
   'longitude',
   'latitude',
   'geo',
-  'contact_phone',
-  'customer_phone',
+];
+const PROOF_DROP_KEY_TERMS = [
+  'proof',
+  'photo',
+  'image',
+  'file',
+  'attachment',
+  'upload',
+  'drop',
+  'dropoff',
+  'drop_location',
+  'delivery_photo',
+  'delivery_proof',
 ];
 
 function normalizeText(value) {
@@ -195,7 +211,7 @@ function hasMeaningfulFieldValue(value) {
   return Boolean(normalizeSingleLine(value));
 }
 
-function findUnsafeFieldKeys(source, { terms, safeKeys = new Set(), isAllowed = () => false }) {
+function findUnsafeFieldKeys(source, { terms, safeKeys = new Set(), isAllowed = () => false }, depth = 0) {
   if (!source || typeof source !== 'object' || Array.isArray(source)) return [];
 
   return Object.entries(source).reduce((keys, [key, value]) => {
@@ -204,6 +220,9 @@ function findUnsafeFieldKeys(source, { terms, safeKeys = new Set(), isAllowed = 
     if (safeKeys.has(normalized.snake) || safeKeys.has(normalized.compact)) return keys;
     if (isAllowed({ normalized, value })) return keys;
     if (fieldKeyMatchesTerms(key, terms)) keys.push(normalized.snake || 'unknown_field');
+    if (typeof value === 'object' && !Array.isArray(value) && depth < 2) {
+      keys.push(...findUnsafeFieldKeys(value, { terms, safeKeys, isAllowed }, depth + 1));
+    }
     return keys;
   }, []);
 }
@@ -213,12 +232,10 @@ function isApprovedSyntheticShopifyId(value) {
 }
 
 function hasProofOrDrop(order, task) {
-  return Boolean(
-    normalizeSingleLine(order?.delivery_photo_url) ||
-    normalizeSingleLine(order?.delivery_drop_location) ||
-    normalizeSingleLine(task?.delivery_photo_url) ||
-    normalizeSingleLine(task?.delivery_drop_location)
-  );
+  const taskUnsafeKeys = findUnsafeFieldKeys(task, { terms: PROOF_DROP_KEY_TERMS });
+  const orderUnsafeKeys = findUnsafeFieldKeys(order, { terms: PROOF_DROP_KEY_TERMS });
+
+  return taskUnsafeKeys.length > 0 || orderUnsafeKeys.length > 0;
 }
 
 function hasProviderPaymentLinkage(order, task) {
@@ -250,11 +267,11 @@ function isApprovedTestContactField({ normalized, value }) {
 
 function hasCustomerContactOrAddress(order, task) {
   const taskUnsafeKeys = findUnsafeFieldKeys(task, {
-    terms: CONTACT_ADDRESS_KEY_TERMS,
+    terms: CUSTOMER_DATA_KEY_TERMS,
     isAllowed: isApprovedTestContactField,
   });
   const orderUnsafeKeys = findUnsafeFieldKeys(order, {
-    terms: CONTACT_ADDRESS_KEY_TERMS,
+    terms: CUSTOMER_DATA_KEY_TERMS,
     isAllowed: isApprovedTestContactField,
   });
 
@@ -309,8 +326,8 @@ function evaluateFakeGate(task, order, taskId) {
   if (normalizeEmail(task?.customer_email) !== APPROVED_TEST_EMAIL) failures.push('task_email_not_approved');
   if (!isApprovedSyntheticShopifyId(order?.shopify_order_id)) failures.push('synthetic_shopify_order_id_not_approved');
   if (hasProviderPaymentLinkage(order, task)) failures.push('provider_payment_linkage_present');
-  if (hasCustomerContactOrAddress(order, task)) failures.push('customer_contact_or_address_present');
-  if (hasProofOrDrop(order, task)) failures.push('proof_or_drop_present');
+  if (hasCustomerContactOrAddress(order, task)) failures.push('customer_data_present');
+  if (hasProofOrDrop(order, task)) failures.push('proof_drop_out_of_scope');
   if (isBlockedOrderState(order)) failures.push('blocked_hub_order_state');
 
   return {
@@ -327,9 +344,9 @@ function evaluatePreconditions(task, order) {
   if (!isValidIsoTimestamp(task?.delivered_at)) errors.push('task_delivered_at_required');
   if (!normalizeSingleLine(task?.assigned_driver)) errors.push('driver_assignment_required');
   if (isBlockedOrderState(order)) errors.push('blocked_hub_order_state');
-  if (hasProofOrDrop(order, task)) errors.push('proof_or_drop_present');
+  if (hasProofOrDrop(order, task)) errors.push('proof_drop_out_of_scope');
   if (hasProviderPaymentLinkage(order, task)) errors.push('provider_payment_linkage_present');
-  if (hasCustomerContactOrAddress(order, task)) errors.push('customer_contact_or_address_present');
+  if (hasCustomerContactOrAddress(order, task)) errors.push('customer_data_present');
 
   return {
     passed: errors.length === 0,
@@ -366,8 +383,6 @@ function buildNotes({
   previousFulfillmentStatus,
   newFulfillmentStatus,
   taskDeliveredAtPresent,
-  reason,
-  detailsSummary,
 }) {
   return JSON.stringify({
     task_id: sanitizeMetadataValue(taskId, 160) || null,
@@ -380,8 +395,6 @@ function buildNotes({
     task_delivered_at_present: taskDeliveredAtPresent === true,
     source: SOURCE,
     request_id: sanitizeMetadataValue(requestId, 160),
-    reason: sanitizeText(reason, 160) || null,
-    details_summary: sanitizeText(detailsSummary, 200) || null,
     notification_expected_after_sync: true,
     proof_drop_omitted: true,
     fake_test_only: true,
@@ -420,7 +433,6 @@ function buildLogPayload({
   status,
   errorCode,
   detailsSummary,
-  reason,
   timestamp,
   durationMs,
 }) {
@@ -454,8 +466,6 @@ function buildLogPayload({
       previousFulfillmentStatus,
       newFulfillmentStatus,
       taskDeliveredAtPresent: Boolean(deliveredAt),
-      reason,
-      detailsSummary,
     }),
     error_code: errorCode || null,
     error_message: errorCode ? sanitizeText(detailsSummary, 200) : null,
@@ -474,6 +484,13 @@ async function findFulfillmentTask(base44, taskId) {
 async function findShopifyOrder(base44, orderId) {
   const orders = await base44.asServiceRole.entities.ShopifyOrder.filter({ id: orderId }, '-updated_date', 1);
   return orders?.[0] || null;
+}
+
+function isCoherentlyFulfilled(order, taskDeliveredAt) {
+  return normalizeLower(order?.production_status) === FULFILLED_STATUS &&
+    normalizeLower(order?.fulfillment_status) === FULFILLED_STATUS &&
+    Boolean(normalizeSingleLine(order?.delivered_at)) &&
+    normalizeSingleLine(order?.delivered_at) === taskDeliveredAt;
 }
 
 function safeResponse({
@@ -539,7 +556,6 @@ Deno.serve(async (req) => {
     let suppliedOrderId;
     let actorEmail;
     let actorRole;
-    let reason;
 
     try {
       taskId = normalizeId(body.fulfillment_task_id, 'fulfillment_task_id');
@@ -548,7 +564,7 @@ Deno.serve(async (req) => {
       actorEmail = normalizeActorEmail(body.actor_email);
       actorRole = normalizeActorRole(body.actor_role);
       normalizeSource(body.source);
-      reason = normalizeReason(body.reason);
+      normalizeReason(body.reason);
     } catch (error) {
       return Response.json({ error: error.message }, { status: 400 });
     }
@@ -628,21 +644,44 @@ Deno.serve(async (req) => {
         return Response.json({
           success: false,
           error: 'Command request was already rejected',
+          error_code: 'idempotency_conflict',
           request_id: requestId,
           skipped: true,
         }, { status: 409 });
       }
 
+      if (isCoherentlyFulfilled(order, taskDeliveredAt) && evaluateFakeGate(task, order, taskId).passed) {
+        return Response.json(safeResponse({
+          orderId,
+          taskId,
+          previousProductionStatus,
+          productionStatus: FULFILLED_STATUS,
+          previousFulfillmentStatus,
+          fulfillmentStatus: FULFILLED_STATUS,
+          deliveredAt: normalizeSingleLine(order.delivered_at),
+          requestId,
+          skipped: true,
+          updatedAt: existingLog.completed_at || existingLog.created_date || null,
+        }));
+      }
+
       return Response.json({
         success: false,
-        error: 'Command request already exists and did not complete successfully',
+        error: 'Command request already exists and cannot be safely resolved',
+        error_code: 'idempotency_conflict',
         request_id: requestId,
         skipped: true,
-      }, { status: 500 });
+      }, { status: 409 });
     }
 
     const fakeGate = evaluateFakeGate(task, order, taskId);
     if (!fakeGate.passed) {
+      const fakeGateErrorCode = fakeGate.failures.includes('customer_data_present')
+        ? 'customer_data_present'
+        : fakeGate.failures.includes('proof_drop_out_of_scope')
+          ? 'proof_drop_out_of_scope'
+          : 'fake_test_gate_failed';
+
       await createCommandLog(base44, buildLogPayload({
         requestId,
         taskId,
@@ -656,9 +695,8 @@ Deno.serve(async (req) => {
         newFulfillmentStatus: previousFulfillmentStatus,
         deliveredAt: null,
         status: 'rejected',
-        errorCode: 'fake_test_gate_failed',
+        errorCode: fakeGateErrorCode,
         detailsSummary: 'Fake-test gate failed',
-        reason,
         timestamp,
         durationMs: Date.now() - startTime,
       })).catch(() => null);
@@ -666,7 +704,7 @@ Deno.serve(async (req) => {
       return Response.json({
         success: false,
         error: 'Fake-test gate failed',
-        error_code: 'fake_test_gate_failed',
+        error_code: fakeGateErrorCode,
         fulfillment_task_id: taskId,
         hub_order_id: orderId,
         request_id: requestId,
@@ -691,7 +729,6 @@ Deno.serve(async (req) => {
         status: 'rejected',
         errorCode,
         detailsSummary: 'Customer-facing delivered precondition failed',
-        reason,
         timestamp,
         durationMs: Date.now() - startTime,
       }));
@@ -728,7 +765,6 @@ Deno.serve(async (req) => {
           status: 'skipped',
           errorCode: null,
           detailsSummary: 'Hub order already marked customer-facing delivered',
-          reason,
           timestamp,
           durationMs: Date.now() - startTime,
         }));
@@ -762,7 +798,6 @@ Deno.serve(async (req) => {
         status: 'rejected',
         errorCode: 'conflicting_delivered_at',
         detailsSummary: 'Hub order is already fulfilled with missing or conflicting delivered_at',
-        reason,
         timestamp,
         durationMs: Date.now() - startTime,
       }));
@@ -783,26 +818,6 @@ Deno.serve(async (req) => {
         fulfillment_status: FULFILLED_STATUS,
         delivered_at: taskDeliveredAt,
       });
-
-      await createCommandLog(base44, buildLogPayload({
-        requestId,
-        taskId,
-        orderId,
-        displayOrderNumber,
-        actorEmail,
-        actorRole,
-        previousProductionStatus,
-        newProductionStatus: FULFILLED_STATUS,
-        previousFulfillmentStatus,
-        newFulfillmentStatus: FULFILLED_STATUS,
-        deliveredAt: taskDeliveredAt,
-        status: 'success',
-        errorCode: null,
-        detailsSummary: 'Hub order marked customer-facing delivered for scoped Customer App sync',
-        reason,
-        timestamp,
-        durationMs: Date.now() - startTime,
-      }));
     } catch {
       await createCommandLog(base44, buildLogPayload({
         requestId,
@@ -819,13 +834,47 @@ Deno.serve(async (req) => {
         status: 'failed',
         errorCode: 'update_failed',
         detailsSummary: 'Hub order delivered sync-readiness update failed',
-        reason: null,
         timestamp,
         durationMs: Date.now() - startTime,
       })).catch(() => null);
 
       console.error('[MARK-HUB-ORDER-DELIVERED-FOR-CA-SYNC] command failed');
       return Response.json({ error: 'Unable to mark Hub order delivered for Customer App sync' }, { status: 500 });
+    }
+
+    try {
+      await createCommandLog(base44, buildLogPayload({
+        requestId,
+        taskId,
+        orderId,
+        displayOrderNumber,
+        actorEmail,
+        actorRole,
+        previousProductionStatus,
+        newProductionStatus: FULFILLED_STATUS,
+        previousFulfillmentStatus,
+        newFulfillmentStatus: FULFILLED_STATUS,
+        deliveredAt: taskDeliveredAt,
+        status: 'success',
+        errorCode: null,
+        detailsSummary: 'Hub order marked customer-facing delivered for scoped Customer App sync',
+        timestamp,
+        durationMs: Date.now() - startTime,
+      }));
+    } catch {
+      console.error('[MARK-HUB-ORDER-DELIVERED-FOR-CA-SYNC] audit log failed after update');
+      return Response.json(safeResponse({
+        orderId,
+        taskId,
+        previousProductionStatus,
+        productionStatus: FULFILLED_STATUS,
+        previousFulfillmentStatus,
+        fulfillmentStatus: FULFILLED_STATUS,
+        deliveredAt: taskDeliveredAt,
+        requestId,
+        skipped: false,
+        updatedAt: timestamp,
+      }));
     }
 
     return Response.json(safeResponse({
