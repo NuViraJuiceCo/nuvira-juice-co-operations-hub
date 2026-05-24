@@ -21,6 +21,17 @@ function normalizeText(value) {
   return (value || '').toString().trim();
 }
 
+function sanitizeAssignedDriver(value) {
+  const text = normalizeText(value)
+    .replace(/\s+/g, ' ')
+    .replace(/\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b/g, '[redacted phone]')
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, '[redacted auth]')
+    .replace(/\b(?:sk|pk|rk|whsec|ghp|github_pat|xoxb|xoxp|shpat|secret|token|api[_-]?key)[A-Za-z0-9:_-]{8,}\b/gi, '[redacted secret]');
+
+  if (!text) return null;
+  return text.length > 120 ? `${text.slice(0, 119).trim()}...` : text;
+}
+
 function parseIsoDate(value, fieldName) {
   const text = normalizeText(value);
   if (!text) return null;
@@ -80,6 +91,7 @@ function sanitizeStop(task, deliveryDate) {
     order_number: task.order_number || null,
     fulfillment_number: task.fulfillment_number ?? null,
     source_type: task.source_type || null,
+    assigned_driver: sanitizeAssignedDriver(task.assigned_driver),
     task_status: task.status || null,
     delivery_status: task.delivery_status || null,
     fulfillment_status: null,
