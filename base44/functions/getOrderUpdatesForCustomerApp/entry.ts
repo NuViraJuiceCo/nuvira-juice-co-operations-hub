@@ -2,6 +2,48 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 
+function normalizeGuardValue(value) {
+  return (value ?? '').toString().trim().toLowerCase();
+}
+
+function safeString(value, maxLength = 80) {
+  const normalized = normalizeGuardValue(value).replace(/[^a-z0-9_ -]/g, '').replace(/\s+/g, '_');
+  if (!normalized) return null;
+  return normalized.length > maxLength ? normalized.slice(0, maxLength) : normalized;
+}
+
+function buildSyncGuardMetadata(order) {
+  const syncStatus = safeString(order.sync_status);
+  const productionStatus = normalizeGuardValue(order.production_status);
+  const fulfillmentStatus = normalizeGuardValue(order.fulfillment_status);
+  const orderStatus = normalizeGuardValue(order.order_status);
+  const paymentStatus = normalizeGuardValue(order.payment_status);
+  const operationalVisibility = normalizeGuardValue(order.operational_visibility);
+  const dataQualityStatus = normalizeGuardValue(order.data_quality_status);
+  const tags = Array.isArray(order.tags)
+    ? order.tags.map(tag => normalizeGuardValue(tag)).filter(Boolean)
+    : [];
+
+  const tagSet = new Set(tags);
+  const guardReasons = new Set();
+
+  if (syncStatus === 'do_not_sync') guardReasons.add('do_not_sync');
+  if (tagSet.has('do_not_sync') || tagSet.has('do-not-sync')) guardReasons.add('do_not_sync');
+  if (tagSet.has('excluded') || tagSet.has('exclude_from_sync') || tagSet.has('excluded_from_sync')) guardReasons.add('excluded');
+  if (operationalVisibility === 'archived') guardReasons.add('excluded');
+  if (dataQualityStatus === 'quarantined') guardReasons.add('quarantined');
+  if (productionStatus === 'canceled' || productionStatus === 'cancelled' || orderStatus === 'canceled' || orderStatus === 'cancelled') guardReasons.add('cancelled');
+  if (productionStatus === 'refunded' || orderStatus === 'refunded' || paymentStatus === 'refunded') guardReasons.add('refunded');
+
+  return {
+    sync_status: syncStatus,
+    do_not_sync: guardReasons.has('do_not_sync'),
+    excluded_from_sync: guardReasons.has('excluded') || guardReasons.has('quarantined'),
+    excluded: guardReasons.has('excluded') || guardReasons.has('quarantined'),
+    guard_reasons: Array.from(guardReasons),
+  };
+}
+
 Deno.serve(async (req) => {
   try {
     // Authenticate using Bearer token
@@ -60,6 +102,7 @@ Deno.serve(async (req) => {
         customer_app_user_id: order.customer_app_user_id || null,
         status: order.production_status,
         fulfillment_status: order.fulfillment_status || null,
+        ...buildSyncGuardMetadata(order),
         // ── Delivery outcome fields (visible to customer) ──
         delivered_at: order.delivered_at || null,
         delivered_by: order.delivered_by || null,
