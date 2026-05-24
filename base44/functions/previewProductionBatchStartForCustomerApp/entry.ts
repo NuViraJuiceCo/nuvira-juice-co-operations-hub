@@ -80,6 +80,23 @@ const UNSAFE_CUSTOMER_CONTEXT_KEY_TERMS = [
   'provider_payload',
 ];
 
+const SECRET_AUTH_KEY_TERMS = [
+  'secret',
+  'token',
+  'api_key',
+  'apikey',
+  'auth',
+  'authorization',
+  'bearer',
+  'credential',
+  'password',
+  'private_key',
+  'access_key',
+  'refresh_token',
+  'session_token',
+  'webhook_secret',
+];
+
 const PROVIDER_PAYMENT_KEY_TERMS = [
   'stripe',
   'shopify',
@@ -350,6 +367,12 @@ function hasUnsafeOrderSourceCustomerData(orderSources) {
   }).length > 0;
 }
 
+function hasOrderSourceSecretOrAuthFields(orderSources) {
+  return findUnsafeFieldKeys(orderSources, {
+    terms: SECRET_AUTH_KEY_TERMS,
+  }).length > 0;
+}
+
 function hasComplianceFinalization(batch) {
   return COMPLIANCE_FINALIZATION_FIELDS.some((field) => hasMeaningfulFieldValue(batch?.[field]));
 }
@@ -428,6 +451,7 @@ function buildPreview({ batch, productionBatchId, expectedBatchId, expectedStatu
   const linkedTaskCount = Array.isArray(batch?.fulfillment_task_ids) ? batch.fulfillment_task_ids.length : 0;
   const unexpectedCustomerDataPresent = hasUnexpectedCustomerData(batch);
   const unsafeOrderSourceCustomerDataPresent = hasUnsafeOrderSourceCustomerData(batch?.order_sources);
+  const orderSourceSecretOrAuthPresent = hasOrderSourceSecretOrAuthFields(batch?.order_sources);
   const customerContextPresent = orderSourceSummary.orderSourcesCount > 0 && (
     safeOrderSourceSummaries.length > 0 ||
     orderSourceSummary.orderNumberCount > 0
@@ -447,6 +471,7 @@ function buildPreview({ batch, productionBatchId, expectedBatchId, expectedStatu
   if (hasProofOrDropFields(batch)) blockers.push('proof_drop_out_of_scope');
   if (hasUnsafeProviderPaymentFields(batch)) blockers.push('provider_payment_fields_present');
   if (customerDataBlocking) blockers.push('customer_data_present');
+  if (orderSourceSecretOrAuthPresent) blockers.push('secret_or_auth_field_present');
   if (recalculationRisk) blockers.push('recalculation_risk');
   if (hasPriorLifecycleConflict(batch)) blockers.push('prior_lifecycle_conflict');
 
