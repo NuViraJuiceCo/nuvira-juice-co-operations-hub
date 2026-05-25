@@ -64,6 +64,25 @@ function normalizeKey(value) {
     .trim();
 }
 
+function singularizeIngredientKey(key) {
+  const normalized = normalizeKey(key);
+  if (!normalized) return '';
+  return normalized
+    .split(' ')
+    .map((part) => {
+      if (part.length > 3 && part.endsWith('ies')) return `${part.slice(0, -3)}y`;
+      if (part.length > 3 && part.endsWith('s') && !part.endsWith('ss')) return part.slice(0, -1);
+      return part;
+    })
+    .join(' ');
+}
+
+function genericIngredientFallbackKey(key) {
+  const parts = singularizeIngredientKey(key).split(' ').filter(Boolean);
+  if (parts.length < 2) return '';
+  return parts[parts.length - 1];
+}
+
 function sanitizeText(value, maxLength = MAX_TEXT_LENGTH) {
   const text = normalizeSingleLine(value)
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted email]')
@@ -374,15 +393,55 @@ function normalizeIngredientRows(batch) {
 }
 
 function buildInventoryMap(items) {
-  const map = new Map();
+  const exact = new Map();
+  const singular = new Map();
+  const generic = new Map();
+
   for (const item of items || []) {
     const key = normalizeKey(item?.ingredient);
     if (!key) continue;
-    const existing = map.get(key) || [];
-    existing.push(item);
-    map.set(key, existing);
+    const exactItems = exact.get(key) || [];
+    exactItems.push(item);
+    exact.set(key, exactItems);
+
+    const singularKey = singularizeIngredientKey(key);
+    if (singularKey) {
+      const singularItems = singular.get(singularKey) || [];
+      singularItems.push(item);
+      singular.set(singularKey, singularItems);
+    }
+
+    const genericKey = genericIngredientFallbackKey(key);
+    if (genericKey) {
+      const genericItems = generic.get(genericKey) || [];
+      genericItems.push(item);
+      generic.set(genericKey, genericItems);
+    }
   }
-  return map;
+
+  return { exact, singular, generic };
+}
+
+function findIngredientMatches(lookup, ingredientKey) {
+  const key = normalizeKey(ingredientKey);
+  if (!key || !lookup) return [];
+
+  const exactMatches = lookup.exact?.get(key) || [];
+  if (exactMatches.length > 0) return exactMatches;
+
+  const singularKey = singularizeIngredientKey(key);
+  const singularMatches = lookup.singular?.get(singularKey) || [];
+  if (singularMatches.length > 0) return singularMatches;
+
+  const fallbackKey = genericIngredientFallbackKey(key);
+  if (!fallbackKey) return [];
+  const fallbackMatches = [
+    ...(lookup.exact?.get(fallbackKey) || []),
+    ...(lookup.singular?.get(fallbackKey) || []),
+    ...(lookup.generic?.get(fallbackKey) || []),
+  ];
+  const uniqueMatches = [...new Map(fallbackMatches.map(item => [item.id, item])).values()];
+  return uniqueMatches;
 }
 
 function buildDeductionPlan(ingredients, inventoryMap) {
@@ -408,13 +467,13 @@ function buildDeductionPlan(ingredients, inventoryMap) {
       continue;
     }
 
-    const matches = inventoryMap.get(ingredient.key) || [];
+    const matches = findIngredientMatches(inventoryMap, ingredient.key);
     if (matches.length === 0) {
       blockers.push('inventory_match_missing');
       continue;
     }
     if (matches.length > 1) {
-      blockers.push('inventory_match_ambiguous');
+      blockers.push('ambiguous_ingredient_match');
       continue;
     }
 
