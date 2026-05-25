@@ -37,6 +37,7 @@ const ALLOWED_BODY_KEYS = new Set([
   'sanitation_verification_complete',
   'labels_applied',
   'passed_failed',
+  'staff_on_duty',
   'notes',
   'reason',
   'actor_email',
@@ -377,6 +378,18 @@ function validatePassedFailed(value, fieldName) {
   return status;
 }
 
+function normalizeStaffOnDuty(value) {
+  if (value === null || value === undefined || value === '') return [];
+  if (!Array.isArray(value)) throw new Error('staff_on_duty must be an array');
+
+  const staff = value
+    .map((entry) => sanitizeText(entry, 80))
+    .filter(Boolean)
+    .slice(0, 12);
+
+  return [...new Set(staff)];
+}
+
 function hasComplianceFinalization(batch) {
   return [...COMPLIANCE_FINALIZATION_FIELDS].some((field) => hasMeaningfulFieldValue(batch?.[field]));
 }
@@ -687,6 +700,7 @@ function normalizeCompletionInput(body) {
     sanitationVerificationComplete: booleanValue(body.sanitation_verification_complete),
     labelsApplied: booleanValue(body.labels_applied),
     passedFailed: batchStatus,
+    staffOnDuty: normalizeStaffOnDuty(body.staff_on_duty),
     notes: sanitizeText(body.notes, 240),
   };
 }
@@ -848,6 +862,7 @@ Deno.serve(async (req) => {
       labels_applied: completionInput.labelsApplied,
       passed_failed: completionInput.passedFailed,
       corrective_action_required: false,
+      ...(completionInput.staffOnDuty.length > 0 ? { staff_on_duty: completionInput.staffOnDuty } : {}),
       notes: completionInput.notes || '',
       audit_trail: [...existingAuditTrail, auditEntry],
     };
