@@ -419,6 +419,12 @@ function buildDeductionPlan(ingredients, inventoryMap) {
     }
 
     const inventory = matches[0];
+    const inventoryItemId = normalizeSingleLine(inventory.id);
+    if (!inventoryItemId) {
+      blockers.push('inventory_item_id_missing');
+      continue;
+    }
+
     const currentStock = numberOrNull(inventory.stock);
     if (currentStock === null) {
       blockers.push('inventory_stock_missing');
@@ -436,7 +442,7 @@ function buildDeductionPlan(ingredients, inventoryMap) {
     if (!ingredient.lotPresent) warnings.push('ingredient_lot_missing');
 
     rows.push({
-      inventoryItemId: inventory.id,
+      inventoryItemId,
       inventoryUnit: sanitizeText(inventory.unit, 40),
       currentStock,
       reorderPoint: numberOrNull(inventory.reorder_point),
