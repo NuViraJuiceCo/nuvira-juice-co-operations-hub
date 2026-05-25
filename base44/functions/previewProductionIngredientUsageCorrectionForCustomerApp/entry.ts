@@ -73,6 +73,25 @@ function normalizeKey(value) {
     .trim();
 }
 
+function singularizeIngredientKey(key) {
+  const normalized = normalizeKey(key);
+  if (!normalized) return '';
+  return normalized
+    .split(' ')
+    .map((part) => {
+      if (part.length > 3 && part.endsWith('ies')) return `${part.slice(0, -3)}y`;
+      if (part.length > 3 && part.endsWith('s') && !part.endsWith('ss')) return part.slice(0, -1);
+      return part;
+    })
+    .join(' ');
+}
+
+function genericIngredientFallbackKey(key) {
+  const parts = singularizeIngredientKey(key).split(' ').filter(Boolean);
+  if (parts.length < 2) return '';
+  return parts[parts.length - 1];
+}
+
 function safeText(value, maxLength = MAX_TEXT_LENGTH) {
   const text = normalizeSingleLine(value)
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted email]')
@@ -184,28 +203,64 @@ function findBestRecipeMatch(recipes, productName) {
   return null;
 }
 
-function buildInventoryMap(items) {
-  const map = new Map();
+function buildIngredientLookup(items, getName) {
+  const exact = new Map();
+  const singular = new Map();
+  const generic = new Map();
+
   for (const item of items || []) {
-    const key = normalizeKey(item?.ingredient);
+    const key = normalizeKey(getName(item));
     if (!key) continue;
-    const existing = map.get(key) || [];
-    existing.push(item);
-    map.set(key, existing);
+    const exactItems = exact.get(key) || [];
+    exactItems.push(item);
+    exact.set(key, exactItems);
+
+    const singularKey = singularizeIngredientKey(key);
+    if (singularKey) {
+      const singularItems = singular.get(singularKey) || [];
+      singularItems.push(item);
+      singular.set(singularKey, singularItems);
+    }
+
+    const genericKey = genericIngredientFallbackKey(key);
+    if (genericKey) {
+      const genericItems = generic.get(genericKey) || [];
+      genericItems.push(item);
+      generic.set(genericKey, genericItems);
+    }
   }
-  return map;
+
+  return { exact, singular, generic };
+}
+
+function findIngredientMatches(lookup, ingredientName) {
+  const key = normalizeKey(ingredientName);
+  if (!key || !lookup) return [];
+
+  const exactMatches = lookup.exact?.get(key) || [];
+  if (exactMatches.length > 0) return exactMatches;
+
+  const singularKey = singularizeIngredientKey(key);
+  const singularMatches = lookup.singular?.get(singularKey) || [];
+  if (singularMatches.length > 0) return singularMatches;
+
+  const fallbackKey = genericIngredientFallbackKey(key);
+  if (!fallbackKey) return [];
+  const fallbackMatches = [
+    ...(lookup.exact?.get(fallbackKey) || []),
+    ...(lookup.singular?.get(fallbackKey) || []),
+    ...(lookup.generic?.get(fallbackKey) || []),
+  ];
+  const uniqueMatches = [...new Map(fallbackMatches.map(item => [item.id, item])).values()];
+  return uniqueMatches;
+}
+
+function buildInventoryMap(items) {
+  return buildIngredientLookup(items, item => item?.ingredient);
 }
 
 function buildYieldMap(items) {
-  const map = new Map();
-  for (const item of items || []) {
-    const key = normalizeKey(item?.ingredient_name);
-    if (!key) continue;
-    const existing = map.get(key) || [];
-    existing.push(item);
-    map.set(key, existing);
-  }
-  return map;
+  return buildIngredientLookup(items, item => item?.ingredient_name);
 }
 
 function unitFamily(unit) {
@@ -321,8 +376,8 @@ function buildPreviewRows(recipe, batch, inventoryMap, yieldMap) {
     const proposedQuantityOz = actualUnits && quantityOzPerUnit !== null
       ? roundThousandth(quantityOzPerUnit * actualUnits * yieldFactor)
       : null;
-    const inventoryMatches = inventoryMap.get(ingredientKey) || [];
-    const yieldMatches = yieldMap.get(ingredientKey) || [];
+    const inventoryMatches = findIngredientMatches(inventoryMap, ingredient?.ingredient_name);
+    const yieldMatches = findIngredientMatches(yieldMap, ingredient?.ingredient_name);
     const rowCorrectionBlockers = [];
     const rowDeductionBlockers = [];
     const rowWarnings = [];
@@ -338,14 +393,17 @@ function buildPreviewRows(recipe, batch, inventoryMap, yieldMap) {
       rowDeductionBlockers.push('missing_inventory_item');
     }
     if (inventoryMatches.length > 1) {
-      rowCorrectionBlockers.push('inventory_match_ambiguous');
-      rowDeductionBlockers.push('inventory_match_ambiguous');
+      rowCorrectionBlockers.push('ambiguous_ingredient_match');
+      rowDeductionBlockers.push('ambiguous_ingredient_match');
     }
     if (yieldMatches.length === 0) {
       rowCorrectionBlockers.push('missing_ingredient_yield');
       rowDeductionBlockers.push('missing_ingredient_yield');
     }
-    if (yieldMatches.length > 1) rowWarnings.push('ingredient_yield_ambiguous');
+    if (yieldMatches.length > 1) {
+      rowCorrectionBlockers.push('ambiguous_ingredient_match');
+      rowDeductionBlockers.push('ambiguous_ingredient_match');
+    }
 
     const inventory = inventoryMatches.length === 1 ? inventoryMatches[0] : null;
     const inventoryUnit = normalizeLower(inventory?.unit);
