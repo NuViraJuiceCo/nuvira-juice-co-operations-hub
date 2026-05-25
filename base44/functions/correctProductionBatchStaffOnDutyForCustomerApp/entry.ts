@@ -116,6 +116,7 @@ function normalizeStaffOnDuty(value) {
   if (value.length > MAX_STAFF_COUNT) throw new Error('staff_on_duty contains too many entries');
 
   const staff = value.map((entry) => {
+    if (typeof entry !== 'string') throw new Error('staff_on_duty values must be strings');
     const text = normalizeSingleLine(entry);
     if (!text) throw new Error('staff_on_duty cannot include empty values');
     if (text.length > MAX_STAFF_LENGTH) throw new Error('staff_on_duty contains an overly long value');
@@ -378,6 +379,10 @@ Deno.serve(async (req) => {
 
     if (normalizeSingleLine(batch.status) !== REQUIRED_STATUS) {
       return Response.json(safeError('Batch is not in the approved correction status', 'invalid_status_transition'), { status: 409 });
+    }
+
+    if (batch.is_locked === true) {
+      return Response.json(safeError('Batch is locked', 'batch_locked'), { status: 409 });
     }
 
     if (hasMeaningfulStaff(batch.staff_on_duty)) {
