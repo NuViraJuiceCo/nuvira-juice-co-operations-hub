@@ -303,14 +303,15 @@ function sanitizeYieldRecord(item) {
 
 function buildPreviewRows(recipe, batch, inventoryMap, yieldMap) {
   const rows = [];
-  const blockers = [];
+  const correctionBlockers = [];
+  const deductionBlockers = [];
   const warnings = [];
   const actualUnits = positiveNumber(batch?.actual_units ?? batch?.final_usable_quantity ?? batch?.bottles_produced);
   const yieldFactor = positiveNumber(recipe?.yield_factor) || 1;
   const recipeRows = Array.isArray(recipe?.ingredients) ? recipe.ingredients.slice(0, MAX_RECIPE_ROWS) : [];
 
-  if (!actualUnits) blockers.push('missing_actual_units');
-  if (!Array.isArray(recipe?.ingredients) || recipe.ingredients.length === 0) blockers.push('missing_recipe_ingredients');
+  if (!actualUnits) correctionBlockers.push('missing_actual_units');
+  if (!Array.isArray(recipe?.ingredients) || recipe.ingredients.length === 0) correctionBlockers.push('missing_recipe_ingredients');
   if ((recipe?.ingredients || []).length > MAX_RECIPE_ROWS) warnings.push('recipe_rows_truncated_for_preview');
 
   for (const ingredient of recipeRows) {
@@ -322,18 +323,28 @@ function buildPreviewRows(recipe, batch, inventoryMap, yieldMap) {
       : null;
     const inventoryMatches = inventoryMap.get(ingredientKey) || [];
     const yieldMatches = yieldMap.get(ingredientKey) || [];
-    const rowBlockers = [];
+    const rowCorrectionBlockers = [];
+    const rowDeductionBlockers = [];
     const rowWarnings = [];
 
-    if (!ingredientKey || !ingredientName) rowBlockers.push('invalid_ingredient_name');
-    if (quantityOzPerUnit === null || quantityOzPerUnit <= 0) rowBlockers.push('quantity_normalization_issue');
-    if (!actualUnits) rowBlockers.push('missing_actual_units');
+    if (!ingredientKey || !ingredientName) rowCorrectionBlockers.push('invalid_ingredient_name');
+    if (quantityOzPerUnit === null || quantityOzPerUnit <= 0) rowCorrectionBlockers.push('quantity_normalization_issue');
+    if (!actualUnits) rowCorrectionBlockers.push('missing_actual_units');
     if (normalizeLower(ingredient?.unit) && normalizeLower(ingredient.unit) !== 'oz') {
-      rowWarnings.push('recipe_unit_label_not_oz');
+      rowWarnings.push('quantity_field_normalized');
     }
-    if (inventoryMatches.length === 0) rowBlockers.push('missing_inventory_item');
-    if (inventoryMatches.length > 1) rowBlockers.push('inventory_match_ambiguous');
-    if (yieldMatches.length === 0) rowBlockers.push('missing_ingredient_yield');
+    if (inventoryMatches.length === 0) {
+      rowCorrectionBlockers.push('missing_inventory_item');
+      rowDeductionBlockers.push('missing_inventory_item');
+    }
+    if (inventoryMatches.length > 1) {
+      rowCorrectionBlockers.push('inventory_match_ambiguous');
+      rowDeductionBlockers.push('inventory_match_ambiguous');
+    }
+    if (yieldMatches.length === 0) {
+      rowCorrectionBlockers.push('missing_ingredient_yield');
+      rowDeductionBlockers.push('missing_ingredient_yield');
+    }
     if (yieldMatches.length > 1) rowWarnings.push('ingredient_yield_ambiguous');
 
     const inventory = inventoryMatches.length === 1 ? inventoryMatches[0] : null;
@@ -349,15 +360,27 @@ function buildPreviewRows(recipe, batch, inventoryMap, yieldMap) {
       ? roundThousandth(Math.abs(projectedStock))
       : 0;
     const reorderPoint = numberOrNull(inventory?.reorder_point);
+    const stockAvailable = currentStock !== null && quantityToDeduct !== null && projectedStock !== null && projectedStock >= 0;
+    const procurementNeeded = projectedStock !== null && projectedStock < 0;
 
-    if (inventory && quantityToDeduct === null) rowBlockers.push('quantity_normalization_issue');
-    if (projectedStock !== null && projectedStock < 0) rowBlockers.push('inventory_shortfall');
+    if (inventory && quantityToDeduct === null) {
+      rowCorrectionBlockers.push('quantity_normalization_issue');
+      rowDeductionBlockers.push('quantity_normalization_issue');
+    }
+    if (procurementNeeded) {
+      rowDeductionBlockers.push('inventory_shortfall');
+      rowWarnings.push('procurement_needed');
+    }
     if (projectedStock !== null && reorderPoint !== null && projectedStock <= reorderPoint) {
       rowWarnings.push('reorder_or_low_stock_after_deduction');
     }
 
-    blockers.push(...rowBlockers);
+    correctionBlockers.push(...rowCorrectionBlockers);
+    deductionBlockers.push(...rowDeductionBlockers);
     warnings.push(...rowWarnings);
+
+    const usageRowReady = rowCorrectionBlockers.length === 0;
+    const inventoryDeductionReady = usageRowReady && rowDeductionBlockers.length === 0 && stockAvailable;
 
     rows.push({
       matched_recipe_ingredient_name: ingredientName,
@@ -375,19 +398,28 @@ function buildPreviewRows(recipe, batch, inventoryMap, yieldMap) {
       proposed_deduction_quantity: quantityToDeduct,
       projected_stock_after_deduction: projectedStock,
       shortfall_quantity: shortfallQuantity,
+      usage_row_ready: usageRowReady,
+      inventory_match_found: inventoryMatches.length === 1,
+      yield_match_found: yieldMatches.length > 0,
+      stock_available: stockAvailable,
+      procurement_needed: procurementNeeded,
+      inventory_deduction_ready: inventoryDeductionReady,
       inventory_match_count: inventoryMatches.length,
       inventory_matches: inventoryMatches.slice(0, 5).map(sanitizeInventoryItem).filter(Boolean),
       yield_match_count: yieldMatches.length,
       yield_matches: yieldMatches.slice(0, 5).map(sanitizeYieldRecord).filter(Boolean),
-      status: rowBlockers.length > 0 ? 'blocked' : 'ready',
-      blockers: [...new Set(rowBlockers)],
+      status: usageRowReady ? (procurementNeeded ? 'usage_ready_procurement_needed' : 'ready') : 'blocked',
+      correction_blockers: [...new Set(rowCorrectionBlockers)],
+      deduction_blockers: [...new Set(rowDeductionBlockers)],
+      blockers: [...new Set(rowCorrectionBlockers)],
       warnings: [...new Set(rowWarnings)],
     });
   }
 
   return {
     rows,
-    blockers: [...new Set(blockers)],
+    correctionBlockers: [...new Set(correctionBlockers)],
+    deductionBlockers: [...new Set(deductionBlockers)],
     warnings: [...new Set(warnings)],
   };
 }
@@ -432,31 +464,36 @@ Deno.serve(async (req) => {
       }), { status: 404 });
     }
 
-    const blockers = [];
+    const correctionBlockers = [];
+    const deductionBlockers = [];
     const warnings = [];
     const batchDisplayId = safeText(batch.batch_id, 160);
     const currentStatus = normalizeText(batch.status);
 
     if (requestBatchId && requestBatchId !== normalizeText(batch.batch_id)) {
-      blockers.push('batch_id_mismatch');
+      correctionBlockers.push('batch_id_mismatch');
+      deductionBlockers.push('batch_id_mismatch');
     }
 
     if (expectedStatus && expectedStatus !== currentStatus) {
-      blockers.push('expected_status_mismatch');
+      correctionBlockers.push('expected_status_mismatch');
+      deductionBlockers.push('expected_status_mismatch');
     }
 
     if (currentStatus !== 'verified_logged') {
-      blockers.push('batch_not_verified_logged');
+      correctionBlockers.push('batch_not_verified_logged');
+      deductionBlockers.push('batch_not_verified_logged');
     }
 
     const existingIngredientCount = Array.isArray(batch.ingredients_used) ? batch.ingredients_used.length : 0;
     if (existingIngredientCount > 0) {
-      blockers.push('existing_ingredient_usage');
+      correctionBlockers.push('existing_ingredient_usage');
     }
 
     const priorDeductionLogPresent = await hasPriorDeductionLog(base44, productionBatchId);
     if (priorDeductionLogPresent) {
-      blockers.push('prior_deduction_log_present');
+      correctionBlockers.push('prior_deduction_log_present');
+      deductionBlockers.push('prior_deduction_log_present');
     }
 
     const [
@@ -472,7 +509,10 @@ Deno.serve(async (req) => {
     ]);
 
     const recipe = findBestRecipeMatch(recipes || [], batch.product_name);
-    if (!recipe) blockers.push('recipe_match_missing');
+    if (!recipe) {
+      correctionBlockers.push('recipe_match_missing');
+      deductionBlockers.push('recipe_match_missing');
+    }
     if ((recipes || []).length >= RECIPE_QUERY_LIMIT) warnings.push('recipe_query_limit_reached');
     if ((inventoryItems || []).length >= INVENTORY_QUERY_LIMIT) warnings.push('inventory_query_limit_reached');
     if ((yieldRows || []).length >= YIELD_QUERY_LIMIT) warnings.push('yield_query_limit_reached');
@@ -481,14 +521,20 @@ Deno.serve(async (req) => {
     const yieldMap = buildYieldMap(yieldRows || []);
     const preview = recipe
       ? buildPreviewRows(recipe, batch, inventoryMap, yieldMap)
-      : { rows: [], blockers: [], warnings: [] };
+      : { rows: [], correctionBlockers: [], deductionBlockers: [], warnings: [] };
 
-    blockers.push(...preview.blockers);
+    correctionBlockers.push(...preview.correctionBlockers);
+    deductionBlockers.push(...preview.deductionBlockers);
     warnings.push(...preview.warnings);
 
-    const uniqueBlockers = [...new Set(blockers)];
+    const uniqueCorrectionBlockers = [...new Set(correctionBlockers)];
+    const uniqueDeductionBlockers = [...new Set(deductionBlockers)];
     const uniqueWarnings = [...new Set(warnings)];
-    const readyRows = preview.rows.filter(row => row.status === 'ready').length;
+    const usageReadyRows = preview.rows.filter(row => row.usage_row_ready === true).length;
+    const deductionReadyRows = preview.rows.filter(row => row.inventory_deduction_ready === true).length;
+    const procurementNeededCount = preview.rows.filter(row => row.procurement_needed === true).length;
+    const usageCorrectionAllowed = uniqueCorrectionBlockers.length === 0 && preview.rows.length > 0;
+    const inventoryDeductionReady = usageCorrectionAllowed && uniqueDeductionBlockers.length === 0 && deductionReadyRows === preview.rows.length;
 
     return Response.json({
       success: true,
@@ -512,8 +558,11 @@ Deno.serve(async (req) => {
       recipe_product_name: recipe ? safeText(recipe.product_name, 160) : null,
       recipe_yield_factor: recipe ? numberOrNull(recipe.yield_factor) : null,
       recipe_ingredients_count: Array.isArray(recipe?.ingredients) ? recipe.ingredients.length : 0,
+      usage_correction_preview_count: preview.rows.length,
+      usage_correction_ready_count: usageReadyRows,
+      usage_correction_allowed: usageCorrectionAllowed,
       proposed_ingredient_usage_count: preview.rows.length,
-      proposed_ingredient_usage_ready_count: readyRows,
+      proposed_ingredient_usage_ready_count: usageReadyRows,
       proposed_ingredient_usage_rows: preview.rows,
       inventory_item_count_scanned: Array.isArray(inventoryItems) ? inventoryItems.length : 0,
       ingredient_yield_count_scanned: Array.isArray(yieldRows) ? yieldRows.length : 0,
@@ -523,9 +572,13 @@ Deno.serve(async (req) => {
       batch_compliance_log_changes_deferred: true,
       customer_app_sync_deferred: true,
       notifications_deferred: true,
-      live_allowed: uniqueBlockers.length === 0,
-      inventory_deduction_ready: uniqueBlockers.length === 0 && readyRows === preview.rows.length && preview.rows.length > 0,
-      blockers: uniqueBlockers,
+      procurement_needed: procurementNeededCount > 0,
+      procurement_needed_count: procurementNeededCount,
+      inventory_deduction_ready: inventoryDeductionReady,
+      deduction_blockers: uniqueDeductionBlockers,
+      correction_blockers: uniqueCorrectionBlockers,
+      live_allowed: usageCorrectionAllowed,
+      blockers: uniqueCorrectionBlockers,
       warnings: uniqueWarnings,
     });
   } catch (error) {
