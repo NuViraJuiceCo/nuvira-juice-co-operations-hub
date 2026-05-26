@@ -103,6 +103,10 @@ async function maybeMirrorPosOrderToCustomerApp({ body, orderNumber, customerNam
 
 Deno.serve(async (req) => {
   try {
+    if (req.method !== 'POST') {
+      return Response.json({ error: 'Method not allowed' }, { status: 405 });
+    }
+
     const base44 = createClientFromRequest(req);
 
     const authHeader = req.headers.get('Authorization');
