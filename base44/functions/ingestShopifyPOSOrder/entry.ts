@@ -24,6 +24,9 @@ const POS_APP_IDS = new Set([
   '131', // Shopify POS numeric app ID
   '131313', // Shopify POS Go
 ]);
+const ENABLE_MAY30_NATIVE_ORDER_OPS = Deno.env.get('ENABLE_MAY30_NATIVE_ORDER_OPS') === 'true';
+const CUSTOMER_APP_API_URL = Deno.env.get('CUSTOMER_APP_API_URL') || '';
+const CUSTOMER_APP_SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET') || '';
 
 function classifyAsPOS(payload) {
   const sourceName = (payload.source_name || '').toLowerCase();
@@ -37,6 +40,65 @@ function classifyAsPOS(payload) {
   if (hasLocationId) return true;
 
   return false;
+}
+
+function customerAppFunctionUrl(functionName) {
+  const base = CUSTOMER_APP_API_URL.replace(/\/$/, '');
+  if (!base) return null;
+  if (base.endsWith('/api')) return `${base}/functions/${functionName}`;
+  return `${base}/api/functions/${functionName}`;
+}
+
+async function maybeMirrorPosOrderToCustomerApp({ body, orderNumber, customerName, customerEmail, customerPhone, lineItems, totalPrice, subtotal, paymentStatus, sourceLabel }) {
+  if (!ENABLE_MAY30_NATIVE_ORDER_OPS) return { skipped: true, reason: 'disabled' };
+  const endpoint = customerAppFunctionUrl('processMay30NativeOrderOps');
+  if (!endpoint || !CUSTOMER_APP_SYNC_SECRET) return { skipped: true, reason: 'customer_app_not_configured' };
+
+  try {
+    const shopifyOrderId = body.shopify_order_id || `pos:${orderNumber}`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${CUSTOMER_APP_SYNC_SECRET}`,
+      },
+      body: JSON.stringify({
+        mode: 'live',
+        source: 'shopify_pos',
+        event_type: 'pos.order.created',
+        request_id: `ingestShopifyPOSOrder:${shopifyOrderId || orderNumber}`,
+        idempotency_key: `may30_native_order_ops:shopify_pos:${orderNumber || shopifyOrderId}`,
+        order: {
+          id: shopifyOrderId,
+          shopify_order_id: shopifyOrderId,
+          shopify_order_number: orderNumber,
+          order_number: orderNumber,
+          customer_name: customerName || 'POS Customer',
+          customer_email: customerEmail || `pos-${orderNumber}@event.nuvira.local`,
+          customer_phone: customerPhone || '',
+          line_items: lineItems || [],
+          total_price: totalPrice,
+          subtotal: subtotal || totalPrice,
+          payment_status: paymentStatus || 'paid',
+          source_name: body.source_name || 'pos',
+          app_id: body.app_id || null,
+          location_id: body.location_id || body.pos_location_id || null,
+          location_name: body.pos_location_name || body.event_name || null,
+          event_name: body.event_name || null,
+          event_id: body.event_id || null,
+          event_location: body.pos_location_name || body.event_name || null,
+          order_date: body.order_date || new Date().toISOString(),
+        },
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    console.log(`[POS-INGEST] May30 native POS mirror source=${sourceLabel} order=${orderNumber} status=${response.status} action=${data?.action || 'unknown'} success=${data?.success === true}`);
+    return { attempted: true, status: response.status, success: response.ok && data?.success === true, action: data?.action || null };
+  } catch (error) {
+    console.warn(`[POS-INGEST] May30 native POS mirror failed safely for ${orderNumber}: ${error?.message || 'unknown error'}`);
+    return { attempted: true, success: false, error_code: 'may30_native_pos_mirror_failed' };
+  }
 }
 
 Deno.serve(async (req) => {
@@ -111,6 +173,18 @@ Deno.serve(async (req) => {
 
     if (existingOrder) {
       console.log(`[POS-INGEST] Duplicate POS order ${order_number} already exists as ${existingOrder.id}`);
+      await maybeMirrorPosOrderToCustomerApp({
+        body,
+        orderNumber: order_number,
+        customerName: customer_name || existingOrder.customer_name || 'Walk-in Customer',
+        customerEmail: customer_email || existingOrder.customer_email || '',
+        customerPhone: customer_phone || existingOrder.customer_phone || '',
+        lineItems: line_items || existingOrder.line_items || [],
+        totalPrice: total_price || existingOrder.total_price || 0,
+        subtotal: subtotal || existingOrder.subtotal || total_price || 0,
+        paymentStatus: payment_status || existingOrder.payment_status || 'paid',
+        sourceLabel: 'manual_ingest_existing',
+      });
       return Response.json({
         status: 'success',
         action: 'dedupe_exact_match',
@@ -181,6 +255,19 @@ Deno.serve(async (req) => {
     const createdOrder = await base44.asServiceRole.entities.ShopifyOrder.create(posPayload);
 
     console.log(`[POS-INGEST] Created POS order ${order_number} → hub_id=${createdOrder.id} location="${resolvedLocationName}"`);
+
+    await maybeMirrorPosOrderToCustomerApp({
+      body,
+      orderNumber: order_number,
+      customerName: customer_name || 'Walk-in Customer',
+      customerEmail: customer_email || `pos-${order_number}@event.nuvira.local`,
+      customerPhone: customer_phone || '',
+      lineItems: line_items || [],
+      totalPrice: total_price,
+      subtotal: subtotal || total_price,
+      paymentStatus: 'paid',
+      sourceLabel: 'manual_ingest_created',
+    });
 
     // Log the sync
     await base44.asServiceRole.entities.OrderSyncLog.create({
