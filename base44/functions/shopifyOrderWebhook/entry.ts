@@ -8,6 +8,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 
 const POS_APP_IDS = new Set(['131', '131313', 'com.jadedpixel.pos', 'shopify_pos', 'pos']);
+const ENABLE_MAY30_NATIVE_ORDER_OPS = Deno.env.get('ENABLE_MAY30_NATIVE_ORDER_OPS') === 'true';
+const CUSTOMER_APP_API_URL = Deno.env.get('CUSTOMER_APP_API_URL') || '';
+const CUSTOMER_APP_SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET') || '';
 
 function classifyAsPOS(order) {
   const sourceName = (order.source_name || '').toLowerCase();
@@ -45,6 +48,64 @@ function mapPaymentStatus(financialStatus) {
     voided: 'refunded',
   };
   return map[(financialStatus || '').toLowerCase()] || 'pending';
+}
+
+function customerAppFunctionUrl(functionName) {
+  const base = CUSTOMER_APP_API_URL.replace(/\/$/, '');
+  if (!base) return null;
+  if (base.endsWith('/api')) return `${base}/functions/${functionName}`;
+  return `${base}/api/functions/${functionName}`;
+}
+
+async function maybeMirrorPosOrderToCustomerApp({ order, orderId, orderNumber, customerName, customerEmail, customerPhone, lineItems, totalPrice, subtotal, hubPaymentStatus, sourceLabel }) {
+  if (!ENABLE_MAY30_NATIVE_ORDER_OPS) return { skipped: true, reason: 'disabled' };
+  const endpoint = customerAppFunctionUrl('processMay30NativeOrderOps');
+  if (!endpoint || !CUSTOMER_APP_SYNC_SECRET) return { skipped: true, reason: 'customer_app_not_configured' };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${CUSTOMER_APP_SYNC_SECRET}`,
+      },
+      body: JSON.stringify({
+        mode: 'live',
+        source: 'shopify_pos',
+        event_type: 'pos.order.created',
+        request_id: `shopifyOrderWebhook:${orderId || orderNumber}`,
+        idempotency_key: `may30_native_order_ops:shopify_pos:${orderNumber || orderId}`,
+        order: {
+          id: orderId,
+          shopify_order_id: orderId,
+          shopify_order_number: orderNumber,
+          order_number: orderNumber,
+          customer_name: customerName,
+          customer_email: customerEmail || `pos-${orderId || orderNumber}@nuvira.local`,
+          customer_phone: customerPhone || '',
+          line_items: lineItems,
+          total_price: totalPrice,
+          subtotal,
+          payment_status: hubPaymentStatus,
+          source_name: order?.source_name || 'pos',
+          app_id: order?.app_id || null,
+          location_id: order?.location_id || null,
+          location_name: order?.location_name || null,
+          event_name: order?.event_name || null,
+          event_date: order?.event_date || null,
+          event_location: order?.event_location || order?.location_name || null,
+          order_date: order?.created_at || new Date().toISOString(),
+        },
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    console.log(`[SHOPIFY-WEBHOOK] May30 native POS mirror source=${sourceLabel} order=${orderNumber} status=${response.status} action=${data?.action || 'unknown'} success=${data?.success === true}`);
+    return { attempted: true, status: response.status, success: response.ok && data?.success === true, action: data?.action || null };
+  } catch (error) {
+    console.warn(`[SHOPIFY-WEBHOOK] May30 native POS mirror failed safely for ${orderNumber}: ${error?.message || 'unknown error'}`);
+    return { attempted: true, success: false, error_code: 'may30_native_pos_mirror_failed' };
+  }
 }
 
 Deno.serve(async (req) => {
@@ -128,6 +189,19 @@ Deno.serve(async (req) => {
           } else {
             console.log(`[SHOPIFY-WEBHOOK] POS order ${orderNumber} already exists (id=${existingOrder.id}) — skipping duplicate`);
           }
+          await maybeMirrorPosOrderToCustomerApp({
+            order,
+            orderId,
+            orderNumber,
+            customerName,
+            customerEmail,
+            customerPhone,
+            lineItems,
+            totalPrice,
+            subtotal,
+            hubPaymentStatus,
+            sourceLabel: 'shopify_webhook_existing',
+          });
           return;
         }
 
@@ -164,6 +238,20 @@ Deno.serve(async (req) => {
 
         const created = await base44.asServiceRole.entities.ShopifyOrder.create(posPayload);
         console.log(`[SHOPIFY-WEBHOOK] POS order CREATED: ${orderNumber} → hub_id=${created.id} payment_status=${hubPaymentStatus}`);
+
+        await maybeMirrorPosOrderToCustomerApp({
+          order,
+          orderId,
+          orderNumber,
+          customerName,
+          customerEmail,
+          customerPhone,
+          lineItems,
+          totalPrice,
+          subtotal,
+          hubPaymentStatus,
+          sourceLabel: 'shopify_webhook_created',
+        });
 
         await base44.asServiceRole.entities.OrderSyncLog.create({
           sync_timestamp: new Date().toISOString(),
