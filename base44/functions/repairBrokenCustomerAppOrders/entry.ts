@@ -4,6 +4,10 @@ import Stripe from 'npm:stripe@14.21.0';
 const STRIPE_API_KEY = Deno.env.get('STRIPE_API_KEY');
 const stripe = new Stripe(STRIPE_API_KEY, { apiVersion: '2023-10-16' });
 
+function hubLegacyDiagnosticRepairToolsEnabled() {
+  return Deno.env.get('ENABLE_HUB_LEGACY_DIAGNOSTIC_REPAIR_TOOLS') === 'true';
+}
+
 /**
  * REPAIR BROKEN CUSTOMER APP ORDERS
  * 
@@ -162,6 +166,15 @@ async function repairOrder(base44, order) {
 
 Deno.serve(async (req) => {
   try {
+    if (!hubLegacyDiagnosticRepairToolsEnabled()) {
+      return Response.json({
+        success: true,
+        skipped: true,
+        reason: 'hub_legacy_diagnostic_repair_tools_disabled',
+        message: 'Hub legacy diagnostic/repair tools are disabled for the May 30 launch freeze.',
+      }, { status: 409 });
+    }
+
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 

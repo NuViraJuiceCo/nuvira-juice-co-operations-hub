@@ -1,5 +1,9 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+function hubLegacyDiagnosticRepairToolsEnabled() {
+  return Deno.env.get('ENABLE_HUB_LEGACY_DIAGNOSTIC_REPAIR_TOOLS') === 'true';
+}
+
 /**
  * shopifyWebhookDiagnostic — TEMPORARY DIAGNOSTIC ENDPOINT
  * 
@@ -14,6 +18,15 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 
 Deno.serve(async (req) => {
+  if (!hubLegacyDiagnosticRepairToolsEnabled()) {
+    return Response.json({
+      success: true,
+      skipped: true,
+      reason: 'hub_legacy_diagnostic_repair_tools_disabled',
+      message: 'Hub legacy diagnostic/repair tools are disabled for the May 30 launch freeze.',
+    }, { status: 409 });
+  }
+
   const timestamp = new Date().toISOString();
   const logs = [];
   
