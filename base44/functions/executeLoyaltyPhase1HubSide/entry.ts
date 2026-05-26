@@ -1,5 +1,9 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+function hubLegacyDiagnosticRepairToolsEnabled() {
+  return Deno.env.get('ENABLE_HUB_LEGACY_DIAGNOSTIC_REPAIR_TOOLS') === 'true';
+}
+
 const ELIGIBLE_ORDERS_TO_BACKFILL = [
   {
     order_number: 'NV-MON367R7',
@@ -160,6 +164,15 @@ function isEligibleForLoyalty(order) {
 
 Deno.serve(async (req) => {
   try {
+    if (!hubLegacyDiagnosticRepairToolsEnabled()) {
+      return Response.json({
+        success: true,
+        skipped: true,
+        reason: 'hub_legacy_diagnostic_repair_tools_disabled',
+        message: 'Hub legacy diagnostic/repair tools are disabled for the May 30 launch freeze.',
+      }, { status: 409 });
+    }
+
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
