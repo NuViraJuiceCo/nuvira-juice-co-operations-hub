@@ -1,6 +1,9 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
+const REAL_DEDUCTION_ENABLED = (Deno.env.get('ENABLE_REAL_PRODUCTION_INVENTORY_DEDUCTION') || '').trim().toLowerCase() === 'true';
+const REAL_DEDUCTION_ALLOWED_EMAILS = Deno.env.get('REAL_PRODUCTION_INVENTORY_DEDUCTION_ALLOWED_EMAILS') || '';
+const REAL_DEDUCTION_BATCH_ALLOWLIST = Deno.env.get('REAL_PRODUCTION_INVENTORY_DEDUCTION_BATCH_ALLOWLIST') || '';
 const MAX_TEXT_LENGTH = 120;
 const MAX_INGREDIENT_ROWS = 50;
 const MAX_PREVIEW_ROWS = 25;
@@ -15,6 +18,9 @@ const ALLOWED_BODY_KEYS = new Set([
   'batch_id',
   'expected_status',
   'request_id',
+  'actor_email',
+  'actor_role',
+  'source',
 ]);
 
 const PROJECTED_WRITES_IF_APPROVED = [
@@ -45,6 +51,10 @@ function normalizeText(value) {
 
 function normalizeLower(value) {
   return normalizeText(value).toLowerCase();
+}
+
+function normalizeSingleLine(value) {
+  return normalizeText(value).replace(/\s+/g, ' ');
 }
 
 function normalizeKey(value) {
@@ -93,6 +103,41 @@ function numberOrNull(value) {
 function nonNegativeNumber(value) {
   const parsed = numberOrNull(value);
   return parsed !== null && parsed >= 0 ? parsed : null;
+}
+
+function parseEmailAllowlist(raw) {
+  return new Set((raw || '')
+    .split(',')
+    .map((email) => normalizeLower(email))
+    .filter(Boolean));
+}
+
+function parseBatchAllowlist(raw) {
+  return (raw || '')
+    .split(',')
+    .map((entry) => normalizeSingleLine(entry))
+    .filter(Boolean)
+    .map((entry) => {
+      const separator = entry.indexOf(':');
+      if (separator <= 0 || separator === entry.length - 1) return null;
+      return {
+        productionBatchId: entry.slice(0, separator).trim(),
+        batchDisplayId: entry.slice(separator + 1).trim(),
+      };
+    })
+    .filter(Boolean);
+}
+
+function isActorAllowed(actorEmail, actorRole) {
+  if (normalizeLower(actorRole) !== 'admin') return false;
+  return parseEmailAllowlist(REAL_DEDUCTION_ALLOWED_EMAILS).has(normalizeLower(actorEmail));
+}
+
+function isBatchAllowlisted(productionBatchId, batchDisplayId) {
+  return parseBatchAllowlist(REAL_DEDUCTION_BATCH_ALLOWLIST).some((entry) => (
+    entry.productionBatchId === productionBatchId &&
+    entry.batchDisplayId === batchDisplayId
+  ));
 }
 
 function statusCodeForError(errorCode) {
@@ -412,6 +457,9 @@ Deno.serve(async (req) => {
     const requestBatchId = normalizeText(body.batch_id);
     const expectedStatus = normalizeText(body.expected_status);
     const requestId = safeText(body.request_id, 100);
+    const actorEmail = normalizeLower(body.actor_email);
+    const actorRole = normalizeLower(body.actor_role);
+    const source = normalizeLower(body.source);
 
     if (!productionBatchId) {
       return Response.json(safeError('production_batch_id is required', 'invalid_request'), { status: 400 });
@@ -454,6 +502,24 @@ Deno.serve(async (req) => {
       blockers.push('missing_verification_metadata');
     }
 
+    if (!REAL_DEDUCTION_ENABLED) {
+      blockers.push('real_inventory_deduction_not_enabled');
+    }
+
+    if (source !== 'customer_app_admin') {
+      blockers.push(source ? 'invalid_source' : 'source_required');
+    }
+
+    if (!actorEmail || !actorRole) {
+      blockers.push('actor_context_required');
+    } else if (!isActorAllowed(actorEmail, actorRole)) {
+      blockers.push('actor_not_allowed');
+    }
+
+    if (!isBatchAllowlisted(productionBatchId, normalizeText(batch.batch_id))) {
+      blockers.push('batch_not_allowlisted');
+    }
+
     const priorDeductionLogPresent = await hasPriorDeductionLog(base44, productionBatchId);
     if (priorDeductionLogPresent) {
       blockers.push('inventory_deduction_already_logged');
@@ -487,6 +553,9 @@ Deno.serve(async (req) => {
       deduction_preview_count: deductionPreview.previewRows.length,
       deduction_preview_rows: deductionPreview.previewRows,
       prior_deduction_log_present: priorDeductionLogPresent,
+      real_inventory_deduction_enabled: REAL_DEDUCTION_ENABLED,
+      actor_allowed: actorEmail && actorRole ? isActorAllowed(actorEmail, actorRole) : false,
+      batch_allowlisted: isBatchAllowlisted(productionBatchId, normalizeText(batch.batch_id)),
       projected_writes_if_approved: PROJECTED_WRITES_IF_APPROVED,
       purchase_order_changes_deferred: true,
       customer_app_sync_deferred: true,
