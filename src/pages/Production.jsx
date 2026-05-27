@@ -444,7 +444,11 @@ export default function Production() {
                           </div>
                         </div>
                         <Button
-                          onClick={() => setVerifyingBatch(batch)}
+                          onClick={async () => {
+                            // Always fetch fresh batch data before opening verify form
+                            const fresh = await base44.entities.ProductionBatch.filter({ batch_id: batch.batch_id });
+                            setVerifyingBatch(fresh?.[0] || batch);
+                          }}
                           disabled={batch.status !== 'completed_pending_verification'}
                           size="sm"
                           className="gap-2 w-full"
