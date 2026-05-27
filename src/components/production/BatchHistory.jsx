@@ -1,13 +1,41 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Filter, Download, CheckCircle2, AlertCircle, Clock, ChevronDown, ChevronUp, Lock, FileCheck } from 'lucide-react';
+import { Filter, Download, ChevronDown, ChevronUp, Lock, FileCheck, RotateCcw } from 'lucide-react';
 import moment from 'moment';
 
 export default function BatchHistory() {
+  const queryClient = useQueryClient();
+  const [reopeningId, setReopeningId] = useState(null);
+
+  const handleReopen = async (batch) => {
+    if (!window.confirm(`Re-open "${batch.batch_id}" for verification? Status will revert to pending verification.`)) return;
+    setReopeningId(batch.id);
+    try {
+      await base44.entities.ProductionBatch.update(batch.id, {
+        status: 'completed_pending_verification',
+        is_locked: false,
+        verified_at: null,
+        verified_by: null,
+        compliance_log_id: null,
+        audit_trail: [...(batch.audit_trail || []), {
+          timestamp: new Date().toISOString(),
+          action: 'AdminReopened',
+          performed_by: 'admin',
+          before: { status: batch.status, is_locked: batch.is_locked },
+          after: { status: 'completed_pending_verification', is_locked: false },
+          reason: 'Manual admin retroactive reopen',
+        }],
+      });
+      queryClient.invalidateQueries({ queryKey: ['batch_history'] });
+    } finally {
+      setReopeningId(null);
+    }
+  };
+
   const [filters, setFilters] = useState({
     batchId: '',
     flavor: '',
@@ -173,12 +201,26 @@ export default function BatchHistory() {
                   {batch.product_name} <span className="text-foreground/50">•</span> {batch.production_date}
                 </p>
               </div>
-              {batch.verified_at && (
-                <div className="text-right text-xs text-foreground/60">
-                  <p>Verified {moment(batch.verified_at).fromNow()}</p>
-                  <p>by {batch.verified_by?.split('@')[0] || 'Unknown'}</p>
-                </div>
-              )}
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                {batch.verified_at && (
+                  <div className="text-right text-xs text-foreground/60">
+                    <p>Verified {moment(batch.verified_at).fromNow()}</p>
+                    <p>by {batch.verified_by?.split('@')[0] || 'Unknown'}</p>
+                  </div>
+                )}
+                {(batch.status === 'verified_logged' || batch.is_locked) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7 px-2 gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+                    onClick={() => handleReopen(batch)}
+                    disabled={reopeningId === batch.id}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    {reopeningId === batch.id ? '...' : 'Re-open'}
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Quantity Summary */}
