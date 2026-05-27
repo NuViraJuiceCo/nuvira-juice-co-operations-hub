@@ -32,6 +32,43 @@ function sanitizeAssignedDriver(value) {
   return text.length > 120 ? `${text.slice(0, 119).trim()}...` : text;
 }
 
+function sanitizeCustomerName(value) {
+  const text = normalizeText(value)
+    .replace(/\s+/g, ' ')
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, '[redacted auth]')
+    .replace(/\b(?:sk|pk|rk|whsec|ghp|github_pat|xoxb|xoxp|shpat|secret|token|api[_-]?key)[A-Za-z0-9:_-]{8,}\b/gi, '[redacted secret]');
+
+  if (!text) return null;
+  return text.length > 120 ? `${text.slice(0, 119).trim()}...` : text;
+}
+
+function sanitizeAddress(value) {
+  const text = normalizeText(value)
+    .replace(/\s+/g, ' ')
+    .replace(/\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b/g, '[redacted phone]')
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}\b/gi, '[redacted auth]')
+    .replace(/\b(?:sk|pk|rk|whsec|ghp|github_pat|xoxb|xoxp|shpat|secret|token|api[_-]?key)[A-Za-z0-9:_-]{8,}\b/gi, '[redacted secret]');
+
+  if (!text) return null;
+  return text.length > 240 ? `${text.slice(0, 239).trim()}...` : text;
+}
+
+function fullAddress(task) {
+  const direct = normalizeText(task.delivery_address) || normalizeText(task.address);
+  if (direct) return direct;
+
+  return [
+    task.address_line1,
+    task.address_line2,
+    task.address_city,
+    task.address_state,
+    task.address_postal_code,
+  ]
+    .map(normalizeText)
+    .filter(Boolean)
+    .join(', ');
+}
+
 function parseIsoDate(value, fieldName) {
   const text = normalizeText(value);
   if (!text) return null;
@@ -85,10 +122,12 @@ function isCompletedTask(task) {
 function sanitizeStop(task, deliveryDate) {
   const deliveryWindowLabel = task.delivery_window_label || task.time_window || null;
   const proofAvailable = Boolean(task.delivery_photo_url || task.delivery_drop_location);
+  const resolvedAddress = fullAddress(task);
 
   return {
     task_id: task.id || null,
     order_number: task.order_number || null,
+    customer_name: sanitizeCustomerName(task.customer_name),
     fulfillment_number: task.fulfillment_number ?? null,
     source_type: task.source_type || null,
     assigned_driver: sanitizeAssignedDriver(task.assigned_driver),
@@ -97,12 +136,13 @@ function sanitizeStop(task, deliveryDate) {
     fulfillment_status: null,
     delivery_date: task.scheduled_date || task.delivery_date || deliveryDate,
     delivery_window_label: deliveryWindowLabel,
+    delivery_address: sanitizeAddress(resolvedAddress),
     items_summary: task.items_summary || null,
     delivered_at: task.delivered_at || null,
     proof_available: proofAvailable,
     delivery_photo_url: task.delivery_photo_url || null,
     delivery_drop_location: task.delivery_drop_location || null,
-    missing_address: !hasAddress(task),
+    missing_address: !resolvedAddress,
     bag_return_required: null,
     bag_return_count: null,
   };
