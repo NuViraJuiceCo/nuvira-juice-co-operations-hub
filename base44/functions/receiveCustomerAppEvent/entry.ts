@@ -839,15 +839,17 @@ Deno.serve(async (req) => {
         _internalSecret: internalSecret,
       });
 
-      const { status: refundStatus } = refundResult?.data || {};
+      const refundPayload = refundResult?.data || refundResult || {};
+      const { status: refundStatus } = refundPayload;
       console.log(`[RECEIVE-CUSTOMER-EVENT] customer.subscription_cancelled cascade result: ${refundStatus}`);
 
       return Response.json({
         status: 'success',
         event,
         cascade: 'triggered',
+        action: refundStatus === 'refund_processed' ? 'refund_processed' : refundStatus,
         refund_status: refundStatus,
-        hub_order_id: cancelOrder.id,
+        hub_order_id: refundPayload.order_id || cancelOrder.id,
         hub_order_number: cancelOrder.shopify_order_number,
         matched_by: subId ? 'stripe_subscription_id' : caSubId ? 'customer_app_subscription_id' : piId ? 'stripe_payment_intent_id' : 'order_number',
       }, { status: 200 });
@@ -865,7 +867,7 @@ Deno.serve(async (req) => {
       // Route to processStripeRefund with CA-provided context
       const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
       const refundResult = await base44.asServiceRole.functions.invoke('processStripeRefund', {
-        stripe_charge_id: data.stripe_charge_id || null,
+        stripe_charge_id: data.stripe_charge_id || data.refund_id || null,
         stripe_payment_intent_id: data.stripe_payment_intent_id || null,
         stripe_refund_id: data.stripe_refund_id || null,
         stripe_event_id: data.stripe_event_id || `ca_refund_${data.order_number}_${Date.now()}`,
@@ -875,14 +877,17 @@ Deno.serve(async (req) => {
         _internalSecret: internalSecret,
       });
 
-      const { status: refundStatus } = refundResult?.data || {};
+      const refundPayload = refundResult?.data || refundResult || {};
+      const { status: refundStatus } = refundPayload;
       console.log(`[RECEIVE-CUSTOMER-EVENT] Refund cascade result: ${refundStatus}`);
 
       return Response.json({
         status: 'success',
         event,
+        action: refundStatus === 'refund_processed' ? 'refund_processed' : refundStatus,
         refund_status: refundStatus,
         order_number: data.order_number,
+        hub_order_id: refundPayload.order_id || null,
       }, { status: 200 });
     }
 
