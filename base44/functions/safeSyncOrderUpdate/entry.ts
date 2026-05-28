@@ -222,8 +222,17 @@ async function quarantine(base44, params) {
 
 Deno.serve(async (req) => {
   try {
+    if (req.method !== 'POST') {
+      return Response.json({ error: 'method_not_allowed' }, { status: 405 });
+    }
+
     const base44 = createClientFromRequest(req);
-    const body = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return Response.json({ error: 'invalid_json' }, { status: 400 });
+    }
 
     // ── INTERNAL FUNCTION AUTHORIZATION ─────────────────────────────────────
     // Allow trusted internal functions (rebuild_subscriptions) to call this gateway
