@@ -176,6 +176,22 @@ function safeProductionBatchSummary(batch) {
   };
 }
 
+async function safeEntityList(base44, entityName, sort, limit) {
+  try {
+    const entity = base44?.asServiceRole?.entities?.[entityName];
+    if (!entity || typeof entity.list !== 'function') {
+      console.warn(`[COMPLIANCE-OPS-SUMMARY] Optional entity unavailable: ${entityName}`);
+      return [];
+    }
+
+    const rows = await entity.list(sort, limit);
+    return Array.isArray(rows) ? rows : [];
+  } catch (error) {
+    console.warn(`[COMPLIANCE-OPS-SUMMARY] Optional entity read failed: ${entityName}: ${error?.message || 'unknown_error'}`);
+    return [];
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization') || '';
@@ -235,15 +251,15 @@ Deno.serve(async (req) => {
       complianceAll,
       productionBatchAll,
     ] = await Promise.all([
-      base44.asServiceRole.entities.TemperatureLog.list('-log_date', QUERY_LIMIT).catch(() => []),
-      base44.asServiceRole.entities.pHLog.list('-log_date', QUERY_LIMIT).catch(() => []),
-      base44.asServiceRole.entities.CCPLog.list('-log_date', QUERY_LIMIT).catch(() => []),
-      base44.asServiceRole.entities.SanitationLog.list('-log_date', QUERY_LIMIT).catch(() => []),
-      base44.asServiceRole.entities.DailyChecklist.list('-checklist_date', QUERY_LIMIT).catch(() => []),
-      base44.asServiceRole.entities.CorrectiveActionLog.list('-log_date', QUERY_LIMIT).catch(() => []),
-      base44.asServiceRole.entities.BatchComplianceLog.list('-date', QUERY_LIMIT).catch(() => []),
-      base44.asServiceRole.entities.ComplianceLog.list('-log_date', QUERY_LIMIT).catch(() => []),
-      base44.asServiceRole.entities.ProductionBatch.list('-production_date', QUERY_LIMIT).catch(() => []),
+      safeEntityList(base44, 'TemperatureLog', '-log_date', QUERY_LIMIT),
+      safeEntityList(base44, 'pHLog', '-log_date', QUERY_LIMIT),
+      safeEntityList(base44, 'CCPLog', '-log_date', QUERY_LIMIT),
+      safeEntityList(base44, 'SanitationLog', '-log_date', QUERY_LIMIT),
+      safeEntityList(base44, 'DailyChecklist', '-checklist_date', QUERY_LIMIT),
+      safeEntityList(base44, 'CorrectiveActionLog', '-log_date', QUERY_LIMIT),
+      safeEntityList(base44, 'BatchComplianceLog', '-date', QUERY_LIMIT),
+      safeEntityList(base44, 'ComplianceLog', '-log_date', QUERY_LIMIT),
+      safeEntityList(base44, 'ProductionBatch', '-production_date', QUERY_LIMIT),
     ]);
 
     const logs = {
