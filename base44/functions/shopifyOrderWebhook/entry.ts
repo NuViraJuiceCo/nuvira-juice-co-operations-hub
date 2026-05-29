@@ -108,6 +108,88 @@ async function maybeMirrorPosOrderToCustomerApp({ order, orderId, orderNumber, c
   }
 }
 
+function uniqueTags(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : [])
+    .map(value => (value || '').toString().trim())
+    .filter(Boolean)));
+}
+
+async function cancelLinkedFulfillmentTasksForShopifyRefund(base44, orderId, orderNumber) {
+  const tasks = await base44.asServiceRole.entities.FulfillmentTask.filter({ order_id: orderId }, '-created_date', 50).catch(() => []);
+  let cancelled = 0;
+  for (const task of tasks || []) {
+    const status = String(task.status || '').toLowerCase();
+    if (['cancelled', 'canceled', 'completed', 'delivered'].includes(status)) continue;
+    await base44.asServiceRole.entities.FulfillmentTask.update(task.id, {
+      status: 'Cancelled',
+      delivery_status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      notes: `${task.notes || ''}\nCancelled by Shopify refund webhook for ${orderNumber}.`.trim(),
+    });
+    cancelled += 1;
+  }
+  return cancelled;
+}
+
+async function applyShopifyRefundToExistingOrder({ base44, existingOrder, orderNumber, orderId, topic, refundAmount, financialStatus }) {
+  const now = new Date().toISOString();
+  const alreadyRefunded = existingOrder.payment_status === 'refunded' &&
+    ['canceled', 'cancelled', 'refunded'].includes(String(existingOrder.production_status || existingOrder.order_status || '').toLowerCase());
+  const tags = uniqueTags([...(existingOrder.tags || []), 'refunded', 'excluded']);
+
+  if (!alreadyRefunded) {
+    await base44.asServiceRole.entities.ShopifyOrder.update(existingOrder.id, {
+      payment_status: 'refunded',
+      production_status: 'canceled',
+      fulfillment_status: 'cancelled',
+      order_status: 'refunded',
+      operational_visibility: 'archived',
+      sync_status: 'do_not_sync',
+      tags,
+      refunded_at: now,
+      cancel_type: 'shopify_refund',
+      last_sync_at: now,
+      internal_notes: `${existingOrder.internal_notes || ''}\n[SHOPIFY_REFUND] ${topic} financial_status=${financialStatus || 'unknown'} amount=${refundAmount ?? 'unknown'} on ${now}`.trim(),
+      audit_trail: [
+        ...(existingOrder.audit_trail || []),
+        {
+          timestamp: now,
+          action: 'ShopifyRefundWebhook',
+          performed_by: 'shopifyOrderWebhook',
+          before: {
+            payment_status: existingOrder.payment_status || null,
+            production_status: existingOrder.production_status || null,
+          },
+          after: { payment_status: 'refunded', production_status: 'canceled' },
+          reason: `Shopify ${topic} webhook`,
+        },
+      ],
+    });
+  }
+
+  const cancelledTasks = alreadyRefunded
+    ? 0
+    : await cancelLinkedFulfillmentTasksForShopifyRefund(base44, existingOrder.id, orderNumber);
+
+  await base44.asServiceRole.entities.OrderSyncLog.create({
+    sync_timestamp: now,
+    sync_source: 'shopify_webhook',
+    event_type: `shopify_webhook:${topic}`,
+    order_id: existingOrder.id,
+    order_number: orderNumber,
+    customer_email: existingOrder.customer_email || '',
+    action: alreadyRefunded ? 'skipped' : 'refund_processed',
+    reason: alreadyRefunded
+      ? 'Shopify refund webhook replay skipped; order already refunded/canceled.'
+      : `Shopify refund webhook processed. Cancelled ${cancelledTasks} fulfillment tasks.`,
+    success: true,
+    idempotency_key: `shopify_refund:${orderId || orderNumber}:${topic}`,
+  }).catch(() => null);
+
+  console.log(`[SHOPIFY-WEBHOOK] Shopify refund ${alreadyRefunded ? 'skipped duplicate' : 'processed'} for ${orderNumber}; tasks_cancelled=${cancelledTasks}`);
+  return { alreadyRefunded, cancelledTasks };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 });
@@ -175,6 +257,35 @@ Deno.serve(async (req) => {
       // ── Idempotency: check existing by Shopify order ID ──
       const existing = await base44.asServiceRole.entities.ShopifyOrder.filter({ shopify_order_id: orderId });
       const existingOrder = existing?.[0] || null;
+
+      if (topic === 'orders/refunded' || hubPaymentStatus === 'refunded') {
+        if (existingOrder) {
+          await applyShopifyRefundToExistingOrder({
+            base44,
+            existingOrder,
+            orderNumber,
+            orderId,
+            topic,
+            refundAmount: totalPrice,
+            financialStatus,
+          });
+        } else {
+          console.warn(`[SHOPIFY-WEBHOOK] Refund received for unknown Shopify order ${orderNumber}; queued safe sync log only`);
+          await base44.asServiceRole.entities.OrderSyncLog.create({
+            sync_timestamp: new Date().toISOString(),
+            sync_source: 'shopify_webhook',
+            event_type: `shopify_webhook:${topic}`,
+            order_number: orderNumber,
+            customer_email: customerEmail || '',
+            action: 'rejected',
+            reason: 'Shopify refund webhook received before operational order record existed.',
+            success: false,
+            error_code: 'shopify_refund_order_not_found',
+            idempotency_key: `shopify_refund:${orderId || orderNumber}:${topic}:missing`,
+          }).catch(() => null);
+        }
+        return;
+      }
 
       // ── POS path ──
       if (isPOS) {
