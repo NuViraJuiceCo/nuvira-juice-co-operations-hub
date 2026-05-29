@@ -873,6 +873,7 @@ Deno.serve(async (req) => {
         stripe_event_id: data.stripe_event_id || `ca_refund_${data.order_number}_${Date.now()}`,
         refund_amount: data.refund_amount || 0,
         charge_amount: data.charge_amount || data.total_price || 0,
+        is_full_refund: data.is_full_refund === true || data.is_partial_refund === false,
         manual_order_number: data.order_number,
         _internalSecret: internalSecret,
       });
