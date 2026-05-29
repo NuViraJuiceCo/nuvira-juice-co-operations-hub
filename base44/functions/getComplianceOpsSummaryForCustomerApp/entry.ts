@@ -134,6 +134,39 @@ function summarizeIssues(logs) {
   };
 }
 
+function emptyLogs() {
+  return {
+    temperature: [],
+    ph: [],
+    ccp: [],
+    sanitation: [],
+    dailyChecklists: [],
+    correctiveActions: [],
+    batchComplianceLogs: [],
+    complianceLogs: [],
+    productionBatches: [],
+  };
+}
+
+function fallbackSummary(dateFrom, dateTo, reason = 'summary_unavailable') {
+  const logs = emptyLogs();
+  return {
+    success: true,
+    dry_run: true,
+    read_only: true,
+    hub_degraded: true,
+    date_from: dateFrom || null,
+    date_to: dateTo || null,
+    generated_at: new Date().toISOString(),
+    summary: summarizeCounts(logs),
+    issues: summarizeIssues(logs),
+    recent_logs: [],
+    batch_compliance: [],
+    attention_batches: [],
+    warnings: [sanitizeText(reason, 160) || 'summary_unavailable'],
+  };
+}
+
 function latestByDateTime(items, dateField, timeField) {
   return [...items].sort((a, b) => {
     const aKey = `${a?.[dateField] || ''} ${a?.[timeField] || ''} ${a?.updated_date || ''}`;
@@ -193,6 +226,9 @@ async function safeEntityList(base44, entityName, sort, limit) {
 }
 
 Deno.serve(async (req) => {
+  let requestDateFrom = null;
+  let requestDateTo = null;
+
   try {
     const authHeader = req.headers.get('Authorization') || '';
     if (!authHeader.startsWith('Bearer ')) {
@@ -238,6 +274,9 @@ Deno.serve(async (req) => {
         max_range_days: MAX_RANGE_DAYS,
       }, { status: 400 });
     }
+
+    requestDateFrom = dateFrom;
+    requestDateTo = dateTo;
 
     const base44 = createClientFromRequest(req);
     const [
@@ -314,6 +353,6 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('[COMPLIANCE-OPS-SUMMARY] Error:', error.message);
-    return Response.json({ error: 'Unable to load compliance ops summary' }, { status: 500 });
+    return Response.json(fallbackSummary(requestDateFrom, requestDateTo, 'Unable to load compliance ops summary'));
   }
 });
