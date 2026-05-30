@@ -14,6 +14,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 
 const PRODUCTION_DAYS = [2, 5]; // Tue=2, Fri=5 — NuVira production days ONLY (no Saturday)
+const BUSINESS_TIME_ZONE = 'America/Chicago';
 
 // ─── Phase 5: Validate production date day-of-week before creating/updating batches ──
 // Only Tue and Fri are valid. If a planMap entry has an invalid production date, skip it.
@@ -22,6 +23,25 @@ function isValidNuViraProductionDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dow = new Date(y, m - 1, d).getDay();
   return dow === 2 || dow === 5; // Tue=2, Fri=5
+}
+
+function getBusinessTodayDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function isPastBusinessDate(dateStr, todayStr) {
+  return Boolean(dateStr) && dateStr < todayStr;
+}
+
+function isTodayOrFutureBusinessDate(dateStr, todayStr) {
+  return Boolean(dateStr) && dateStr >= todayStr;
 }
 
 const FIRST_PRODUCTION_DATE = '2026-05-01'; // First production date (May 1st)
@@ -272,8 +292,7 @@ Deno.serve(async (req) => {
       base44.asServiceRole.entities.ManualProductionBatch.list('-production_date', 200),
     ]);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStr = getBusinessTodayDateString();
 
     // Build bundle lookup map: bundle_name (normalized) -> full bundle object
     // Also map exact original names so we can match order line items flexibly
@@ -409,8 +428,7 @@ Deno.serve(async (req) => {
       if (!taskDeliveryDate) continue;
 
       const productionDate = getProductionDateForDelivery(taskDeliveryDate);
-      const prodDateObj = new Date(productionDate + 'T00:00:00');
-      if (prodDateObj < today) continue; // skip past dates
+      if (isPastBusinessDate(productionDate, todayStr)) continue; // skip past dates in NuVira business timezone
 
       console.log(`[RECALC] Processing subscription FulfillmentTask ${task.id}: ${task.customer_name} → ${productionDate}`);
 
@@ -677,8 +695,7 @@ Deno.serve(async (req) => {
         for (let fi = 0; fi < order.fulfillments.length; fi++) {
           const fulfillment = order.fulfillments[fi];
           const fDate = fulfillment.production_date;
-          const fDateObj = new Date(fDate + 'T00:00:00');
-          if (fDateObj < today) continue; // skip past dates
+          if (isPastBusinessDate(fDate, todayStr)) continue; // skip past dates in NuVira business timezone
 
           const fulfillmentItems = fulfillment.items && fulfillment.items.length > 0
             ? fulfillment.items
@@ -781,8 +798,7 @@ Deno.serve(async (req) => {
 
           for (let fi = 0; fi < fulfillmentDates.length; fi++) {
             const fDate = fulfillmentDates[fi];
-            const fDateObj = new Date(fDate + 'T00:00:00');
-            if (fDateObj < today) continue; // skip past dates
+            if (isPastBusinessDate(fDate, todayStr)) continue; // skip past dates in NuVira business timezone
 
             if (bundleComponents && bundleComponents.length > 0) {
               // Decompose bundle into individual products, FOR THIS FULFILLMENT ONLY
@@ -860,8 +876,7 @@ Deno.serve(async (req) => {
       if (!productionDate) continue;
 
       // Skip past dates — production has already happened or is not actionable
-      const prodDateObj = new Date(productionDate + 'T00:00:00');
-      if (prodDateObj < today) continue;
+      if (isPastBusinessDate(productionDate, todayStr)) continue;
 
       // Phase 5 guard: only valid NuVira production days (Tue=2, Fri=5)
       // Manual batches may be on any date — if it's not a valid prod day, still include
@@ -1037,8 +1052,7 @@ Deno.serve(async (req) => {
     // ─── ZERO OUT / DELETE STALE BATCHES (no longer needed) ───────────────────
     // Remaining keys in existingBatchMap were not in planMap — no orders for them
     for (const [key, batch] of Object.entries(existingBatchMap)) {
-      const prodDateObj = new Date(batch.production_date + 'T00:00:00');
-      if (prodDateObj >= today && !batch.is_locked) {
+      if (isTodayOrFutureBusinessDate(batch.production_date, todayStr) && !batch.is_locked) {
         // Delete batches that have no orders
         await base44.asServiceRole.entities.ProductionBatch.delete(batch.id);
         results.zeroed++;
