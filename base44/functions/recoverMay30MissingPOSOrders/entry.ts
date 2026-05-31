@@ -84,7 +84,7 @@ function buildPosOrderPayload(orderNumber, input) {
     order_lock_status: 'fulfilled',
     data_quality_status: 'complete',
     source_channel: 'pos',
-    source_type: 'shopify_pos',
+    source_type: 'admin_create',
     order_type: 'pos',
     fulfillment_method: 'pos',
     fulfillment_mode: 'single_delivery',
@@ -117,12 +117,8 @@ function hasLineItems(value) {
 function isNormalizedPosOrder(order) {
   const tags = Array.isArray(order?.tags) ? order.tags : [];
   return order?.source_channel === 'pos' &&
-    order?.source_type === 'shopify_pos' &&
     order?.order_type === 'pos' &&
     order?.fulfillment_method === 'pos' &&
-    order?.requires_delivery === false &&
-    order?.requires_production === false &&
-    order?.requires_fulfillment_task === false &&
     tags.includes('pos_sale') &&
     tags.includes('event_sale');
 }
@@ -143,7 +139,7 @@ function buildPosNormalizationPayload(orderNumber, existing) {
     order_lock_status: existing?.order_lock_status || 'fulfilled',
     data_quality_status: 'complete',
     source_channel: 'pos',
-    source_type: 'shopify_pos',
+    source_type: existing?.source_type || 'admin_create',
     order_type: 'pos',
     fulfillment_method: 'pos',
     fulfillment_mode: 'single_delivery',
