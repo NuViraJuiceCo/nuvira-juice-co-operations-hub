@@ -223,8 +223,9 @@ Deno.serve(async (req) => {
 
   console.log(`[SHOPIFY-WEBHOOK] HMAC verified OK — topic=${topic}`);
 
-  // Respond 200 immediately so Shopify doesn't retry, then process async
-  (async () => {
+  let processingError = null;
+
+  await (async () => {
     try {
       const base44 = createClientFromRequest(req);
       const order = JSON.parse(rawBody);
@@ -422,10 +423,19 @@ Deno.serve(async (req) => {
 
       console.log(`[SHOPIFY-WEBHOOK] Online order ${orderNumber} synced OK`);
 
-    } catch (err) {
-      console.error('[SHOPIFY-WEBHOOK] Processing error:', err.message, err.stack);
-    }
+  } catch (err) {
+    processingError = err;
+    console.error('[SHOPIFY-WEBHOOK] Processing error:', err.message, err.stack);
+  }
   })();
+
+  if (processingError) {
+    return Response.json({
+      received: false,
+      error: 'processing_failed',
+      retryable: true,
+    }, { status: 500 });
+  }
 
   return Response.json({ received: true }, { status: 200 });
 });
