@@ -27,7 +27,7 @@
     },
     "trim_waste_factor": {
       "type": "number",
-      "default": 1,
+      "default": 1.0,
       "description": "Multiplier for waste/trim loss (e.g. 1.1 = 10% extra to account for waste). Applied on top of recipe yield_factor."
     },
     "units_per_case": {
@@ -62,43 +62,5 @@
     "ingredient_name",
     "purchase_unit",
     "oz_per_purchase_unit"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "production_manager"
-          ]
-        }
-      }
-    },
-    "read": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "production_manager",
-            "staff"
-          ]
-        }
-      }
-    },
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "production_manager"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }

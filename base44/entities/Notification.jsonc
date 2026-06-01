@@ -33,30 +33,5 @@
     "title",
     "message",
     "type"
-  ],
-  "rls": {
-    "create": {
-      "$or": [
-        {
-          "data.user_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
-    },
-    "read": {
-      "data.user_email": "{{user.email}}"
-    },
-    "update": {
-      "data.user_email": "{{user.email}}"
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }

@@ -26,5 +26,12 @@
       "type": "string",
       "description": "Display name (editable alternative to full_name)"
     }
-  }
+  },
+  "required": [
+    "role",
+    "title",
+    "phone",
+    "bio",
+    "display_name"
+  ]
 }

@@ -29,7 +29,7 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       const [orderData, batchData, inventoryData, reviewQueue] = await Promise.all([
-        base44.entities.ShopifyOrder.list("-created_date", 50),
+        base44.entities.ShopifyOrder.list("-created_date", 200),
         base44.entities.ProductionBatch.list("-production_date", 50),
         base44.entities.InventoryItem.list("-updated_date", 100),
         base44.entities.OrderReviewQueue.filter({ status: "pending" }),
@@ -85,7 +85,7 @@ export default function Dashboard() {
 
   const handleRefresh = async () => {
     const [orderData, batchData, inventoryData, reviewQueue] = await Promise.all([
-      base44.entities.ShopifyOrder.list("-created_date", 50),
+      base44.entities.ShopifyOrder.list("-created_date", 200),
       base44.entities.ProductionBatch.list("-production_date", 50),
       base44.entities.InventoryItem.list("-updated_date", 100),
       base44.entities.OrderReviewQueue.filter({ status: "pending" }),

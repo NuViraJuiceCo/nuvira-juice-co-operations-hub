@@ -74,33 +74,5 @@
     "type",
     "status",
     "date"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "marketing_staff"
-          ]
-        }
-      }
-    },
-    "read": {},
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "marketing_staff"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }

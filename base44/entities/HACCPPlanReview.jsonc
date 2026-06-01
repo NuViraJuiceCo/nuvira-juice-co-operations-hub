@@ -99,38 +99,5 @@
   "required": [
     "plan_version",
     "review_date"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "quality_control_staff"
-          ]
-        }
-      }
-    },
-    "read": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "quality_control_staff",
-            "production_manager"
-          ]
-        }
-      }
-    },
-    "update": {
-      "user_condition": {
-        "role": "admin"
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }

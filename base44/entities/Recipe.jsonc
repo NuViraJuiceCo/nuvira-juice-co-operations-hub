@@ -58,43 +58,5 @@
   },
   "required": [
     "product_name"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "production_manager"
-          ]
-        }
-      }
-    },
-    "read": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "production_manager",
-            "staff"
-          ]
-        }
-      }
-    },
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "production_manager"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }

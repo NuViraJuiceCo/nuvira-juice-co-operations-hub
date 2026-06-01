@@ -172,40 +172,5 @@
     "plan_name",
     "first_delivery_date",
     "products"
-  ],
-  "rls": {
-    "create": {
-      "data.customer_email": "{{user.email}}",
-      "data.customer_app_user_id": "{{user.id}}"
-    },
-    "read": {
-      "$or": [
-        {
-          "data.customer_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
-    },
-    "update": {
-      "user_condition": {
-        "role": "admin"
-      }
-    },
-    "delete": {
-      "$or": [
-        {
-          "data.customer_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
-    }
-  }
+  ]
 }

@@ -153,42 +153,5 @@
     "incoming_source",
     "issue_description",
     "status"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "operations_staff"
-          ]
-        }
-      }
-    },
-    "read": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "operations_staff"
-          ]
-        }
-      }
-    },
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "operations_staff"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }

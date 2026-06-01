@@ -61,35 +61,5 @@
   "required": [
     "title",
     "category"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "operations_staff",
-            "marketing_staff"
-          ]
-        }
-      }
-    },
-    "read": {},
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "operations_staff",
-            "marketing_staff"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }

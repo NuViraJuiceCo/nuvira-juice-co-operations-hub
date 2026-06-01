@@ -110,37 +110,5 @@
     "sync_source",
     "action",
     "success"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "operations_staff"
-          ]
-        }
-      }
-    },
-    "read": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "operations_staff"
-          ]
-        }
-      }
-    },
-    "update": {
-      "user_condition": {
-        "role": "admin"
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }

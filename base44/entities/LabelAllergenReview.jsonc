@@ -110,42 +110,5 @@
   },
   "required": [
     "product_name"
-  ],
-  "rls": {
-    "create": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "quality_control_staff"
-          ]
-        }
-      }
-    },
-    "read": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "quality_control_staff"
-          ]
-        }
-      }
-    },
-    "update": {
-      "user_condition": {
-        "role": {
-          "$in": [
-            "admin",
-            "quality_control_staff"
-          ]
-        }
-      }
-    },
-    "delete": {
-      "user_condition": {
-        "role": "admin"
-      }
-    }
-  }
+  ]
 }
