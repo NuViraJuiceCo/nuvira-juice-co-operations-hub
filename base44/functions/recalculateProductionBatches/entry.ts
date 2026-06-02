@@ -980,6 +980,20 @@ Deno.serve(async (req) => {
         if (hasChange) {
           try {
             await base44.asServiceRole.entities.ShopifyOrder.update(order.id, updateData);
+            await base44.asServiceRole.entities.OrderSyncLog.create({
+              sync_timestamp: new Date().toISOString(),
+              sync_source: 'scheduled_rebuild',
+              event_type: 'recalculateProductionBatches:order_enrichment',
+              order_id: order.id,
+              order_number: order.shopify_order_number || null,
+              customer_email: order.customer_email || null,
+              action: 'updated',
+              reason: 'Production recalculation updated operational fulfillments/assigned delivery date',
+              fields_updated: Object.keys(updateData),
+              success: true,
+            }).catch((logErr) => {
+              console.warn(`[RECALC] Failed to write OrderSyncLog for order ${order.id}: ${logErr?.message || 'unknown error'}`);
+            });
             ordersWritten++;
           } catch (err) {
             console.warn(`[RECALC] Failed to update fulfillments for order ${order.id}: ${err.message}`);

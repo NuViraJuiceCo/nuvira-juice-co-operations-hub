@@ -10,10 +10,24 @@
       "type": "string",
       "enum": [
         "stripe_webhook",
+        "stripe_refund_webhook",
         "customer_app_pull",
+        "customer_app",
         "manual_recovery",
+        "manual_repair",
         "scheduled_rebuild",
-        "repair_worker"
+        "repair_worker",
+        "pullOrdersFromCustomerApp",
+        "shopify_webhook",
+        "shopify_admin_sync",
+        "rebuild_subscriptions",
+        "operations",
+        "customer_app_driver",
+        "admin",
+        "subscription_integrity_check",
+        "unified_repair_worker",
+        "repair_broken_app_orders",
+        "stripe_subscription"
       ],
       "description": "Source of the sync operation"
     },
@@ -44,7 +58,12 @@
         "updated",
         "skipped",
         "rejected",
-        "quarantined"
+        "quarantined",
+        "queued_for_review",
+        "dedupe_exact_match",
+        "flagged",
+        "refund_processed",
+        "error"
       ],
       "description": "Action taken"
     },
