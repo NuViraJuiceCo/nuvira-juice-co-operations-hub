@@ -32,14 +32,38 @@ Deno.serve(async (req) => {
     const recentLogs = await base44.asServiceRole.entities.OrderSyncLog.list('-sync_timestamp', 500);
     const logsInWindow = recentLogs.filter(l => l.sync_timestamp && l.sync_timestamp > windowStart);
 
-    // Build set of order IDs that have a sync log entry
+    const normalizeOrderNumber = (value) => String(value || '').trim().toLowerCase();
+
+    // Build set of order IDs/numbers that have a sync log entry. Some older
+    // approved operational paths logged by order_number before order_id was
+    // consistently populated.
     const loggedOrderIds = new Set(logsInWindow.map(l => l.order_id).filter(Boolean));
+    const loggedOrderNumbers = new Set(logsInWindow.map(l => normalizeOrderNumber(l.order_number)).filter(Boolean));
+
+    // Loyalty repairs can create UserPoints records linked by order_id. In Base44,
+    // that relationship may advance the parent ShopifyOrder.updated_date even
+    // though no ShopifyOrder fields were changed. Treat those as known relation
+    // touches, not order-write bypasses.
+    const recentUserPoints = await base44.asServiceRole.entities.UserPoints.list('-created_date', 500).catch(() => []);
+    const loyaltyTouchTimesByOrderId = new Map<string, number[]>();
+    for (const p of (recentUserPoints || [])) {
+      if (!p.order_id) continue;
+      const touchTimestamps = [p.created_date, p.updated_date].filter(ts => ts && ts > windowStart);
+      if (touchTimestamps.length === 0) continue;
+      const existing = loyaltyTouchTimesByOrderId.get(p.order_id) || [];
+      existing.push(...touchTimestamps.map(ts => new Date(ts).getTime()).filter(Boolean));
+      loyaltyTouchTimesByOrderId.set(p.order_id, existing);
+    }
 
     // Find orders updated with no corresponding log entry
     // Exclude orders that were JUST created (same minute) — creation may not have a log yet
     const bypassCandidates = ordersInWindow.filter(o => {
       if (!o.id) return false;
       if (loggedOrderIds.has(o.id)) return false;
+      if (loggedOrderNumbers.has(normalizeOrderNumber(o.shopify_order_number))) return false;
+      const loyaltyTouchTimes = loyaltyTouchTimesByOrderId.get(o.id) || [];
+      const orderUpdatedAt = new Date(o.updated_date).getTime();
+      if (loyaltyTouchTimes.some((t: number) => Math.abs(orderUpdatedAt - t) < 5 * 60 * 1000)) return false;
       // Skip very recent (within 2 min) — log may not have written yet
       const updatedAge = Date.now() - new Date(o.updated_date).getTime();
       if (updatedAge < 2 * 60 * 1000) return false;
@@ -52,6 +76,7 @@ Deno.serve(async (req) => {
         message: `No bypass writes detected in last ${windowMinutes} minutes`,
         orders_checked: ordersInWindow.length,
         logs_checked: logsInWindow.length,
+        loyalty_relation_touches_seen: loyaltyTouchTimesByOrderId.size,
       });
     }
 
@@ -82,11 +107,13 @@ Deno.serve(async (req) => {
     return Response.json({
       status: 'alert_sent',
       bypass_candidates: bypassCandidates.length,
+      loyalty_relation_touches_seen: loyaltyTouchTimesByOrderId.size,
       orders: bypassCandidates.map(o => ({ id: o.id, order_number: o.shopify_order_number, email: o.customer_email, updated: o.updated_date })),
     });
 
   } catch (error) {
-    console.error('[REGRESSION-GUARD]', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[REGRESSION-GUARD]', message);
+    return Response.json({ error: message }, { status: 500 });
   }
 });

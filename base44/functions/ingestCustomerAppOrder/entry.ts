@@ -229,6 +229,20 @@ Deno.serve(async (req) => {
           sync_status: 'synced',
           last_sync_at: new Date().toISOString(),
         });
+        await base44.asServiceRole.entities.OrderSyncLog.create({
+          sync_timestamp: new Date().toISOString(),
+          sync_source: 'customer_app_pull',
+          event_type: 'ingestCustomerAppOrder:payment_status_upgrade',
+          order_id: existingMatchedOrder.id,
+          order_number: existingMatchedOrder.shopify_order_number || order_number,
+          customer_email: existingMatchedOrder.customer_email || customer_email || '',
+          action: 'updated',
+          reason: `Customer App ingest upgraded payment_status from ${existingPayment} to paid`,
+          fields_updated: ['payment_status', 'sync_status', 'last_sync_at'],
+          success: true,
+        }).catch((logErr) => {
+          console.warn(`[INGEST] Payment upgrade log failed for ${order_number}: ${logErr?.message || 'unknown error'}`);
+        });
         return Response.json({
           status: 'success',
           action: 'updated',
@@ -355,6 +369,30 @@ Deno.serve(async (req) => {
             address_last_synced_at: new Date().toISOString(),
           }).then(() => {
             console.log(`[INGEST] Address snapshot written to ShopifyOrder ${order_id}`);
+            return base44.asServiceRole.entities.OrderSyncLog.create({
+              sync_timestamp: new Date().toISOString(),
+              sync_source: 'customer_app_pull',
+              event_type: 'ingestCustomerAppOrder:address_snapshot',
+              order_id,
+              order_number,
+              customer_email: customer_email || '',
+              action: 'updated',
+              reason: 'Customer App ingest wrote normalized address snapshot after order creation',
+              fields_updated: [
+                'address_line1',
+                'address_line2',
+                'address_city',
+                'address_state',
+                'address_postal_code',
+                'address_country',
+                'delivery_address',
+                'address_last_synced_from',
+                'address_last_synced_at',
+              ],
+              success: true,
+            }).catch((logErr) => {
+              console.warn(`[INGEST] Address snapshot log failed for ${order_number}: ${logErr?.message || 'unknown error'}`);
+            });
           })
         );
       } else {

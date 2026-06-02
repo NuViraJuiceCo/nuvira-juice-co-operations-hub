@@ -71,6 +71,18 @@ const FIELD_OWNERSHIP = {
     'production_status', 'order_lock_status', 'customer_app_user_id', 'customer_notes', 'tags',
     'requested_delivery_date', 'delivery_notes',
   ],
+  shopify_admin_sync: [
+    'shopify_order_id', 'shopify_order_number',
+    'order_type', 'source_channel', 'source_type',
+    'customer_name', 'customer_email', 'customer_phone',
+    'line_items', 'payment_status', 'order_status', 'fulfillment_status',
+    'fulfillment_method', 'subtotal', 'total_price',
+    'operational_visibility', 'tags', 'sync_status', 'last_sync_at',
+    'cancelled_at', 'archived_at', 'customer_order_date',
+    'address_line1', 'address_line2', 'address_city', 'address_state',
+    'address_postal_code', 'address_country', 'delivery_notes',
+    'production_status',
+  ],
   operations: [
     'production_status', 'fulfillment_status', 'assigned_delivery_date',
     'internal_notes', 'tags', 'sync_status', 'order_lock_status',
@@ -235,11 +247,11 @@ Deno.serve(async (req) => {
     }
 
     // ── INTERNAL FUNCTION AUTHORIZATION ─────────────────────────────────────
-    // Allow trusted internal functions (rebuild_subscriptions) to call this gateway
+    // Allow trusted internal functions to call this gateway
     // without requiring user authentication. Validate via INTERNAL_FUNCTION_SECRET.
     const providedSecret = body._internalSecret;
     const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
-    const TRUSTED_INTERNAL_SOURCES = new Set(['rebuild_subscriptions', 'operations', 'manual_recovery']);
+    const TRUSTED_INTERNAL_SOURCES = new Set(['rebuild_subscriptions', 'shopify_admin_sync', 'operations', 'manual_recovery']);
     const isInternalCall = providedSecret && internalSecret && providedSecret === internalSecret && TRUSTED_INTERNAL_SOURCES.has(body.source);
     
     if (!isInternalCall) {
@@ -255,7 +267,7 @@ Deno.serve(async (req) => {
 
     const {
       incomingData,     // Fields to write
-      source,           // Who is writing: stripe_webhook | customer_app | rebuild_subscriptions | operations | admin | manual_recovery
+      source,           // Who is writing: stripe_webhook | customer_app | rebuild_subscriptions | shopify_admin_sync | operations | admin | manual_recovery
       stripeEventId,    // For idempotency
       matchBy,          // How to find existing order: { stripe_subscription_id, stripe_checkout_session_id, stripe_payment_intent_id, internal_id, shopify_order_id }
     } = body;
@@ -912,8 +924,10 @@ Deno.serve(async (req) => {
     }
 
     // ── STEP 10: AUDIT LOG ───────────────────────────────────────────────────
-    // Log creates, Stripe webhooks, rejected fields, admin writes, and customer_app (skip only unchanged routine updates)
-    const shouldLog = !existingOrder || stripeEventId || fieldsRejected.length > 0 || fieldsFiltered.length > 0 || source === 'stripe_webhook' || source === 'admin';
+    // Every successful gateway write must create an OrderSyncLog. The regression
+    // guard treats ShopifyOrder.updated_date without a same-window log as a
+    // possible direct-write bypass, so selective logging causes false positives.
+    const shouldLog = true;
     if (shouldLog) {
       await logSync(base44, {
         source,

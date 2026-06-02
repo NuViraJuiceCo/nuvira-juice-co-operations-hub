@@ -297,6 +297,20 @@ Deno.serve(async (req) => {
               payment_status: 'paid',
               last_sync_at: new Date().toISOString(),
             });
+            await base44.asServiceRole.entities.OrderSyncLog.create({
+              sync_timestamp: new Date().toISOString(),
+              sync_source: 'shopify_webhook',
+              event_type: `shopify_webhook:${topic}:pos_payment_update`,
+              order_id: existingOrder.id,
+              order_number: existingOrder.shopify_order_number || orderNumber,
+              customer_email: existingOrder.customer_email || customerEmail || '',
+              action: 'updated',
+              reason: `Shopify POS payment status updated via webhook — financial_status=${financialStatus}`,
+              fields_updated: ['payment_status', 'last_sync_at'],
+              success: true,
+            }).catch((logErr) => {
+              console.warn(`[SHOPIFY-WEBHOOK] POS payment update log failed for ${orderNumber}: ${logErr?.message || 'unknown error'}`);
+            });
             console.log(`[SHOPIFY-WEBHOOK] POS order ${orderNumber} payment updated to paid`);
           } else {
             console.log(`[SHOPIFY-WEBHOOK] POS order ${orderNumber} already exists (id=${existingOrder.id}) — skipping duplicate`);
@@ -367,7 +381,7 @@ Deno.serve(async (req) => {
 
         await base44.asServiceRole.entities.OrderSyncLog.create({
           sync_timestamp: new Date().toISOString(),
-          sync_source: 'stripe_webhook',
+          sync_source: 'shopify_webhook',
           event_type: `shopify_webhook:${topic}:pos`,
           order_id: created.id,
           order_number: orderNumber,
@@ -375,7 +389,9 @@ Deno.serve(async (req) => {
           action: 'created',
           reason: `Shopify POS order via webhook — source_name=${order.source_name} location_id=${order.location_id} financial_status=${financialStatus}`,
           success: true,
-        }).catch(() => null);
+        }).catch((logErr) => {
+          console.warn(`[SHOPIFY-WEBHOOK] POS create log failed for ${orderNumber}: ${logErr?.message || 'unknown error'}`);
+        });
 
         return;
       }
