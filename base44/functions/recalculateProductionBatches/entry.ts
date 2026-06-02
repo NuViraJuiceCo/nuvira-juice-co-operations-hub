@@ -108,6 +108,44 @@ function normalizeProductName(name) {
   return name.trim().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
+function normalizeStatus(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function orderHasTag(order, tag) {
+  const target = normalizeStatus(tag);
+  return Array.isArray(order?.tags) && order.tags.some(t => normalizeStatus(t) === target);
+}
+
+function isExcludedFromProductionDemand(order) {
+  const paymentStatus = normalizeStatus(order?.payment_status);
+  const productionStatus = normalizeStatus(order?.production_status);
+  const fulfillmentStatus = normalizeStatus(order?.fulfillment_status);
+  const orderLockStatus = normalizeStatus(order?.order_lock_status);
+  const sourceChannel = normalizeStatus(order?.source_channel);
+  const sourceType = normalizeStatus(order?.source_type);
+  const orderType = normalizeStatus(order?.order_type);
+  const fulfillmentMethod = normalizeStatus(order?.fulfillment_method);
+
+  return (
+    paymentStatus === 'refunded' ||
+    ['refunded', 'canceled', 'cancelled', 'not_required', 'fulfilled', 'completed', 'verified_logged', 'archived'].includes(productionStatus) ||
+    ['fulfilled', 'delivered', 'completed', 'cancelled', 'canceled'].includes(fulfillmentStatus) ||
+    ['fulfilled', 'cancelled', 'canceled'].includes(orderLockStatus) ||
+    orderHasTag(order, 'excluded') ||
+    orderHasTag(order, 'no_production') ||
+    order?.requires_production === false ||
+    order?.do_not_recover === true ||
+    order?.do_not_sync === true ||
+    order?.canceled_at ||
+    order?.deleted_at ||
+    sourceChannel === 'pos' ||
+    sourceType === 'shopify_pos' ||
+    orderType === 'pos' ||
+    fulfillmentMethod === 'pos'
+  );
+}
+
 function stripArticle(name) {
   // Strip leading "The " for fuzzy bundle matching
   if (!name) return name;
@@ -359,18 +397,10 @@ Deno.serve(async (req) => {
       'service fee', 'handling fee', 'tax',
     ];
 
-    // Build a set of ShopifyOrder IDs that are active (not excluded) — used to guard FulfillmentTask dedup
+    // Build a set of ShopifyOrder IDs that are active production demand candidates.
     const activeOrderIds = new Set();
     for (const o of allOrders) {
-      const isExcludedCheck =
-        o.payment_status === 'refunded' ||
-        o.production_status === 'refunded' ||
-        o.production_status === 'canceled' ||
-        o.production_status === 'cancelled' ||
-        (Array.isArray(o.tags) && o.tags.includes('excluded')) ||
-        o.do_not_recover === true ||
-        o.do_not_sync === true;
-      if (!isExcludedCheck) activeOrderIds.add(o.id);
+      if (!isExcludedFromProductionDemand(o)) activeOrderIds.add(o.id);
     }
 
     // Build a set of order IDs whose demand will be covered by ShopifyOrder loop.
@@ -382,15 +412,7 @@ Deno.serve(async (req) => {
     // production demand — doing so causes double-counting (order + task both contribute).
     const ordersCoveredByOrderLoop = new Set();
     for (const o of allOrders) {
-      const isExcludedCheck =
-        o.payment_status === 'refunded' ||
-        o.production_status === 'refunded' ||
-        o.production_status === 'canceled' ||
-        o.production_status === 'cancelled' ||
-        (Array.isArray(o.tags) && o.tags.includes('excluded')) ||
-        o.do_not_recover === true ||
-        o.do_not_sync === true;
-      if (isExcludedCheck) continue;
+      if (isExcludedFromProductionDemand(o)) continue;
 
       const isSubscriptionOrder =
         o.source_channel === 'subscription' ||
@@ -416,6 +438,12 @@ Deno.serve(async (req) => {
       // GUARDRAIL: Only process active/scheduled delivery tasks
       const isActiveTask = task.status && !['Cancelled', 'Completed', 'cancelled', 'completed'].includes(task.status);
       if (!isActiveTask) continue;
+
+      const linkedOrderForTask = task.order_id ? allOrders.find(o => o.id === task.order_id) : null;
+      if (linkedOrderForTask && isExcludedFromProductionDemand(linkedOrderForTask)) {
+        console.log(`[RECALC] Skipping FT ${task.id} (${task.customer_name}): linked order ${linkedOrderForTask.shopify_order_number} is fulfilled/no-production`);
+        continue;
+      }
 
       // GUARDRAIL: Skip FulfillmentTasks linked to active one-time orders (covered by ShopifyOrder loop)
       if (task.order_id && ordersCoveredByOrderLoop.has(task.order_id)) {
@@ -497,19 +525,11 @@ Deno.serve(async (req) => {
     }
 
     for (const order of allOrders) {
-      // GUARDRAIL: Exclude refunded, cancelled, and test orders from production planning
-      const isExcluded =
-        order.payment_status === 'refunded' ||
-        order.production_status === 'refunded' ||
-        order.production_status === 'canceled' ||
-        order.production_status === 'cancelled' ||
-        (Array.isArray(order.tags) && order.tags.includes('excluded')) ||
-        order.do_not_recover === true ||
-        order.do_not_sync === true ||
-        order.canceled_at ||
-        order.deleted_at;
-      if (isExcluded) {
-        console.log(`[RECALC] Skipping excluded order ${order.shopify_order_number}: refunded/cancelled/test`);
+      // GUARDRAIL: Exclude refunded, cancelled, POS, fulfilled, and no-production
+      // Shopify/manual orders from production planning. These may still be valid
+      // sales/accounting records, but they are not new production demand.
+      if (isExcludedFromProductionDemand(order)) {
+        console.log(`[RECALC] Skipping excluded/no-production order ${order.shopify_order_number}`);
         continue;
       }
 
