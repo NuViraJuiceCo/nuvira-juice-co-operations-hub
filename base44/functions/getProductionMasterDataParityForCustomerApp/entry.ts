@@ -37,6 +37,63 @@ function matchKeys(value) {
   return [...new Set([exact, singular].filter(Boolean))];
 }
 
+const KNOWN_ALIAS_KEYS = {
+  'the nuvira trio': ['nuvira trio', 'nu vira trio', 'trio'],
+  'nuvira trio': ['the nuvira trio', 'nu vira trio', 'trio'],
+  'nu vira trio': ['the nuvira trio', 'nuvira trio', 'trio'],
+  'black salt': ['himalayan black salt', 'kala namak', 'salt'],
+  'himalayan black salt': ['black salt', 'kala namak', 'salt'],
+  'kala namak': ['black salt', 'himalayan black salt', 'salt'],
+  'beetroot': ['beet root', 'beet', 'beets'],
+  'beet root': ['beetroot', 'beet', 'beets'],
+  'beet': ['beetroot', 'beet root', 'beets'],
+};
+
+function aliasKeys(value) {
+  const base = normalizeKey(value);
+  if (!base) return [];
+  const keys = new Set(matchKeys(base));
+  const withoutThe = base.replace(/^the\s+/, '').trim();
+  if (withoutThe && withoutThe !== base) keys.add(withoutThe);
+  const withoutBrand = withoutThe.replace(/^nuvira\s+/, '').replace(/^nu\s+vira\s+/, '').trim();
+  if (withoutBrand && withoutBrand !== withoutThe) keys.add(withoutBrand);
+  for (const alias of KNOWN_ALIAS_KEYS[base] || []) keys.add(normalizeKey(alias));
+  for (const alias of KNOWN_ALIAS_KEYS[withoutThe] || []) keys.add(normalizeKey(alias));
+  return [...keys].filter(Boolean);
+}
+
+function tokensFor(value) {
+  return normalizeKey(value).split(' ').filter(Boolean);
+}
+
+function candidateScore(requestedName, candidateName) {
+  const requested = normalizeKey(requestedName);
+  const candidate = normalizeKey(candidateName);
+  if (!requested || !candidate) return 0;
+  if (requested === candidate || singularKey(requested) === singularKey(candidate)) return 1;
+  const aliases = aliasKeys(requested);
+  if (aliases.includes(candidate) || aliases.includes(singularKey(candidate))) return 0.9;
+  const candidateAliases = aliasKeys(candidate);
+  if (candidateAliases.includes(requested) || candidateAliases.includes(singularKey(requested))) return 0.88;
+
+  const requestedTokens = new Set(tokensFor(requested));
+  const candidateTokens = new Set(tokensFor(candidate));
+  if (requestedTokens.size === 0 || candidateTokens.size === 0) return 0;
+  const shared = [...requestedTokens].filter(token => candidateTokens.has(token));
+  if (shared.length === 0) return 0;
+  if (shared.length === requestedTokens.size || shared.length === candidateTokens.size) return 0.72;
+  return shared.length >= 2 ? 0.62 : 0.5;
+}
+
+function matchKind(requestedName, candidateName, score) {
+  if (score >= 1) return 'exact_or_singular';
+  const requested = normalizeKey(requestedName);
+  const candidate = normalizeKey(candidateName);
+  if (aliasKeys(requested).includes(candidate) || aliasKeys(candidate).includes(requested)) return 'known_alias';
+  if (score >= 0.7) return 'token_subset';
+  return 'weak_token_overlap';
+}
+
 function safeText(value, maxLength = MAX_TEXT) {
   const text = normalizeSingleLine(value)
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted email]')
@@ -205,6 +262,26 @@ function summarizeYield(item) {
   };
 }
 
+function summarizeProduct(product) {
+  const ingredients = Array.isArray(product?.ingredients)
+    ? product.ingredients.map(item => safeText(item, 120)).filter(Boolean)
+    : [];
+  return {
+    id: safeId(product?.id),
+    name: safeText(product?.name || product?.title, 120),
+    normalized_name: normalizeKey(product?.name || product?.title) || null,
+    sku: safeText(product?.sku, 80),
+    category: safeText(product?.category, 80),
+    availability: product?.availability !== false && product?.is_available !== false,
+    price_present: numberOrNull(product?.price) !== null,
+    ingredient_names: ingredients.slice(0, 80),
+    field_compatibility_status: product?.name || product?.title ? 'context_only' : 'schema_gap',
+    incompatibilities: [
+      !(product?.name || product?.title) ? 'missing_product_name' : null,
+    ].filter(Boolean),
+  };
+}
+
 function summarizeMatches(index, names, summarizer) {
   return names.map(name => {
     const matches = findMatches(index, name);
@@ -214,6 +291,35 @@ function summarizeMatches(index, names, summarizer) {
       status: matchStatus(matches),
       count: matches.length,
       matches: matches.slice(0, 5).map(summarizer),
+    };
+  });
+}
+
+function summarizeAliasCandidates(rows, names, nameSelector, summarizer, requiredType, candidateType) {
+  return names.map(name => {
+    const candidates = (rows || [])
+      .map(row => {
+        const candidateName = nameSelector(row);
+        const score = candidateScore(name, candidateName);
+        return { row, candidateName, score };
+      })
+      .filter(candidate => candidate.score >= 0.7 && normalizeKey(candidate.candidateName) !== normalizeKey(name))
+      .sort((a, b) => b.score - a.score || normalizeKey(a.candidateName).localeCompare(normalizeKey(b.candidateName)))
+      .slice(0, 5)
+      .map(candidate => ({
+        confidence: Number(candidate.score.toFixed(2)),
+        match_kind: matchKind(name, candidate.candidateName, candidate.score),
+        candidate: summarizer(candidate.row),
+      }));
+
+    return {
+      requested_name: safeText(name, 120),
+      normalized_name: normalizeKey(name) || null,
+      required_type: requiredType,
+      candidate_type: candidateType,
+      status: candidates.length === 0 ? 'none' : candidates.length === 1 ? 'single_candidate' : 'multiple_candidates',
+      count: candidates.length,
+      candidates,
     };
   });
 }
@@ -246,20 +352,25 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const requestedNames = parseNames(url.searchParams.get('names'));
     const base44 = createClientFromRequest(req);
-    const [recipes, bundles, inventoryItems, ingredientYields] = await Promise.all([
+    const [recipes, bundles, inventoryItems, ingredientYields, products] = await Promise.all([
       base44.asServiceRole.entities.Recipe.list('-updated_date', QUERY_LIMIT),
       base44.asServiceRole.entities.Bundle.list('-updated_date', QUERY_LIMIT),
       base44.asServiceRole.entities.InventoryItem.list('-updated_date', QUERY_LIMIT),
       base44.asServiceRole.entities.IngredientYield.list('-updated_date', QUERY_LIMIT),
+      base44.asServiceRole.entities.Product?.list
+        ? base44.asServiceRole.entities.Product.list('-updated_date', QUERY_LIMIT).catch(() => [])
+        : [],
     ]);
 
     const recipeIndex = buildIndex(recipes, row => row?.product_name);
     const bundleIndex = buildIndex(bundles, row => row?.bundle_name);
     const inventoryIndex = buildIndex(inventoryItems, row => row?.ingredient);
     const yieldIndex = buildIndex(ingredientYields, row => row?.ingredient_name);
+    const productIndex = buildIndex(products, row => row?.name || row?.title);
 
     const directRecipeMatches = summarizeMatches(recipeIndex, requestedNames, summarizeRecipe);
     const directBundleMatches = summarizeMatches(bundleIndex, requestedNames, summarizeBundle);
+    const productMatches = summarizeMatches(productIndex, requestedNames, summarizeProduct);
 
     const matchedBundles = directBundleMatches.flatMap(row => row.matches || []);
     const componentNames = [...new Set(matchedBundles.flatMap(bundle => bundle.components || []).map(component => component.product_name).filter(Boolean))];
@@ -269,6 +380,18 @@ Deno.serve(async (req) => {
       ...componentRecipeMatches.flatMap(row => row.matches || []),
     ];
     const ingredientNames = ingredientNamesFromRecipes(allMatchedRecipes);
+    const bundleAliasCandidates = summarizeAliasCandidates(bundles, requestedNames, row => row?.bundle_name, summarizeBundle, 'bundle', 'bundle');
+    const productAliasCandidates = summarizeAliasCandidates(products, requestedNames, row => row?.name || row?.title, summarizeProduct, 'bundle', 'product');
+    const recipeAliasCandidates = summarizeAliasCandidates(recipes, requestedNames, row => row?.product_name, summarizeRecipe, 'recipe', 'recipe');
+    const inventoryAliasCandidates = summarizeAliasCandidates(inventoryItems, ingredientNames, row => row?.ingredient, summarizeInventoryItem, 'inventory', 'inventory');
+    const yieldAliasCandidates = summarizeAliasCandidates(ingredientYields, ingredientNames, row => row?.ingredient_name, summarizeYield, 'yield', 'yield');
+    const aliasCandidateRows = [
+      ...bundleAliasCandidates,
+      ...productAliasCandidates,
+      ...recipeAliasCandidates,
+      ...inventoryAliasCandidates,
+      ...yieldAliasCandidates,
+    ].filter(row => row.count > 0);
 
     return Response.json({
       success: true,
@@ -281,18 +404,27 @@ Deno.serve(async (req) => {
         bundle_count: (bundles || []).length,
         inventory_item_count: (inventoryItems || []).length,
         ingredient_yield_count: (ingredientYields || []).length,
+        product_count: (products || []).length,
       },
       truncated: Boolean(
         (recipes || []).length >= QUERY_LIMIT ||
         (bundles || []).length >= QUERY_LIMIT ||
         (inventoryItems || []).length >= QUERY_LIMIT ||
-        (ingredientYields || []).length >= QUERY_LIMIT
+        (ingredientYields || []).length >= QUERY_LIMIT ||
+        (products || []).length >= QUERY_LIMIT
       ),
       recipe_matches: directRecipeMatches,
       bundle_matches: directBundleMatches,
+      product_matches: productMatches,
       component_recipe_matches: componentRecipeMatches,
       inventory_matches: summarizeMatches(inventoryIndex, ingredientNames, summarizeInventoryItem),
       yield_matches: summarizeMatches(yieldIndex, ingredientNames, summarizeYield),
+      alias_candidate_rows: aliasCandidateRows,
+      bundle_alias_candidates: bundleAliasCandidates,
+      product_alias_candidates: productAliasCandidates,
+      recipe_alias_candidates: recipeAliasCandidates,
+      inventory_alias_candidates: inventoryAliasCandidates,
+      yield_alias_candidates: yieldAliasCandidates,
       safety: {
         dry_run_only: true,
         writes_performed: false,
