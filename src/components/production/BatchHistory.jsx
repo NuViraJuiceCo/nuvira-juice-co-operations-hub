@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Filter, Download, ChevronDown, ChevronUp, Lock, FileCheck, RotateCcw } from 'lucide-react';
+import { resolveBatchDeliveryStatus } from '../../lib/deliveryStatusHelper';
 import moment from 'moment';
 
 export default function BatchHistory() {
@@ -68,6 +69,22 @@ export default function BatchHistory() {
       });
     },
   });
+  const { data: fulfillmentTasks = [] } = useQuery({
+    queryKey: ['batch_history_fulfillment_tasks'],
+    queryFn: () => base44.entities.FulfillmentTask.list('-scheduled_date', 500),
+    staleTime: 60000,
+  });
+
+  const fulfillmentTasksByOrderId = useMemo(() => {
+    const byOrderId = {};
+    fulfillmentTasks.forEach(task => {
+      if (task.order_id) {
+        if (!byOrderId[task.order_id]) byOrderId[task.order_id] = [];
+        byOrderId[task.order_id].push(task);
+      }
+    });
+    return byOrderId;
+  }, [fulfillmentTasks]);
 
   const handleExport = async () => {
     const csv = [
@@ -126,9 +143,7 @@ export default function BatchHistory() {
 
   // Count delivered orders
   const getDeliveryCompletion = (batch) => {
-    if (!batch.order_sources || batch.order_sources.length === 0) return null;
-    const delivered = batch.order_sources.filter(os => os.delivery_status === 'delivered').length;
-    return { delivered, total: batch.order_sources.length };
+    return resolveBatchDeliveryStatus(batch, fulfillmentTasksByOrderId);
   };
 
   // Resolve ingredients list
@@ -235,10 +250,10 @@ export default function BatchHistory() {
                   <p className="font-semibold text-foreground">{planned}</p>
                 </div>
               )}
-              {delivery && (
+              {delivery && delivery !== '—' && (
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Delivered</p>
-                  <p className="font-semibold text-foreground">{delivery.delivered}/{delivery.total}</p>
+                  <p className="font-semibold text-foreground">{delivery}</p>
                 </div>
               )}
               {batch.order_sources?.length > 0 && (

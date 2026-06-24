@@ -15,7 +15,7 @@ import PullToRefresh from "../components/shared/PullToRefresh";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import SelectMobile from "../components/SelectMobile";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Play, CheckSquare, FileCheck, ClipboardCheck } from "lucide-react";
+import { RefreshCw, CheckSquare, FileCheck, ClipboardCheck } from "lucide-react";
 import _ from "lodash";
 import moment from "moment";
 
@@ -53,7 +53,7 @@ export default function Production() {
 
   const load = useCallback(async () => {
     const [batchData, planData, ftData] = await Promise.all([
-      base44.entities.ProductionBatch.list("production_date", 200),
+      base44.entities.ProductionBatch.list("production_date", 1000),
       base44.functions.invoke('getProductionPlanningData', {}),
       base44.entities.FulfillmentTask.list('-scheduled_date', 500),
     ]);
@@ -164,6 +164,7 @@ export default function Production() {
     const completedStatuses = ['verified_logged', 'completed', 'archived', 'fulfilled'];
     return completedStatuses.includes(b.status);
   };
+  const isPastIncompleteBatch = (b) => b.production_date && b.production_date < today && !isBatchDone(b);
 
   // Filter
   const filtered = batches.filter(b => {
@@ -174,19 +175,19 @@ export default function Production() {
 
   // Active view: always hide completed/verified/archived batches (moved to History)
   const visibleForActiveView = tab === "today"
-    ? filtered.filter(b => !isBatchDone(b))
+    ? filtered.filter(b => !isBatchDone(b) && (!b.production_date || b.production_date >= today))
+    : tab === "catch_up"
+    ? filtered.filter(isPastIncompleteBatch)
     : filtered;
 
-  // Group by production date (include past 7 days + all future existing batches)
-  const sevenDaysAgo = moment(today).subtract(7, 'days').format('YYYY-MM-DD');
-  const grouped = _.groupBy(
-    visibleForActiveView.filter(b => b.production_date >= sevenDaysAgo),
-    b => b.production_date
-  );
+  const grouped = _.groupBy(visibleForActiveView, b => b.production_date);
 
-  const sortedDates = Object.keys(grouped).sort();
+  const sortedDates = Object.keys(grouped).sort((a, b) => (
+    tab === "catch_up" ? b.localeCompare(a) : a.localeCompare(b)
+  ));
   // Active batches: those that still need operational action (not completed/verified)
-  const activeBatches = visibleForActiveView.filter(b => b.status !== "completed" && b.production_date >= today);
+  const activeBatches = filtered.filter(b => !isBatchDone(b) && b.production_date >= today);
+  const catchUpBatches = filtered.filter(isPastIncompleteBatch);
   const totalUnits = activeBatches.reduce((s, b) => s + (b.planned_units || 0), 0);
 
   // Build fulfillment tasks lookup map by order_id for efficient rendering
@@ -234,6 +235,7 @@ export default function Production() {
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground">Production Planning</h1>
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 {activeBatches.length} active · {totalUnits} units
+                {catchUpBatches.length > 0 && <> · {catchUpBatches.length} catch-up</>}
               </p>
               {lastCalc && (
                 <p className="text-xs text-green-600 mt-1">{lastCalc}</p>
@@ -244,6 +246,7 @@ export default function Production() {
             <div className="flex gap-0 border-b overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
               {[
                 { id: "today", mobileLabel: "📅 Today", desktopLabel: "📅 Today & Upcoming" },
+                { id: "catch_up", mobileLabel: "↩ Catch-up", desktopLabel: "↩ Catch-up" },
                 { id: "in_progress", mobileLabel: "⚙️ In Progress", desktopLabel: "⚙️ In Progress" },
                 { id: "verify", mobileLabel: "✓ Verify", desktopLabel: "✓ Needs Verification" },
                 { id: "subscription_verify", mobileLabel: "🔐 Sub Verify", desktopLabel: "🔐 Subscription Clearance" },
@@ -308,11 +311,11 @@ export default function Production() {
                 </>
               )}
 
-              {/* Today & Upcoming Tab */}
-              {tab === "today" && (
+              {/* Today & Upcoming / Catch-up Tabs */}
+              {(tab === "today" || tab === "catch_up") && (
                 <>
                   {/* Pre-production reminder banner for today's batches */}
-                  {grouped[today] && grouped[today].some(b => b.status === 'planned' || b.status === 'ready_for_production') && (
+                  {tab === "today" && grouped[today] && grouped[today].some(b => b.status === 'planned' || b.status === 'ready_for_production') && (
                     <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex items-start gap-2.5">
                       <ClipboardCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
@@ -325,10 +328,27 @@ export default function Production() {
                       <a href="/compliance" className="shrink-0 text-[10px] font-semibold text-amber-700 underline whitespace-nowrap">Open Logs →</a>
                     </div>
                   )}
+                  {tab === "catch_up" && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex items-start gap-2.5">
+                      <ClipboardCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-amber-800">Retrospective production catch-up</p>
+                        <p className="text-[11px] text-amber-700 mt-0.5">
+                          Past incomplete batches stay on their original production date. Running one still records the normal production and compliance fields.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   {sortedDates.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground">
-                      <p className="text-lg font-medium mb-2">No upcoming production scheduled</p>
-                      <p className="text-sm">Click Recalculate to generate production cards from active orders.</p>
+                      <p className="text-lg font-medium mb-2">
+                        {tab === "catch_up" ? "No catch-up production batches" : "No upcoming production scheduled"}
+                      </p>
+                      <p className="text-sm">
+                        {tab === "catch_up"
+                          ? "Past incomplete batches will appear here when they still need production action."
+                          : "Click Recalculate to generate production cards from active orders."}
+                      </p>
                     </div>
                   ) : (
                     <div className="space-y-10">
