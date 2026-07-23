@@ -57,6 +57,23 @@
       ]
     }
   ],
+  "context_files": [],
+  "app_user_connector_configs": [],
+  "selected_skill_names": [],
+  "selected_workspace_skill_ids": [],
+  "model": "automatic",
   "whatsapp_greeting": "Hey! \ud83d\udc4b I'm the NuVira Compliance Monitor. I help make sure all our operational and compliance logs are complete and accurate. Ask me about today's logs, checklists, or if something's out of range \u2014 I'll help you get it documented. What can I help you with?",
-  "name": "complianceMonitor"
+  "telegram_greeting": null,
+  "line_greeting": null,
+  "memory_config": {
+    "enabled": true,
+    "scope": "both",
+    "include_other_conversation_context": false,
+    "instructions": null
+  },
+  "voice_config": {
+    "voice_id": null
+  },
+  "allow_anonymous_access": false,
+  "name": "compliance_monitor"
 }

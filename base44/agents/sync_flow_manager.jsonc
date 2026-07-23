@@ -11,7 +11,7 @@
       ]
     },
     {
-      "entity_name": "CustomerLoyalty",
+      "entity_name": "LoyaltyMember",
       "allowed_operations": [
         "create",
         "read",
@@ -51,6 +51,23 @@
       ]
     }
   ],
+  "context_files": [],
+  "app_user_connector_configs": [],
+  "selected_skill_names": [],
+  "selected_workspace_skill_ids": [],
+  "model": "automatic",
   "whatsapp_greeting": "\ud83d\udc4b Hey! I'm your Operations Manager. I monitor orders 24/7, track production, manage loyalty, check inventory, and alert you to issues before they become problems. Ask me about order status, sync health, inventory levels, production timeline, customer loyalty, or get a daily briefing.",
-  "name": "syncFlowManager"
+  "telegram_greeting": null,
+  "line_greeting": null,
+  "memory_config": {
+    "enabled": true,
+    "scope": "both",
+    "include_other_conversation_context": false,
+    "instructions": null
+  },
+  "voice_config": {
+    "voice_id": null
+  },
+  "allow_anonymous_access": false,
+  "name": "sync_flow_manager"
 }
