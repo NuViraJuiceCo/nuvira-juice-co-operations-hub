@@ -3,12 +3,12 @@ import { base44 } from '@/api/base44Client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { getChicagoDateInput, getChicagoTimeInput } from '@/lib/compliancePersistence';
 
-export default function CorrectiveActionForm({ onClose }) {
-  const [user, setUser] = useState(null);
+export default function CorrectiveActionForm({ initialDate, onClose }) {
   const [formData, setFormData] = useState({
-    log_date: new Date().toISOString().split('T')[0],
-    log_time: new Date().toTimeString().slice(0, 5),
+    log_date: initialDate || getChicagoDateInput(),
+    log_time: getChicagoTimeInput(),
     staff_member: '',
     issue_type: 'Temperature Out of Range',
     related_log_id: '',
@@ -21,14 +21,18 @@ export default function CorrectiveActionForm({ onClose }) {
     notes: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     base44.auth.me().then(u => {
-      setUser(u);
-      setFormData(prev => ({ ...prev, staff_member: u.full_name }));
-    });
+      setFormData(prev => ({ ...prev, staff_member: u.full_name || u.email }));
+    }).catch(() => setMessage({ type: 'error', text: 'Unable to confirm the current operator.' }));
   }, []);
+
+  useEffect(() => {
+    if (initialDate) setFormData(prev => ({ ...prev, log_date: initialDate }));
+  }, [initialDate]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -39,13 +43,21 @@ export default function CorrectiveActionForm({ onClose }) {
     if (!formData.corrective_action_taken) return;
 
     setIsSubmitting(true);
+    setMessage(null);
     try {
-      await base44.entities.CorrectiveActionLog.create({
+      const saved = await base44.entities.CorrectiveActionLog.create({
         ...formData,
       });
+      await base44.entities.CorrectiveActionLog.get(saved.id);
 
-      queryClient.invalidateQueries({ queryKey: ['corrective_logs'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['corrective_logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['production_audit_packet'] }),
+      ]);
+      setMessage({ type: 'success', text: 'Corrective action saved and verified.' });
       onClose?.();
+    } catch (error) {
+      setMessage({ type: 'error', text: `Corrective action was not saved: ${error.message}` });
     } finally {
       setIsSubmitting(false);
     }
@@ -89,6 +101,12 @@ export default function CorrectiveActionForm({ onClose }) {
               disabled
             />
           </div>
+
+          {message && (
+            <div className={`rounded-md p-3 text-sm ${message.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
+              {message.text}
+            </div>
+          )}
 
           <div>
             <label className="text-sm font-medium">Issue Type</label>
@@ -190,9 +208,7 @@ export default function CorrectiveActionForm({ onClose }) {
             <Button type="submit" disabled={isSubmitting} className="flex-1">
               {isSubmitting ? 'Saving...' : 'Save Corrective Action'}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
+            {onClose && <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>}
           </div>
         </form>
       </CardContent>

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, CheckCircle2, Clock, AlertTriangle, Plus, Eye, Download } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Plus, Eye, Download } from 'lucide-react';
 import ComplianceDashboard from '@/components/compliance/ComplianceDashboard';
 import TemperatureLogForm from '@/components/compliance/TemperatureLogForm';
 import PHLogForm from '@/components/compliance/pHLogForm';
@@ -15,6 +15,7 @@ import DailyChecklistForm from '@/components/compliance/DailyChecklistForm';
 import ComplianceMonitor from '@/components/compliance/ComplianceMonitor';
 import LabelAllergenTab from '@/components/compliance/LabelAllergenTab';
 import HACCPPlanTab from '@/components/compliance/HACCPPlanTab';
+import { getChicagoDateInput } from '@/lib/compliancePersistence';
 
 export default function ComplianceCenter() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -32,7 +33,7 @@ export default function ComplianceCenter() {
   const { data: checklists } = useQuery({
     queryKey: ['daily_checklists_today'],
     queryFn: async () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getChicagoDateInput();
       return base44.entities.DailyChecklist.filter({ checklist_date: today });
     },
   });

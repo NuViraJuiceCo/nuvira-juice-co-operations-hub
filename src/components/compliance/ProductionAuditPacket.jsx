@@ -4,11 +4,12 @@ import { useAuth } from '@/lib/AuthContext';
 import {
   ClipboardCheck, Thermometer, ShieldCheck, Beaker, Package,
   AlertTriangle, CheckCircle2, Printer, X, ChevronDown, ChevronUp,
-  FileText, Pen, Clock, Zap
+  Pen, Clock, Zap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import moment from 'moment';
+import { isDailyChecklistPreProductionComplete } from '@/lib/compliancePersistence';
 
 /**
  * ProductionAuditPacket
@@ -207,6 +208,7 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
         temperatureLogs,
         ccpLogs,
         batchLogs,
+        correctiveActionLogs,
         complianceLogs,
         batches,
       ] = await Promise.all([
@@ -215,6 +217,7 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
         base44.entities.TemperatureLog?.list('-log_date', 200).catch(() => []),
         base44.entities.CCPLog?.list('-log_date', 200).catch(() => []),
         base44.entities.BatchComplianceLog?.list('-date', 200).catch(() => []),
+        base44.entities.CorrectiveActionLog?.list('-log_date', 200).catch(() => []),
         base44.entities.ComplianceLog?.list('-log_date', 200).catch(() => []),
         base44.entities.ProductionBatch?.filter({ production_date: productionDate }).catch(() => []),
       ]);
@@ -227,7 +230,11 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
         temperatureLogs: (temperatureLogs || []).filter(l => l.log_date === today),
         ccpLogs: (ccpLogs || []).filter(l => l.log_date === today),
         batchLogs: (batchLogs || []).filter(l => l.date === today),
-        correctiveActions: (complianceLogs || []).filter(l => l.log_date === today && l.log_type === 'corrective_action'),
+        receivingLogs: (complianceLogs || []).filter(l => l.log_date === today && l.log_type === 'receiving'),
+        correctiveActions: [
+          ...(correctiveActionLogs || []).filter(l => l.log_date === today),
+          ...(complianceLogs || []).filter(l => l.log_date === today && l.log_type === 'corrective_action'),
+        ],
         batches: batches || [],
       };
 
@@ -246,18 +253,13 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
         },
         {
           key: 'checklist',
-          label: 'Daily Checklist Complete',
-          complete: filtered.dailyChecklists.length > 0,
+          label: 'Daily Pre-Production Checklist Complete',
+          complete: filtered.dailyChecklists.some(isDailyChecklistPreProductionComplete),
         },
         {
           key: 'temperature',
           label: 'Temperature Logs Started',
           complete: filtered.temperatureLogs.length > 0,
-        },
-        {
-          key: 'ccp',
-          label: 'CCP Monitoring Started',
-          complete: filtered.ccpLogs.length > 0,
         },
         {
           key: 'batch',
@@ -339,7 +341,8 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Audit Packet Contents</p>
               <div className="grid grid-cols-2 gap-1 text-xs">
                 {[
-                  { label: 'Receiving / Sanitation Log', count: data.sanitationLogs.length },
+                  { label: 'Receiving Log', count: data.receivingLogs.length },
+                  { label: 'Sanitation Log', count: data.sanitationLogs.length },
                   { label: 'Daily Checklist', count: data.dailyChecklists.length },
                   { label: 'Temperature Log', count: data.temperatureLogs.length },
                   { label: 'CCP Log', count: data.ccpLogs.length },
@@ -358,8 +361,33 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
               </div>
             </div>
 
-            {/* 1. Receiving / Sanitation Log */}
-            <Section icon={ShieldCheck} title="Receiving / Sanitation Log" color="text-green-600">
+            {/* 1. Receiving Log */}
+            <Section icon={Package} title="Receiving Log" color="text-amber-600">
+              {data.receivingLogs.length === 0 ? (
+                <MissingLogPlaceholder
+                  label="Receiving"
+                  isSetupPhase={!productionStarted}
+                  logType="receiving"
+                />
+              ) : data.receivingLogs.map((log, i) => (
+                <div key={log.id || i} className="border border-border rounded-lg p-3 space-y-1.5">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold">{log.data?.item || 'Received item'} — {log.log_time}</span>
+                    <StatusPill value={log.data?.accepted ? 'Pass' : 'Fail'} />
+                  </div>
+                  <Field label="Staff Member" value={log.staff_member} />
+                  <Field label="Supplier" value={log.data?.supplier} />
+                  <Field label="Quantity" value={log.data?.quantity} />
+                  <Field label="Condition" value={log.data?.condition} />
+                  <Field label="Accepted" value={log.data?.accepted ? 'Yes' : 'No'} highlight={log.data?.accepted ? 'pass' : 'fail'} />
+                  <Field label="Stored At" value={log.data?.stored_at} />
+                  {log.notes && <Field label="Notes" value={log.notes} />}
+                </div>
+              ))}
+            </Section>
+
+            {/* 2. Sanitation Log */}
+            <Section icon={ShieldCheck} title="Sanitation Log" color="text-green-600">
               {data.sanitationLogs.length === 0 ? (
                 <MissingLogPlaceholder
                   label="Sanitation"
@@ -383,7 +411,7 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
               ))}
             </Section>
 
-            {/* 2. Daily Checklist */}
+            {/* 3. Daily Checklist */}
             <Section icon={ClipboardCheck} title="Daily Checklist" color="text-blue-600">
               {data.dailyChecklists.length === 0 ? (
                 <MissingLogPlaceholder
@@ -403,14 +431,14 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
                   <Field label="Equipment Sanitized" value={log.equipment_sanitized ? 'Yes' : 'No'} highlight={log.equipment_sanitized ? 'pass' : 'fail'} />
                   <Field label="Work Areas Cleaned" value={log.work_areas_cleaned ? 'Yes' : 'No'} highlight={log.work_areas_cleaned ? 'pass' : 'fail'} />
                   <Field label="Batch Logs Completed" value={log.batch_logs_completed ? 'Yes' : 'No'} highlight={log.batch_logs_completed ? 'pass' : 'fail'} />
-                  <Field label="CCP Logs Completed" value={log.ccp_logs_completed ? 'Yes' : 'No'} highlight={log.ccp_logs_completed ? 'pass' : 'fail'} />
+                  <Field label="CCP Logs (if required)" value={log.ccp_logs_completed ? 'Completed' : 'Not required / not recorded'} />
                   {log.issues_reported && <Field label="Issues Reported" value={log.issues_reported} highlight="fail" />}
                   {log.manager_reviewed && <Field label="Manager Reviewed" value={`Yes${log.manager_comments ? ' — ' + log.manager_comments : ''}`} />}
                 </div>
               ))}
             </Section>
 
-            {/* 3. Temperature Log */}
+            {/* 4. Temperature Log */}
             <Section icon={Thermometer} title="Temperature Log" color="text-red-500">
               {data.temperatureLogs.length === 0 ? (
                 <MissingLogPlaceholder
@@ -425,22 +453,21 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
                     <StatusPill value={log.within_range ? 'Pass' : 'Fail'} />
                   </div>
                   <Field label="Staff Member" value={log.staff_member} />
-                  <Field label="Temperature" value={log.temperature != null ? `${log.temperature}°C` : '—'} highlight={log.within_range ? 'pass' : 'fail'} />
-                  <Field label="Acceptable Range" value={log.min_range != null && log.max_range != null ? `${log.min_range}°C – ${log.max_range}°C` : '—'} />
+                  <Field label="Temperature" value={log.temperature != null ? `${log.temperature}°F` : '—'} highlight={log.within_range ? 'pass' : 'fail'} />
+                  <Field label="Acceptable Range" value={log.min_range != null && log.max_range != null ? `${log.min_range}°F – ${log.max_range}°F` : '—'} />
                   <Field label="Within Range" value={log.within_range ? 'Yes' : 'No'} highlight={log.within_range ? 'pass' : 'fail'} />
                   {log.notes && <Field label="Notes" value={log.notes} />}
                 </div>
               ))}
             </Section>
 
-            {/* 4. CCP Log */}
+            {/* 5. CCP Log (only required when applicable) */}
             <Section icon={Beaker} title="CCP Monitoring Log" color="text-purple-600">
               {data.ccpLogs.length === 0 ? (
-                <MissingLogPlaceholder
-                  label="CCP Monitoring"
-                  isSetupPhase={!productionStarted}
-                  logType="ccp"
-                />
+                <div className="flex items-center gap-2 py-3 px-3 bg-muted/30 border border-border rounded-lg text-xs text-muted-foreground">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-green-600" />
+                  <p>No CCP entry is required unless a deviation or applicable critical-control check occurs.</p>
+                </div>
               ) : data.ccpLogs.map((log, i) => (
                 <div key={log.id || i} className="border border-border rounded-lg p-3 space-y-1.5">
                   <div className="flex items-center justify-between mb-1">
@@ -457,7 +484,7 @@ export default function ProductionAuditPacket({ productionDate, onClose }) {
               ))}
             </Section>
 
-            {/* 5. Batch Logs */}
+            {/* 6. Batch Logs */}
             <Section icon={Package} title={`Batch Logs (${data.batches.length} batches scheduled)`} color="text-amber-600">
               {data.batches.length === 0 && data.batchLogs.length === 0 ? (
                 <MissingLogPlaceholder

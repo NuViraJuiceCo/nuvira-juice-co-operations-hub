@@ -37,11 +37,32 @@ export default function ComplianceLogs() {
     queryFn: () => base44.entities.BatchComplianceLog?.list('-date', 500).catch(() => []),
   });
 
-  // Fetch other compliance logs (manual: temp, pH, CCP, sanitation, corrective)
+  // Fetch every canonical manual log entity. Production gates and audit packets use
+  // these same records, so this list is also the operator's persistence readback.
   const { data: otherLogs = [], isLoading: otherLoading } = useQuery({
     queryKey: ['other_compliance_logs', startDate, endDate, logTypeFilter, statusFilter],
     queryFn: async () => {
-      const logs = await base44.entities.ComplianceLog?.list('-log_date', 500).catch(() => []);
+      const [temperature, ph, ccp, sanitation, corrective, checklists, generic] = await Promise.all([
+        base44.entities.TemperatureLog?.list('-log_date', 500).catch(() => []),
+        base44.entities.pHLog?.list('-log_date', 500).catch(() => []),
+        base44.entities.CCPLog?.list('-log_date', 500).catch(() => []),
+        base44.entities.SanitationLog?.list('-log_date', 500).catch(() => []),
+        base44.entities.CorrectiveActionLog?.list('-log_date', 500).catch(() => []),
+        base44.entities.DailyChecklist?.list('-checklist_date', 500).catch(() => []),
+        base44.entities.ComplianceLog?.list('-log_date', 500).catch(() => []),
+      ]);
+
+      const canonicalLogs = [
+        ...(temperature || []).map(log => ({ ...log, record_key: `temperature-${log.id}`, log_type: 'temperature', status: log.within_range ? 'pass' : 'fail', data: log })),
+        ...(ph || []).map(log => ({ ...log, record_key: `pH-${log.id}`, log_type: 'pH', status: log.within_range ? 'pass' : 'fail', data: log })),
+        ...(ccp || []).map(log => ({ ...log, record_key: `CCP-${log.id}`, log_type: 'CCP', status: (log.result || '').toLowerCase(), data: log })),
+        ...(sanitation || []).map(log => ({ ...log, record_key: `sanitation-${log.id}`, log_type: 'sanitation', status: log.cleaned && log.sanitized ? 'complete' : 'incomplete', data: log })),
+        ...(corrective || []).map(log => ({ ...log, record_key: `corrective-${log.id}`, log_type: 'corrective_action', status: ['Completed', 'Verified'].includes(log.status) ? 'complete' : 'incomplete', data: log })),
+        ...(checklists || []).map(log => ({ ...log, record_key: `checklist-${log.id}`, log_type: 'daily_checklist', log_date: log.checklist_date, log_time: log.completed_at ? moment(log.completed_at).format('HH:mm') : '', status: (log.overall_status || 'Pending').toLowerCase(), data: log })),
+        ...(generic || []).map(log => ({ ...log, record_key: `generic-${log.id}` })),
+      ];
+
+      const logs = canonicalLogs;
       return (logs || []).filter(log => {
         const matchDate = (log.log_date || '') >= startDate && (log.log_date || '') <= endDate;
         const matchType = logTypeFilter === 'all' || log.log_type === logTypeFilter;
@@ -52,7 +73,7 @@ export default function ComplianceLogs() {
           || (statusFilter === 'complete' && pf === 'complete')
           || (statusFilter === 'incomplete' && pf === 'incomplete');
         return matchDate && matchType && matchStatus;
-      }).sort((a, b) => new Date(b.log_date) - new Date(a.log_date));
+      }).sort((a, b) => `${b.log_date || ''} ${b.log_time || ''}`.localeCompare(`${a.log_date || ''} ${a.log_time || ''}`));
     },
   });
 
@@ -102,6 +123,7 @@ export default function ComplianceLogs() {
     sanitation: '🧹 Sanitation',
     corrective_action: '🔧 Corrective Action',
     daily_checklist: '📋 Daily Checklist',
+    receiving: '📦 Receiving',
   };
 
   return (
@@ -281,6 +303,8 @@ export default function ComplianceLogs() {
                     <option value="pH">pH</option>
                     <option value="CCP">CCP</option>
                     <option value="sanitation">Sanitation</option>
+                    <option value="daily_checklist">Daily Checklist</option>
+                    <option value="receiving">Receiving</option>
                     <option value="corrective_action">Corrective Action</option>
                   </select>
                 </div>
@@ -308,7 +332,7 @@ export default function ComplianceLogs() {
               <p className="text-center text-muted-foreground py-8">No logs found for the selected date range.</p>
             ) : (
               otherLogs.map(log => (
-                <Card key={log.id} className={log.passed_failed === 'failed' || log.status === 'fail' ? 'border-red-200' : ''}>
+                <Card key={log.record_key || log.id} className={log.passed_failed === 'failed' || log.status === 'fail' ? 'border-red-200' : ''}>
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">

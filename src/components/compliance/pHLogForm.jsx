@@ -4,12 +4,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
+import { getChicagoDateInput, getChicagoTimeInput } from '@/lib/compliancePersistence';
 
-export default function PHLogForm({ onClose }) {
-  const [user, setUser] = useState(null);
+export default function PHLogForm({ initialDate, onClose }) {
   const [formData, setFormData] = useState({
-    log_date: new Date().toISOString().split('T')[0],
-    log_time: new Date().toTimeString().slice(0, 5),
+    log_date: initialDate || getChicagoDateInput(),
+    log_time: getChicagoTimeInput(),
     staff_member: '',
     batch_id: '',
     product_name: 'Green Glow Juice',
@@ -20,14 +20,18 @@ export default function PHLogForm({ onClose }) {
   });
   const [warning, setWarning] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     base44.auth.me().then(u => {
-      setUser(u);
-      setFormData(prev => ({ ...prev, staff_member: u.full_name }));
-    });
+      setFormData(prev => ({ ...prev, staff_member: u.full_name || u.email }));
+    }).catch(() => setMessage({ type: 'error', text: 'Unable to confirm the current operator.' }));
   }, []);
+
+  useEffect(() => {
+    if (initialDate) setFormData(prev => ({ ...prev, log_date: initialDate }));
+  }, [initialDate]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -47,29 +51,41 @@ export default function PHLogForm({ onClose }) {
     if (!formData.ph_value || !formData.batch_id) return;
 
     setIsSubmitting(true);
+    setMessage(null);
     try {
       const ph = parseFloat(formData.ph_value);
       const isInRange = ph >= formData.min_ph && ph <= formData.max_ph;
 
-      await base44.entities.pHLog.create({
+      const saved = await base44.entities.pHLog.create({
         ...formData,
         ph_value: ph,
         within_range: isInRange,
       });
+      await base44.entities.pHLog.get(saved.id);
 
-      // If pH fails, require corrective action
+      let validationWarning = '';
       if (!isInRange) {
-        await base44.functions.invoke('validateComplianceEntry', {
-          log_type: 'pH',
-          data: formData,
-          min_value: formData.min_ph,
-          max_value: formData.max_ph,
-        });
+        try {
+          await base44.functions.invoke('validateComplianceEntry', {
+            log_type: 'pH',
+            data: formData,
+            min_value: formData.min_ph,
+            max_value: formData.max_ph,
+          });
+        } catch {
+          validationWarning = ' The log is saved, but the corrective-action prompt could not be created; open Corrective Action manually.';
+        }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['pH_logs'] });
-      queryClient.invalidateQueries({ queryKey: ['pH_logs_today'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['pH_logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['pH_logs_today'] }),
+        queryClient.invalidateQueries({ queryKey: ['production_audit_packet'] }),
+      ]);
+      setMessage({ type: validationWarning ? 'warning' : 'success', text: `pH log saved and verified.${validationWarning}` });
       onClose?.();
+    } catch (error) {
+      setMessage({ type: 'error', text: `pH log was not saved: ${error.message}` });
     } finally {
       setIsSubmitting(false);
     }
@@ -165,6 +181,12 @@ export default function PHLogForm({ onClose }) {
             </div>
           )}
 
+          {message && (
+            <div className={`rounded-md p-3 text-sm ${message.type === 'error' ? 'bg-red-50 text-red-800' : message.type === 'warning' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>
+              {message.text}
+            </div>
+          )}
+
           <div>
             <label className="text-sm font-medium">Notes (Optional)</label>
             <textarea
@@ -180,9 +202,7 @@ export default function PHLogForm({ onClose }) {
             <Button type="submit" disabled={isSubmitting} className="flex-1">
               {isSubmitting ? 'Saving...' : 'Save pH Log'}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
+            {onClose && <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>}
           </div>
         </form>
       </CardContent>

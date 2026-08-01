@@ -4,6 +4,7 @@ import { CheckCircle2, AlertTriangle, X, ClipboardCheck, ExternalLink, Clock, Sh
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
+import { getChicagoDateInput, isDailyChecklistPreProductionComplete } from '@/lib/compliancePersistence';
 
 /**
  * PreProductionChecklist
@@ -26,7 +27,7 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
   const [overrideReason, setOverrideReason] = useState('');
   const [showOverrideInput, setShowOverrideInput] = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getChicagoDateInput();
   const prodDate = batch?.production_date || today;
 
   useEffect(() => {
@@ -44,12 +45,14 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
       ]);
 
       // SanitationLog uses log_date; DailyChecklist uses checklist_date (canonical field name)
-      const hasSanitation = (sanitationLogs || []).some(l => l.log_date === prodDate || l.log_date === today);
-      const hasDailyChecklist = (dailyChecklists || []).some(l =>
-        l.checklist_date === prodDate || l.checklist_date === today
+      const hasSanitation = (sanitationLogs || []).some(l =>
+        l.log_date === prodDate && l.cleaned && l.sanitized
       );
-      const hasTemperature = (temperatureLogs || []).some(l => l.log_date === prodDate || l.log_date === today);
-      const hasCCP = (ccpLogs || []).some(l => l.log_date === prodDate || l.log_date === today);
+      const hasDailyChecklist = (dailyChecklists || []).some(l =>
+        l.checklist_date === prodDate && isDailyChecklistPreProductionComplete(l)
+      );
+      const hasTemperature = (temperatureLogs || []).some(l => l.log_date === prodDate);
+      const hasCCP = (ccpLogs || []).some(l => l.log_date === prodDate);
 
       setChecks([
         {
@@ -58,7 +61,7 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
           description: 'All equipment and surfaces sanitized and logged.',
           complete: hasSanitation,
           required: true,
-          navigateTo: '/compliance',
+          navigateTo: `/compliance?tab=sanitation&date=${encodeURIComponent(prodDate)}`,
         },
         {
           id: 'daily_checklist',
@@ -66,7 +69,7 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
           description: 'Opening checklist completed for today.',
           complete: hasDailyChecklist,
           required: true,
-          navigateTo: '/compliance',
+          navigateTo: `/compliance?tab=daily_checklist&date=${encodeURIComponent(prodDate)}`,
         },
         {
           id: 'temperature',
@@ -74,7 +77,7 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
           description: 'Cold storage temperature check logged.',
           complete: hasTemperature,
           required: false,
-          navigateTo: '/compliance',
+          navigateTo: `/compliance?tab=temperature&date=${encodeURIComponent(prodDate)}`,
         },
         {
           id: 'ccp',
@@ -82,7 +85,7 @@ export default function PreProductionChecklist({ batch, onConfirm, onCancel }) {
           description: 'Critical control points checked.',
           complete: hasCCP,
           required: false,
-          navigateTo: '/compliance',
+          navigateTo: `/compliance?tab=CCP&date=${encodeURIComponent(prodDate)}`,
         },
         {
           id: 'batch_ready',

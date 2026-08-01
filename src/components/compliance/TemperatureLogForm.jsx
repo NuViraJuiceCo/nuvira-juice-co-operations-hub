@@ -4,32 +4,36 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
+import { getChicagoDateInput, getChicagoShift, getChicagoTimeInput } from '@/lib/compliancePersistence';
 
-export default function TemperatureLogForm({ onClose }) {
-  const [user, setUser] = useState(null);
+export default function TemperatureLogForm({ initialDate, onClose }) {
   const [formData, setFormData] = useState({
-    log_date: new Date().toISOString().split('T')[0],
-    log_time: new Date().toTimeString().slice(0, 5),
+    log_date: initialDate || getChicagoDateInput(),
+    log_time: getChicagoTimeInput(),
     staff_member: '',
     location: 'Cold Room 1',
     temperature: '',
     min_range: 35,
     max_range: 40,
-    unit: 'F',
-    shift: 'Morning',
+    shift: getChicagoShift(),
     notes: '',
-    production_date: new Date().toISOString().split('T')[0],
   });
   const [warning, setWarning] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     base44.auth.me().then(u => {
-      setUser(u);
-      setFormData(prev => ({ ...prev, staff_member: u.full_name }));
-    });
+      setFormData(prev => ({ ...prev, staff_member: u.full_name || u.email }));
+    }).catch(() => setMessage({ type: 'error', text: 'Unable to confirm the current operator.' }));
   }, []);
+
+  useEffect(() => {
+    if (initialDate) {
+      setFormData(prev => ({ ...prev, log_date: initialDate }));
+    }
+  }, [initialDate]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -52,30 +56,42 @@ export default function TemperatureLogForm({ onClose }) {
     if (!formData.temperature) return;
 
     setIsSubmitting(true);
+    setMessage(null);
     try {
       const temp = parseFloat(formData.temperature);
       const isInRange = temp >= formData.min_range && temp <= formData.max_range;
 
-      await base44.entities.TemperatureLog.create({
+      const saved = await base44.entities.TemperatureLog.create({
         ...formData,
         temperature: temp,
         within_range: isInRange,
-        production_date: formData.log_date,
       });
+      await base44.entities.TemperatureLog.get(saved.id);
 
       // If out of range, create corrective action prompt
+      let validationWarning = '';
       if (!isInRange) {
-        await base44.functions.invoke('validateComplianceEntry', {
-          log_type: 'temperature',
-          data: formData,
-          min_value: formData.min_range,
-          max_value: formData.max_range,
-        });
+        try {
+          await base44.functions.invoke('validateComplianceEntry', {
+            log_type: 'temperature',
+            data: formData,
+            min_value: formData.min_range,
+            max_value: formData.max_range,
+          });
+        } catch {
+          validationWarning = ' The log is saved, but the corrective-action prompt could not be created; open Corrective Action manually.';
+        }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['temperature_logs'] });
-      queryClient.invalidateQueries({ queryKey: ['temp_logs_today'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['temperature_logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['temp_logs_today'] }),
+        queryClient.invalidateQueries({ queryKey: ['production_audit_packet'] }),
+      ]);
+      setMessage({ type: validationWarning ? 'warning' : 'success', text: `Temperature log saved and verified.${validationWarning}` });
       onClose?.();
+    } catch (error) {
+      setMessage({ type: 'error', text: `Temperature log was not saved: ${error.message}` });
     } finally {
       setIsSubmitting(false);
     }
@@ -173,6 +189,12 @@ export default function TemperatureLogForm({ onClose }) {
             </div>
           )}
 
+          {message && (
+            <div className={`rounded-md p-3 text-sm ${message.type === 'error' ? 'bg-red-50 text-red-800' : message.type === 'warning' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>
+              {message.text}
+            </div>
+          )}
+
           <div>
             <label className="text-sm font-medium">Notes (Optional)</label>
             <textarea
@@ -188,9 +210,7 @@ export default function TemperatureLogForm({ onClose }) {
             <Button type="submit" disabled={isSubmitting} className="flex-1">
               {isSubmitting ? 'Saving...' : 'Save Temperature Log'}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
+            {onClose && <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>}
           </div>
         </form>
       </CardContent>
