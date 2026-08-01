@@ -27,7 +27,7 @@
     },
     "temperature": {
       "type": "number",
-      "description": "Temperature in Celsius"
+      "description": "Temperature in Fahrenheit"
     },
     "min_range": {
       "type": "number",

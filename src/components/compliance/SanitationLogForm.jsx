@@ -4,12 +4,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { getChicagoDateInput, getChicagoTimeInput } from '@/lib/compliancePersistence';
 
-export default function SanitationLogForm({ onClose }) {
-  const [user, setUser] = useState(null);
+export default function SanitationLogForm({ initialDate, onClose }) {
   const [formData, setFormData] = useState({
-    log_date: new Date().toISOString().split('T')[0],
-    log_time: new Date().toTimeString().slice(0, 5),
+    log_date: initialDate || getChicagoDateInput(),
+    log_time: getChicagoTimeInput(),
     staff_member: '',
     area: 'Prep Area',
     sanitizer_type: 'Bleach Solution',
@@ -20,14 +20,20 @@ export default function SanitationLogForm({ onClose }) {
     notes: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     base44.auth.me().then(u => {
-      setUser(u);
-      setFormData(prev => ({ ...prev, staff_member: u.full_name }));
-    });
+      setFormData(prev => ({ ...prev, staff_member: u.full_name || u.email }));
+    }).catch(() => setMessage({ type: 'error', text: 'Unable to confirm the current operator.' }));
   }, []);
+
+  useEffect(() => {
+    if (initialDate) {
+      setFormData(prev => ({ ...prev, log_date: initialDate }));
+    }
+  }, [initialDate]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -38,13 +44,21 @@ export default function SanitationLogForm({ onClose }) {
     if (!formData.cleaned || !formData.sanitized) return;
 
     setIsSubmitting(true);
+    setMessage(null);
     try {
-      await base44.entities.SanitationLog.create({
+      const saved = await base44.entities.SanitationLog.create({
         ...formData,
       });
+      await base44.entities.SanitationLog.get(saved.id);
 
-      queryClient.invalidateQueries({ queryKey: ['sanitation_logs'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['sanitation_logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['production_audit_packet'] }),
+      ]);
+      setMessage({ type: 'success', text: 'Sanitation log saved and verified.' });
       onClose?.();
+    } catch (error) {
+      setMessage({ type: 'error', text: `Sanitation log was not saved: ${error.message}` });
     } finally {
       setIsSubmitting(false);
     }
@@ -174,13 +188,17 @@ export default function SanitationLogForm({ onClose }) {
             />
           </div>
 
+          {message && (
+            <div className={`rounded-md p-3 text-sm ${message.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
+              {message.text}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <Button type="submit" disabled={isSubmitting || !formData.cleaned || !formData.sanitized} className="flex-1">
               {isSubmitting ? 'Saving...' : 'Save Sanitation Log'}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
+            {onClose && <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>}
           </div>
         </form>
       </CardContent>

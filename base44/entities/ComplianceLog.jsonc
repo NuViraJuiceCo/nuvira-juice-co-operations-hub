@@ -10,7 +10,8 @@
         "CCP",
         "sanitation",
         "corrective_action",
-        "daily_checklist"
+        "daily_checklist",
+        "receiving"
       ],
       "description": "Type of compliance log"
     },

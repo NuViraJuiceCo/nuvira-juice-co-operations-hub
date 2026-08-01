@@ -4,12 +4,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
+import { getChicagoDateInput, getChicagoTimeInput } from '@/lib/compliancePersistence';
 
-export default function CCPLogForm({ onClose }) {
-  const [user, setUser] = useState(null);
+export default function CCPLogForm({ initialDate, onClose }) {
   const [formData, setFormData] = useState({
-    log_date: new Date().toISOString().split('T')[0],
-    log_time: new Date().toTimeString().slice(0, 5),
+    log_date: initialDate || getChicagoDateInput(),
+    log_time: getChicagoTimeInput(),
     staff_member: '',
     ccp_point: 'Pasteurization',
     batch_id: '',
@@ -20,14 +20,18 @@ export default function CCPLogForm({ onClose }) {
   });
   const [isCritical, setIsCritical] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     base44.auth.me().then(u => {
-      setUser(u);
-      setFormData(prev => ({ ...prev, staff_member: u.full_name }));
-    });
+      setFormData(prev => ({ ...prev, staff_member: u.full_name || u.email }));
+    }).catch(() => setMessage({ type: 'error', text: 'Unable to confirm the current operator.' }));
   }, []);
+
+  useEffect(() => {
+    if (initialDate) setFormData(prev => ({ ...prev, log_date: initialDate }));
+  }, [initialDate]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -44,26 +48,39 @@ export default function CCPLogForm({ onClose }) {
     if (!formData.batch_id || !formData.measurement) return;
 
     setIsSubmitting(true);
+    setMessage(null);
     try {
-      await base44.entities.CCPLog.create({
+      const saved = await base44.entities.CCPLog.create({
         ...formData,
       });
+      await base44.entities.CCPLog.get(saved.id);
 
       // If CCP fails, trigger critical alert
+      let alertWarning = '';
       if (formData.result === 'Fail') {
-        await base44.entities.ComplianceAlert.create({
-          alert_type: 'Failure',
-          severity: 'Critical',
-          message: `⚠️ CCP FAILURE: ${formData.ccp_point} failed for batch ${formData.batch_id}. Immediate corrective action required.`,
-          triggered_date: formData.log_date,
-          triggered_time: formData.log_time,
-          status: 'Active',
-        });
+        try {
+          await base44.entities.ComplianceAlert.create({
+            alert_type: 'Failure',
+            severity: 'Critical',
+            message: `CCP failure: ${formData.ccp_point} failed for batch ${formData.batch_id}. Immediate corrective action required.`,
+            triggered_date: formData.log_date,
+            triggered_time: formData.log_time,
+            status: 'Active',
+          });
+        } catch {
+          alertWarning = ' The CCP log is saved, but its critical alert could not be created; notify a manager and open Corrective Action manually.';
+        }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['CCP_logs'] });
-      queryClient.invalidateQueries({ queryKey: ['CCP_logs_today'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['CCP_logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['CCP_logs_today'] }),
+        queryClient.invalidateQueries({ queryKey: ['production_audit_packet'] }),
+      ]);
+      setMessage({ type: alertWarning ? 'warning' : 'success', text: `CCP log saved and verified.${alertWarning}` });
       onClose?.();
+    } catch (error) {
+      setMessage({ type: 'error', text: `CCP log was not saved: ${error.message}` });
     } finally {
       setIsSubmitting(false);
     }
@@ -181,6 +198,12 @@ export default function CCPLogForm({ onClose }) {
             </div>
           )}
 
+          {message && (
+            <div className={`rounded-md p-3 text-sm ${message.type === 'error' ? 'bg-red-50 text-red-800' : message.type === 'warning' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>
+              {message.text}
+            </div>
+          )}
+
           <div>
             <label className="text-sm font-medium">Notes</label>
             <textarea
@@ -196,9 +219,7 @@ export default function CCPLogForm({ onClose }) {
             <Button type="submit" disabled={isSubmitting} className="flex-1">
               {isSubmitting ? 'Saving...' : 'Save CCP Log'}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
+            {onClose && <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>}
           </div>
         </form>
       </CardContent>

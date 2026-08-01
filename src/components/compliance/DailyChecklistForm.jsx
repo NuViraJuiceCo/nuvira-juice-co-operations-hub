@@ -5,13 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertCircle } from 'lucide-react';
+import {
+  calculateDailyChecklistStatus,
+  getChicagoDateInput,
+  isDailyChecklistPreProductionComplete,
+} from '@/lib/compliancePersistence';
 
-export default function DailyChecklistForm() {
-  const today = new Date().toISOString().split('T')[0];
-  const [user, setUser] = useState(null);
+export default function DailyChecklistForm({ initialDate }) {
+  const checklistDate = initialDate || getChicagoDateInput();
   const [existingChecklist, setExistingChecklist] = useState(null);
   const [formData, setFormData] = useState({
-    checklist_date: today,
+    checklist_date: checklistDate,
     staff_member: '',
     shift: 'Morning',
     morning_fridge_temp_logged: false,
@@ -32,19 +36,20 @@ export default function DailyChecklistForm() {
     overall_status: 'Incomplete',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     base44.auth.me().then(u => {
-      setUser(u);
-      setFormData(prev => ({ ...prev, staff_member: u.full_name }));
-      checkExistingChecklist(u.full_name);
-    });
-  }, []);
+      const staffName = u.full_name || u.email;
+      setFormData(prev => ({ ...prev, staff_member: staffName }));
+      checkExistingChecklist(staffName, checklistDate);
+    }).catch(() => setMessage({ type: 'error', text: 'Unable to confirm the current operator.' }));
+  }, [checklistDate]);
 
-  const checkExistingChecklist = async (staffName) => {
+  const checkExistingChecklist = async (staffName, date) => {
     const existing = await base44.entities.DailyChecklist.filter({
-      checklist_date: today,
+      checklist_date: date,
       staff_member: staffName,
     });
     if (existing && existing.length > 0) {
@@ -60,54 +65,70 @@ export default function DailyChecklistForm() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const calculateStatus = (data) => {
-    // Only pre-production items are required to mark checklist as Complete
-    // batch_logs_completed and ccp_logs_completed are post-production and optional at submit time
-    const preProductionComplete =
-      data.morning_fridge_temp_logged &&
-      data.sanitizer_levels_checked &&
-      data.equipment_sanitized &&
-      data.work_areas_cleaned;
-
-    if (!preProductionComplete) return 'Incomplete';
-    const postProductionComplete = data.batch_logs_completed && data.ccp_logs_completed;
-    return postProductionComplete ? 'Complete' : 'Pre-Production Complete';
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const status = calculateStatus(formData);
+    const status = calculateDailyChecklistStatus(formData);
     setIsSubmitting(true);
+    setMessage(null);
 
     try {
       const dataToSave = {
-        ...formData,
+        checklist_date: formData.checklist_date,
+        staff_member: formData.staff_member,
+        shift: formData.shift,
+        morning_fridge_temp_logged: Boolean(formData.morning_fridge_temp_logged),
+        morning_fridge_time: formData.morning_fridge_time,
+        evening_fridge_temp_logged: Boolean(formData.evening_fridge_temp_logged),
+        evening_fridge_time: formData.evening_fridge_time,
+        sanitizer_levels_checked: Boolean(formData.sanitizer_levels_checked),
+        sanitizer_check_time: formData.sanitizer_check_time,
+        equipment_sanitized: Boolean(formData.equipment_sanitized),
+        sanitization_time: formData.sanitization_time,
+        work_areas_cleaned: Boolean(formData.work_areas_cleaned),
+        cleaning_time: formData.cleaning_time,
+        batch_logs_completed: Boolean(formData.batch_logs_completed),
+        batches_logged: formData.batches_logged,
+        ccp_logs_completed: Boolean(formData.ccp_logs_completed),
+        ccp_notes: formData.ccp_notes,
+        issues_reported: formData.issues_reported,
         overall_status: status,
-        completed_at: new Date().toISOString(),
+        ...(status === 'Complete' || existingChecklist?.completed_at
+          ? { completed_at: status === 'Complete' ? new Date().toISOString() : existingChecklist.completed_at }
+          : {}),
       };
 
+      let saved;
       if (existingChecklist) {
-        await base44.entities.DailyChecklist.update(existingChecklist.id, dataToSave);
+        saved = await base44.entities.DailyChecklist.update(existingChecklist.id, dataToSave);
       } else {
-        await base44.entities.DailyChecklist.create(dataToSave);
+        saved = await base44.entities.DailyChecklist.create(dataToSave);
       }
 
-      queryClient.invalidateQueries({ queryKey: ['checklists_today'] });
-      queryClient.invalidateQueries({ queryKey: ['daily_checklists_today'] });
+      const savedId = saved?.id || existingChecklist?.id;
+      const confirmed = await base44.entities.DailyChecklist.get(savedId);
+      setExistingChecklist(confirmed);
+      setFormData(prev => ({ ...prev, ...confirmed }));
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['checklists_today'] }),
+        queryClient.invalidateQueries({ queryKey: ['daily_checklists_today'] }),
+        queryClient.invalidateQueries({ queryKey: ['production_audit_packet'] }),
+      ]);
+      setMessage({
+        type: 'success',
+        text: status === 'Complete'
+          ? 'Daily checklist saved, verified, and complete.'
+          : 'Daily checklist saved and verified. Finish the PM temperature and batch closeout when production is complete.',
+      });
+    } catch (error) {
+      setMessage({ type: 'error', text: `Daily checklist was not saved: ${error.message}` });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Pre-production required items (must be done before batches start)
-  const preProductionItems = [
-    formData.morning_fridge_temp_logged,
-    formData.sanitizer_levels_checked,
-    formData.equipment_sanitized,
-    formData.work_areas_cleaned,
-  ];
-  const preProductionComplete = preProductionItems.every(Boolean);
+  const preProductionComplete = isDailyChecklistPreProductionComplete(formData);
 
   const completedCount = [
     formData.morning_fridge_temp_logged,
@@ -116,10 +137,9 @@ export default function DailyChecklistForm() {
     formData.equipment_sanitized,
     formData.work_areas_cleaned,
     formData.batch_logs_completed,
-    formData.ccp_logs_completed,
   ].filter(Boolean).length;
 
-  const totalItems = 7;
+  const totalItems = 6;
 
   return (
     <Card>
@@ -261,7 +281,7 @@ export default function DailyChecklistForm() {
                 id="ccp_logs"
               />
               <div className="flex-1">
-                <label htmlFor="ccp_logs" className="text-sm cursor-pointer block">CCP logs completed</label>
+                <label htmlFor="ccp_logs" className="text-sm cursor-pointer block">CCP logs completed <span className="text-muted-foreground text-xs">(only when a CCP check was required)</span></label>
                 <input
                   type="text"
                   value={formData.ccp_notes}
@@ -299,8 +319,14 @@ export default function DailyChecklistForm() {
               <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-blue-800">
                 <p className="font-semibold">Pre-Production Ready</p>
-                <p>You can submit now. Batch logs and CCP logs can be updated after production completes. ({completedCount}/{totalItems} done)</p>
+                <p>You can submit now. PM temperature and batch closeout can be updated after production completes. CCP is optional unless a deviation requires it. ({completedCount}/{totalItems} required items done)</p>
               </div>
+            </div>
+          )}
+
+          {message && (
+            <div className={`rounded-md p-3 text-sm ${message.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
+              {message.text}
             </div>
           )}
 
