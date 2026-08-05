@@ -1,0 +1,53 @@
+{
+  "name": "recalculateProductionBatches",
+  "entry": "entry.ts",
+  "automations": [
+    {
+      "name": "Recalculate Production Batches - Daily 6 AM",
+      "description": "Daily early-morning batch recalculation before production begins. Final verification that all paid orders from previous day are included in production plan.",
+      "function_args": null,
+      "is_active": true,
+      "type": "scheduled",
+      "schedule_mode": "recurring",
+      "schedule_type": "simple",
+      "repeat_unit": "days",
+      "repeat_interval": 1,
+      "start_time": "11:00",
+      "repeat_on_days": null,
+      "repeat_on_day_of_month": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    },
+    {
+      "name": "Recalculate Production Batches - Midday 11 AM CT",
+      "description": "Midday catch-all recalculation at 11 AM CT. Reduced from every-30-min polling to once daily midday to prevent credit burn. Combined with the 6 AM run this gives 2x/day coverage.",
+      "function_args": null,
+      "is_active": true,
+      "type": "scheduled",
+      "schedule_mode": "recurring",
+      "schedule_type": "simple",
+      "repeat_unit": "days",
+      "repeat_interval": 1,
+      "start_time": "21:00",
+      "repeat_on_days": null,
+      "repeat_on_day_of_month": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    },
+    {
+      "name": "Auto-Recalculate Production Batches on Order Change",
+      "description": "Automatically recalculates all production batch quantities whenever an order is created, updated, or deleted. Decomposes bundles into individual products and upserts one batch card per product/date.",
+      "function_args": null,
+      "is_active": true,
+      "type": "entity",
+      "entity_name": "ShopifyOrder",
+      "event_types": [
+        "create",
+        "update",
+        "delete"
+      ]
+    }
+  ]
+}

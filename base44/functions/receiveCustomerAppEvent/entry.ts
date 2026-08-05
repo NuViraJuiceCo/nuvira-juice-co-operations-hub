@@ -28,6 +28,23 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const SYNC_SECRET = Deno.env.get('CUSTOMER_APP_SYNC_SECRET');
 const INTERNAL_SECRET = Deno.env.get('INTERNAL_FUNCTION_SECRET');
 
+async function processOrderLoyalty(base44, orderId) {
+  if (!orderId) return { processed: false, reason: 'hub_order_id_missing' };
+  try {
+    const result = await base44.asServiceRole.functions.invoke('awardOrderPoints', {
+      order_id: orderId,
+      _internalSecret: INTERNAL_SECRET,
+    });
+    return { processed: true, ...(result?.data || result || {}) };
+  } catch (error) {
+    return {
+      processed: false,
+      retry_required: true,
+      reason: String(error?.message || 'order_loyalty_processing_failed').slice(0, 160),
+    };
+  }
+}
+
 Deno.serve(async (req) => {
   // ───────────────────────────────────────────────────────────────────────────
   // CHECK FOR GATEWAY AUTH FLAG EARLY (before body parsing)
@@ -585,6 +602,7 @@ Deno.serve(async (req) => {
       console.log('[RECEIVE-CUSTOMER-EVENT] safeSyncOrderUpdate result:', { status: safeStatus, action, order_id });
 
       if (safeStatus === 'success') {
+        const loyaltyResult = await processOrderLoyalty(base44, order_id);
         // ── CREATE FULFILLMENT TASK FOR ONE-TIME ORDERS ──────────────────────
         // After ShopifyOrder is created, immediately create a FulfillmentTask so
         // the delivery appears in Driver Portal. Prevents the gap seen in NV-MOYUAVYB.
@@ -693,6 +711,7 @@ Deno.serve(async (req) => {
           order_id,
           order_number: orderData.order_number,
           fulfillment_task_created: taskCreated,
+          loyalty: loyaltyResult,
         }, { status: 200 });
       } else if (safeStatus === 'skipped') {
         // Dedupe — order already exists, find its hub_order_id
@@ -701,6 +720,7 @@ Deno.serve(async (req) => {
           const found = await base44.asServiceRole.entities.ShopifyOrder.filter({ shopify_order_number: orderData.order_number });
           existingId = found?.[0]?.id || null;
         }
+        const loyaltyResult = await processOrderLoyalty(base44, existingId);
         return Response.json({
           status: 'success',
           action: 'dedupe_exact_match',
@@ -708,6 +728,7 @@ Deno.serve(async (req) => {
           order_id: existingId,
           order_number: orderData.order_number,
           reason: 'Idempotent duplicate — order already exists in Hub',
+          loyalty: loyaltyResult,
         }, { status: 200 });
       } else if (safeStatus === 'rejected') {
         return Response.json({

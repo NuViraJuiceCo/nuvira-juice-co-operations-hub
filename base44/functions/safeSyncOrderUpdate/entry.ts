@@ -52,10 +52,14 @@ const FIELD_OWNERSHIP = {
   customer_app: [
     'customer_name', 'customer_email', 'customer_phone',
     'address_line1', 'address_line2', 'address_city', 'address_state',
-    'address_postal_code', 'address_country', 'customer_notes',
+    'address_postal_code', 'address_country', 'delivery_address',
+    'address_last_synced_from', 'address_last_synced_at', 'customer_notes',
     'requested_delivery_date', 'selected_delivery_date', 'assigned_delivery_date',
     'production_date', 'delivery_window_label', 'delivery_notes', 'fulfillment_method',
     'line_items', 'total_price', 'subtotal', 'delivery_fee', 'tags', 'sync_status', 'last_sync_at',
+    'delivery_zone_key', 'delivery_zone_name', 'delivery_zone_type', 'minimum_order',
+    'distance_miles', 'drive_time_minutes', 'approval_status',
+    'schedule_source', 'schedule_reason', 'schedule_timezone', 'cutoff_window_label',
     'shopify_order_number', 'payment_status', 'stripe_checkout_session_id', 'stripe_payment_intent_id',
     'stripe_customer_id', 'source_channel', 'source_type', 'order_type', 'fulfillment_mode',
     'customer_order_date', 'production_status', 'data_quality_status',
@@ -82,6 +86,12 @@ const FIELD_OWNERSHIP = {
     'address_line1', 'address_line2', 'address_city', 'address_state',
     'address_postal_code', 'address_country', 'delivery_notes',
     'production_status',
+  ],
+  stripe_refund_webhook: [
+    'payment_status', 'financial_status', 'production_status', 'fulfillment_status',
+    'order_status', 'operational_visibility', 'tags', 'sync_status',
+    'refunded_at', 'stripe_event_id_applied', 'cancel_type',
+    'internal_notes', 'audit_trail', 'do_not_recover', 'is_test_order',
   ],
   operations: [
     'production_status', 'fulfillment_status', 'assigned_delivery_date',
@@ -234,24 +244,15 @@ async function quarantine(base44, params) {
 
 Deno.serve(async (req) => {
   try {
-    if (req.method !== 'POST') {
-      return Response.json({ error: 'method_not_allowed' }, { status: 405 });
-    }
-
     const base44 = createClientFromRequest(req);
-    let body;
-    try {
-      body = await req.json();
-    } catch {
-      return Response.json({ error: 'invalid_json' }, { status: 400 });
-    }
+    const body = await req.json();
 
     // ── INTERNAL FUNCTION AUTHORIZATION ─────────────────────────────────────
     // Allow trusted internal functions to call this gateway
     // without requiring user authentication. Validate via INTERNAL_FUNCTION_SECRET.
     const providedSecret = body._internalSecret;
     const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
-    const TRUSTED_INTERNAL_SOURCES = new Set(['rebuild_subscriptions', 'shopify_admin_sync', 'operations', 'manual_recovery']);
+    const TRUSTED_INTERNAL_SOURCES = new Set(['rebuild_subscriptions', 'shopify_admin_sync', 'stripe_refund_webhook', 'operations', 'customer_app_driver', 'manual_recovery']);
     const isInternalCall = providedSecret && internalSecret && providedSecret === internalSecret && TRUSTED_INTERNAL_SOURCES.has(body.source);
     
     if (!isInternalCall) {
@@ -267,7 +268,7 @@ Deno.serve(async (req) => {
 
     const {
       incomingData,     // Fields to write
-      source,           // Who is writing: stripe_webhook | customer_app | rebuild_subscriptions | shopify_admin_sync | operations | admin | manual_recovery
+      source,           // Who is writing: stripe_webhook | stripe_refund_webhook | customer_app | rebuild_subscriptions | shopify_admin_sync | operations | admin | manual_recovery
       stripeEventId,    // For idempotency
       matchBy,          // How to find existing order: { stripe_subscription_id, stripe_checkout_session_id, stripe_payment_intent_id, internal_id, shopify_order_id }
     } = body;
@@ -384,7 +385,8 @@ Deno.serve(async (req) => {
     // Admin writes matched by internal_id bypass this gate entirely — the order is
     // already resolved above via base44.entities.ShopifyOrder.get(matchBy.internal_id).
     const adminInternalIdWrite = source === 'admin' && matchBy?.internal_id && existingOrder;
-    if (!adminInternalIdWrite && isUnknownQuality(incomingData)) {
+    const trustedInternalExistingWrite = isInternalCall && matchBy?.internal_id && existingOrder;
+    if (!adminInternalIdWrite && !trustedInternalExistingWrite && isUnknownQuality(incomingData)) {
       const existingScore = existingOrder ? getCompletenessScore(existingOrder) : 0;
       if (existingOrder && existingScore >= 5) {
         await quarantine(base44, {
@@ -570,6 +572,13 @@ Deno.serve(async (req) => {
         // CARVE-OUT: Never freeze payment_status when upgrading pending → paid (RULE B from Step 4.5)
         if (field === 'payment_status' && _forcePaymentPaid) continue;
 
+        // CARVE-OUT: Provider truth must still be able to record refunds/voids on
+        // fulfilled POS orders. Keep identity and fulfillment locks intact.
+        const isProviderRefundUpdate = field === 'payment_status' &&
+          ['shopify_admin_sync', 'stripe_webhook', 'stripe_refund_webhook'].includes(source) &&
+          ['refunded', 'partially_refunded', 'voided'].includes(incomingData.payment_status);
+        if (isProviderRefundUpdate) continue;
+
         if (field in incomingData && existingOrder[field] !== undefined && existingOrder[field] !== null && existingOrder[field] !== '') {
           // Field is frozen and existing has a value — reject the incoming value
           delete incomingData[field];
@@ -578,25 +587,6 @@ Deno.serve(async (req) => {
       }
       if (fieldsRejected.length > 0) {
         console.log(`[SAFE-SYNC] Lock ${lockStatus} rejected fields from ${source}:`, fieldsRejected.join(', '));
-      }
-    }
-
-    // Customer App can initialize these fields when creating the Hub mirror, but
-    // existing Hub orders own operational/control state after creation.
-    if (existingOrder && source === 'customer_app') {
-      const blockedOpsFields = ['production_status', 'order_lock_status', 'data_quality_status'];
-      const blockedByOpsGuard = [];
-
-      for (const field of blockedOpsFields) {
-        if (field in incomingData) {
-          delete incomingData[field];
-          blockedByOpsGuard.push(field);
-        }
-      }
-
-      if (blockedByOpsGuard.length > 0) {
-        fieldsRejected.push(...blockedByOpsGuard);
-        console.log(`[safeSyncOrderUpdate] customer_app operational ownership guard blocked fields: ${blockedByOpsGuard.join(', ')}`);
       }
     }
 
@@ -624,7 +614,7 @@ Deno.serve(async (req) => {
 
     // ── STEP 8: PRESERVE CRITICAL EXISTING FIELDS IF INCOMING IS EMPTY ──────
      if (existingOrder) {
-       const preserveIfEmpty = ['customer_name', 'customer_phone', 'fulfillments', 'internal_notes', 'assigned_delivery_date', 'production_date', 'selected_delivery_date', 'delivery_window_label', 'production_status', 'order_lock_status', 'total_price', 'subtotal', 'delivery_fee', 'manual_override', 'manual_override_at', 'manual_override_by', 'audit_trail'];
+       const preserveIfEmpty = ['customer_name', 'customer_phone', 'fulfillments', 'internal_notes', 'assigned_delivery_date', 'production_date', 'selected_delivery_date', 'delivery_window_label', 'production_status', 'order_lock_status', 'total_price', 'subtotal', 'delivery_fee', 'delivery_zone_key', 'delivery_zone_name', 'delivery_zone_type', 'minimum_order', 'distance_miles', 'drive_time_minutes', 'approval_status', 'schedule_source', 'schedule_reason', 'schedule_timezone', 'cutoff_window_label', 'manual_override', 'manual_override_at', 'manual_override_by', 'audit_trail'];
        for (const field of preserveIfEmpty) {
          const incomingVal = incomingData[field];
          const existingVal = existingOrder[field];
