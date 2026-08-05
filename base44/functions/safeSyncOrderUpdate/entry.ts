@@ -65,6 +65,13 @@ const FIELD_OWNERSHIP = {
     'customer_order_date', 'production_status', 'data_quality_status',
     'order_lock_status',
   ],
+  customer_app_adjustment: [
+    'selected_delivery_date', 'assigned_delivery_date', 'production_date',
+    'fulfillment_mode', 'fulfillments', 'schedule_source',
+    'payment_status', 'refund_status', 'refund_type', 'refund_amount',
+    'refund_currency', 'refunded_at', 'refund_source', 'refund_event_id',
+    'stripe_refund_id', 'refund_reason', 'internal_notes', 'sync_status', 'last_sync_at',
+  ],
   rebuild_subscriptions: [
     'shopify_order_id', 'shopify_order_number',
     'customer_name', 'customer_email', 'customer_phone', 'source_channel', 'source_type',
@@ -252,7 +259,7 @@ Deno.serve(async (req) => {
     // without requiring user authentication. Validate via INTERNAL_FUNCTION_SECRET.
     const providedSecret = body._internalSecret;
     const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
-    const TRUSTED_INTERNAL_SOURCES = new Set(['rebuild_subscriptions', 'shopify_admin_sync', 'stripe_refund_webhook', 'operations', 'customer_app_driver', 'manual_recovery']);
+    const TRUSTED_INTERNAL_SOURCES = new Set(['rebuild_subscriptions', 'shopify_admin_sync', 'stripe_refund_webhook', 'operations', 'customer_app_driver', 'customer_app_adjustment', 'manual_recovery']);
     const isInternalCall = providedSecret && internalSecret && providedSecret === internalSecret && TRUSTED_INTERNAL_SOURCES.has(body.source);
     
     if (!isInternalCall) {
@@ -578,6 +585,14 @@ Deno.serve(async (req) => {
           ['shopify_admin_sync', 'stripe_webhook', 'stripe_refund_webhook'].includes(source) &&
           ['refunded', 'partially_refunded', 'voided'].includes(incomingData.payment_status);
         if (isProviderRefundUpdate) continue;
+
+        // A customer-confirmed adjustment may change a scheduled order only before
+        // physical production begins. receiveCustomerAppEvent enforces that lifecycle
+        // precondition before invoking this narrowly scoped source.
+        const isPreProductionCustomerAdjustment = source === 'customer_app_adjustment'
+          && ['verified', 'production_scheduled'].includes(lockStatus)
+          && ['fulfillments', 'payment_status'].includes(field);
+        if (isPreProductionCustomerAdjustment) continue;
 
         if (field in incomingData && existingOrder[field] !== undefined && existingOrder[field] !== null && existingOrder[field] !== '') {
           // Field is frozen and existing has a value — reject the incoming value

@@ -45,6 +45,258 @@ async function processOrderLoyalty(base44, orderId) {
   }
 }
 
+const ORDER_ADJUSTMENT_CHOICES = new Set(['full_order_saturday', 'oasis_saturday', 'oasis_refund']);
+const IMMUTABLE_PRODUCTION_STATES = new Set([
+  'in_production', 'bottled', 'labeled', 'qc_checked', 'packed', 'in_cold_storage',
+  'assigned_for_pickup', 'assigned_for_delivery', 'fulfilled', 'refunded', 'canceled', 'cancelled',
+]);
+const IMMUTABLE_ORDER_LOCKS = new Set(['in_production', 'out_for_delivery', 'fulfilled']);
+const IMMUTABLE_BATCH_STATES = new Set(['in_production', 'completed_pending_verification', 'verified_logged', 'archived']);
+
+function safeText(value, max = 180) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
+}
+
+function stateKey(value) {
+  return safeText(value, 80).toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function validDate(value) {
+  const date = safeText(value, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return '';
+  const parsed = new Date(`${date}T12:00:00Z`);
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date ? '' : date;
+}
+
+function productKey(value) {
+  return safeText(value, 120).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function normalizeAdjustmentItems(items) {
+  if (!Array.isArray(items) || items.length === 0 || items.length > 40) return [];
+  return items.map((item) => ({
+    title: safeText(item?.title || item?.product_name, 120),
+    quantity: Number(item?.quantity || 0),
+  })).filter((item) => item.title && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 500);
+}
+
+function validateAdjustmentPlan(data, { requireRefundConfirmation = true } = {}) {
+  const requestId = safeText(data?.request_id, 180);
+  const orderNumber = safeText(data?.order_number, 80).replace(/^#/, '');
+  const choice = safeText(data?.choice, 80);
+  if (!/^[A-Za-z0-9:._-]{8,180}$/.test(requestId) || !orderNumber || !ORDER_ADJUSTMENT_CHOICES.has(choice)) {
+    return { error: 'invalid_order_adjustment_identity' };
+  }
+  const rawFulfillments = Array.isArray(data?.fulfillments) ? data.fulfillments : [];
+  const expectedCount = choice === 'oasis_saturday' ? 2 : 1;
+  if (rawFulfillments.length !== expectedCount) return { error: 'invalid_order_adjustment_fulfillment_count' };
+  const fulfillments = rawFulfillments.map((row, index) => ({
+    fulfillment_number: index + 1,
+    production_date: validDate(row?.production_date),
+    delivery_date: validDate(row?.delivery_date),
+    items: normalizeAdjustmentItems(row?.items),
+    status: 'pending',
+  }));
+  if (fulfillments.some((row) => !row.production_date || !row.delivery_date || row.items.length === 0)) {
+    return { error: 'invalid_order_adjustment_fulfillment' };
+  }
+
+  const firstHasOasis = fulfillments[0].items.some((item) => productKey(item.title) === 'oasis');
+  if (choice === 'full_order_saturday' && !firstHasOasis) return { error: 'full_order_plan_missing_oasis' };
+  if (choice !== 'full_order_saturday' && firstHasOasis) return { error: 'current_plan_must_exclude_oasis' };
+  if (choice === 'oasis_saturday') {
+    if (fulfillments[1].items.some((item) => productKey(item.title) !== 'oasis')) return { error: 'split_plan_follow_up_must_be_oasis_only' };
+  }
+  if (choice === 'oasis_refund') {
+    const amount = Number(data?.refund?.amount || 0);
+    const confirmationInvalid = requireRefundConfirmation
+      && (stateKey(data?.refund?.status) !== 'succeeded' || !safeText(data?.refund?.stripe_refund_id, 180));
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 500 || confirmationInvalid) {
+      return { error: 'invalid_partial_refund_confirmation' };
+    }
+  }
+  return { requestId, orderNumber, choice, fulfillments };
+}
+
+function taskItemsSummary(items) {
+  return items.map((item) => `${item.quantity}x ${item.title}`).join(', ');
+}
+
+function taskUpdateForFulfillment(fulfillment, choice, requestId) {
+  return {
+    fulfillment_number: fulfillment.fulfillment_number,
+    scheduled_date: fulfillment.delivery_date,
+    production_date: fulfillment.production_date,
+    status: 'Scheduled',
+    delivery_status: 'pending',
+    items_summary: taskItemsSummary(fulfillment.items),
+    notes: `Customer order adjustment ${requestId}: ${choice}`,
+  };
+}
+
+async function loadEligibleAdjustmentContext(base44, plan) {
+  const orders = await base44.asServiceRole.entities.ShopifyOrder.filter({ shopify_order_number: plan.orderNumber });
+  if (!orders || orders.length !== 1) {
+    return {
+      error: orders?.length ? 'order_context_ambiguous' : 'order_not_found',
+      status: orders?.length ? 409 : 404,
+    };
+  }
+  const order = orders[0];
+  if (stateKey(order.order_type) !== 'one_time' || stateKey(order.payment_status) === 'refunded') {
+    return { error: 'order_not_eligible_for_adjustment', status: 409 };
+  }
+  if (IMMUTABLE_PRODUCTION_STATES.has(stateKey(order.production_status)) || IMMUTABLE_ORDER_LOCKS.has(stateKey(order.order_lock_status))) {
+    return { error: 'order_already_in_production_or_fulfillment', status: 409 };
+  }
+
+  const tasks = await base44.asServiceRole.entities.FulfillmentTask.filter({ order_id: order.id });
+  if ((tasks || []).some((task) => ['packed', 'in_transit', 'out_for_delivery', 'completed'].includes(stateKey(task.status)))) {
+    return { error: 'fulfillment_already_in_progress', status: 409 };
+  }
+
+  const desired = new Map();
+  for (const fulfillment of plan.fulfillments) {
+    for (const item of fulfillment.items) {
+      desired.set(`${fulfillment.production_date}__${productKey(item.title)}`, item.quantity);
+    }
+  }
+  const batches = await base44.asServiceRole.entities.ProductionBatch.list('-production_date', 500);
+  for (const batch of batches || []) {
+    const sources = Array.isArray(batch.order_sources) ? batch.order_sources : [];
+    const current = sources.filter((source) => source.order_id === order.id);
+    if (current.length === 0) continue;
+    const wanted = desired.get(`${batch.production_date}__${productKey(batch.product_name)}`);
+    const currentQuantity = current.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
+    if ((batch.is_locked || IMMUTABLE_BATCH_STATES.has(stateKey(batch.status))) && (wanted === undefined || wanted !== currentQuantity)) {
+      return { error: 'locked_production_batch_requires_operator', status: 409 };
+    }
+  }
+  return { order, tasks, batches };
+}
+
+async function reconcileAdjustmentTasks(base44, order, plan) {
+  const tasks = await base44.asServiceRole.entities.FulfillmentTask.filter({ order_id: order.id });
+  const activeTasks = (tasks || []).filter((task) => !['completed', 'cancelled'].includes(stateKey(task.status)));
+  if (activeTasks.some((task) => ['packed', 'in_transit', 'out_for_delivery'].includes(stateKey(task.status)))) {
+    throw new Error('fulfillment_already_in_progress');
+  }
+  let primary = activeTasks.find((task) => Number(task.fulfillment_number || 1) === 1) || activeTasks[0] || null;
+  const primaryPatch = taskUpdateForFulfillment(plan.fulfillments[0], plan.choice, plan.requestId);
+  if (primary?.id) {
+    primary = await base44.asServiceRole.entities.FulfillmentTask.update(primary.id, primaryPatch);
+  } else {
+    primary = await base44.asServiceRole.entities.FulfillmentTask.create({
+      customer_name: order.customer_name || 'Customer',
+      customer_email: order.customer_email || '',
+      customer_phone: order.customer_phone || '',
+      fulfillment_type: 'Delivery',
+      time_window: order.delivery_window_label || '',
+      delivery_window_label: order.delivery_window_label || '',
+      address_line1: order.address_line1 || '',
+      address_line2: order.address_line2 || '',
+      address_city: order.address_city || '',
+      address_state: order.address_state || '',
+      address_postal_code: order.address_postal_code || '',
+      order_id: order.id,
+      order_number: order.shopify_order_number,
+      source_type: 'order_derived',
+      payment_status: order.payment_status,
+      ...primaryPatch,
+    });
+  }
+
+  const taskIds = [primary.id];
+  if (plan.fulfillments.length === 2) {
+    const followUpPatch = taskUpdateForFulfillment(plan.fulfillments[1], plan.choice, plan.requestId);
+    const followUp = activeTasks.find((task) => Number(task.fulfillment_number) === 2 && safeText(task.notes).includes(plan.requestId));
+    const result = followUp?.id
+      ? await base44.asServiceRole.entities.FulfillmentTask.update(followUp.id, followUpPatch)
+      : await base44.asServiceRole.entities.FulfillmentTask.create({
+        customer_name: order.customer_name || 'Customer',
+        customer_email: order.customer_email || '',
+        customer_phone: order.customer_phone || '',
+        fulfillment_type: 'Delivery',
+        time_window: order.delivery_window_label || '',
+        delivery_window_label: order.delivery_window_label || '',
+        address_line1: order.address_line1 || '',
+        address_line2: order.address_line2 || '',
+        address_city: order.address_city || '',
+        address_state: order.address_state || '',
+        address_postal_code: order.address_postal_code || '',
+        order_id: order.id,
+        order_number: order.shopify_order_number,
+        source_type: 'order_derived',
+        payment_status: order.payment_status,
+        ...followUpPatch,
+      });
+    taskIds.push(result.id);
+  }
+  return taskIds;
+}
+
+async function reconcileAdjustmentBatchDemand(base44, order, plan) {
+  const desired = new Map();
+  for (const fulfillment of plan.fulfillments) {
+    for (const item of fulfillment.items) {
+      const key = `${fulfillment.production_date}__${productKey(item.title)}`;
+      desired.set(key, { production_date: fulfillment.production_date, title: item.title, quantity: item.quantity });
+    }
+  }
+  const batches = await base44.asServiceRole.entities.ProductionBatch.list('-production_date', 500);
+  for (const batch of batches || []) {
+    const sources = Array.isArray(batch.order_sources) ? batch.order_sources : [];
+    const current = sources.filter((source) => source.order_id === order.id);
+    if (current.length === 0) continue;
+    const key = `${batch.production_date}__${productKey(batch.product_name)}`;
+    const target = desired.get(key);
+    const currentQuantity = current.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
+    if ((batch.is_locked || IMMUTABLE_BATCH_STATES.has(stateKey(batch.status))) && (!target || target.quantity !== currentQuantity)) {
+      throw new Error(`locked_batch_adjustment_required:${batch.batch_id || batch.id}`);
+    }
+  }
+
+  for (const batch of batches || []) {
+    if (batch.is_locked || IMMUTABLE_BATCH_STATES.has(stateKey(batch.status))) continue;
+    const sources = Array.isArray(batch.order_sources) ? batch.order_sources : [];
+    const current = sources.filter((source) => source.order_id === order.id);
+    if (current.length === 0) continue;
+    const key = `${batch.production_date}__${productKey(batch.product_name)}`;
+    const target = desired.get(key);
+    const remaining = sources.filter((source) => source.order_id !== order.id);
+    const nextSources = target ? [...remaining, {
+      order_id: order.id,
+      order_number: order.shopify_order_number,
+      customer_email: order.customer_email || '',
+      customer_name: order.customer_name || '',
+      quantity: target.quantity,
+      source_type: 'customer_order_adjustment',
+      source_item: target.title,
+    }] : remaining;
+    if (nextSources.length === 0) {
+      await base44.asServiceRole.entities.ProductionBatch.delete(batch.id);
+    } else {
+      await base44.asServiceRole.entities.ProductionBatch.update(batch.id, {
+        order_sources: nextSources,
+        planned_units: nextSources.reduce((sum, source) => sum + Number(source.quantity || 0), 0),
+      });
+    }
+  }
+
+  const result = await base44.asServiceRole.functions.invoke('triggerBatchDemandForDates', {
+    _internalSecret: INTERNAL_SECRET,
+    production_dates: [...new Set(plan.fulfillments.map((row) => row.production_date))],
+    order_id: order.id,
+    order_number: order.shopify_order_number,
+    customer_email: order.customer_email || '',
+    customer_name: order.customer_name || '',
+    fulfillments: plan.fulfillments,
+  });
+  const data = result?.data || result || {};
+  if (Number(data.errors || 0) > 0) throw new Error('batch_demand_update_failed');
+  return data;
+}
+
 Deno.serve(async (req) => {
   // ───────────────────────────────────────────────────────────────────────────
   // CHECK FOR GATEWAY AUTH FLAG EARLY (before body parsing)
@@ -467,6 +719,140 @@ Deno.serve(async (req) => {
           customer_email: data.customer_email,
         }, { status: 500 });
       }
+    }
+
+    // ── order.adjustment_preflight ───────────────────────────────────────────
+    // Read-only eligibility check immediately before the customer workflow moves
+    // money or records schedule changes. The selected event repeats every check.
+    if (event === 'order.adjustment_preflight') {
+      const plan = validateAdjustmentPlan(data, { requireRefundConfirmation: false });
+      if (plan.error) return Response.json({ error: plan.error }, { status: 400 });
+      const context = await loadEligibleAdjustmentContext(base44, plan);
+      if (context.error) return Response.json({ error: context.error }, { status: context.status });
+      return Response.json({
+        status: 'success',
+        action: 'preflight_passed',
+        order_id: context.order.id,
+      });
+    }
+
+    // ── order.adjustment_selected ────────────────────────────────────────────
+    // Customer-confirmed, order-specific schedule/split/refund adjustment.
+    // This event is idempotent by request_id and never changes original line_items.
+    if (event === 'order.adjustment_selected') {
+      const plan = validateAdjustmentPlan(data);
+      if (plan.error) return Response.json({ error: plan.error }, { status: 400 });
+
+      const priorLogs = await base44.asServiceRole.entities.OrderSyncLog.filter({
+        sync_source: 'customer_app',
+        event_type: 'order.adjustment_selected',
+        stripe_event_id: plan.requestId,
+        success: true,
+      });
+      if (priorLogs?.length > 0) {
+        return Response.json({ status: 'success', action: 'skipped', reason: 'duplicate_adjustment_request' });
+      }
+
+      const context = await loadEligibleAdjustmentContext(base44, plan);
+      if (context.error) return Response.json({ error: context.error }, { status: context.status });
+      const order = context.order;
+
+      const fulfillments = plan.fulfillments.map((fulfillment) => ({
+        ...fulfillment,
+        address_line1: order.address_line1 || '',
+        address_line2: order.address_line2 || '',
+        address_city: order.address_city || '',
+        address_state: order.address_state || '',
+        address_postal_code: order.address_postal_code || '',
+        address_country: order.address_country || 'US',
+        delivery_notes: order.delivery_notes || '',
+      }));
+      plan.fulfillments = fulfillments;
+      const first = fulfillments[0];
+      const refundPatch = plan.choice === 'oasis_refund' ? {
+        refund_status: 'partially_refunded',
+        refund_type: 'partial',
+        refund_amount: Number(data.refund.amount),
+        refund_currency: safeText(data.refund.currency, 10).toUpperCase() || 'USD',
+        refunded_at: new Date().toISOString(),
+        refund_source: 'customer_app_adjustment',
+        refund_event_id: plan.requestId,
+        stripe_refund_id: safeText(data.refund.stripe_refund_id, 180),
+        refund_reason: 'Customer requested refund for the OASIS portion only.',
+      } : {};
+      const internalNotes = [
+        safeText(order.internal_notes, 1000),
+        `Customer adjustment ${plan.requestId}: ${plan.choice}`,
+      ].filter(Boolean).join('\n').slice(0, 2000);
+      const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+        incomingData: {
+          assigned_delivery_date: first.delivery_date,
+          selected_delivery_date: first.delivery_date,
+          production_date: first.production_date,
+          fulfillment_mode: fulfillments.length > 1 ? 'multi_delivery' : 'single_delivery',
+          fulfillments,
+          schedule_source: 'customer_order_adjustment',
+          internal_notes: internalNotes,
+          sync_status: 'synced',
+          last_sync_at: new Date().toISOString(),
+          ...refundPatch,
+        },
+        source: 'customer_app_adjustment',
+        stripeEventId: plan.requestId,
+        matchBy: { internal_id: order.id },
+        _internalSecret: internalSecret,
+      });
+      const safeData = safeResult?.data || safeResult || {};
+      if (!['success', 'skipped'].includes(safeData.status)) {
+        return Response.json({ error: 'safe_order_update_failed' }, { status: 503 });
+      }
+
+      let taskIds;
+      let batchResult;
+      try {
+        taskIds = await reconcileAdjustmentTasks(base44, { ...order, ...refundPatch }, plan);
+        batchResult = await reconcileAdjustmentBatchDemand(base44, order, plan);
+      } catch (error) {
+        await base44.asServiceRole.entities.OrderSyncLog.create({
+          sync_timestamp: new Date().toISOString(),
+          sync_source: 'customer_app',
+          event_type: 'order.adjustment_selected',
+          stripe_event_id: plan.requestId,
+          order_id: order.id,
+          order_number: order.shopify_order_number,
+          action: 'error',
+          reason: safeText(error?.message || 'adjustment_reconciliation_failed', 180),
+          fields_updated: ['ShopifyOrder'],
+          success: false,
+          error: 'Operational task or batch reconciliation requires retry.',
+        });
+        return Response.json({ error: 'adjustment_reconciliation_failed', retryable: true }, { status: 503 });
+      }
+
+      await base44.asServiceRole.entities.OrderSyncLog.create({
+        sync_timestamp: new Date().toISOString(),
+        sync_source: 'customer_app',
+        event_type: 'order.adjustment_selected',
+        stripe_event_id: plan.requestId,
+        order_id: order.id,
+        order_number: order.shopify_order_number,
+        action: 'updated',
+        reason: `Applied customer-confirmed ${plan.choice} fulfillment plan.`,
+        fields_updated: ['assigned_delivery_date', 'selected_delivery_date', 'production_date', 'fulfillment_mode', 'fulfillments', 'FulfillmentTask', 'ProductionBatch'],
+        success: true,
+      });
+      return Response.json({
+        status: 'success',
+        action: 'updated',
+        order_id: order.id,
+        task_count: taskIds.length,
+        batch_result: {
+          created: Number(batchResult.created || 0),
+          updated: Number(batchResult.updated || 0),
+          deduped: Number(batchResult.deduped || 0),
+          errors: Number(batchResult.errors || 0),
+        },
+      });
     }
 
     // ── order.created / order.paid ───────────────────────────────────────────

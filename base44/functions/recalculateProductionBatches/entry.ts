@@ -564,6 +564,10 @@ Deno.serve(async (req) => {
         order.order_type === 'subscription' ||
         order.source_type === 'subscription_fulfillment';
       const hasValidFulfillments = isSubscription && order.fulfillments && order.fulfillments.length > 0;
+      const hasCustomerAdjustmentPlan = !isSubscription
+        && order.schedule_source === 'customer_order_adjustment'
+        && Array.isArray(order.fulfillments)
+        && order.fulfillments.length > 0;
       
       if (isSubscription && !hasValidFulfillments) {
         console.warn(`[RECALC] Subscription ${order.shopify_order_number} (${order.customer_name}) has no fulfillments — skipping`);
@@ -596,11 +600,11 @@ Deno.serve(async (req) => {
       let fulfillmentCount = 1;
       let fulfillmentDates = [];
       
-      if (isSubscription && order.fulfillments && order.fulfillments.length > 0) {
+      if ((isSubscription || hasCustomerAdjustmentPlan) && order.fulfillments && order.fulfillments.length > 0) {
         // SUBSCRIPTIONS: Use embedded fulfillments structure
         fulfillmentCount = order.fulfillments.length;
         fulfillmentDates = order.fulfillments.map(f => f.production_date);
-        console.log(`[RECALC] Subscription ${order.shopify_order_number} has ${fulfillmentCount} fulfillments from embedded array`);
+        console.log(`[RECALC] ${hasCustomerAdjustmentPlan ? 'Customer adjustment' : 'Subscription'} ${order.shopify_order_number} has ${fulfillmentCount} explicit fulfillments`);
       } else {
         // ONE-TIME ORDERS: Calculate from metadata
         // Try to get fulfillment count from Bundle metadata
@@ -662,7 +666,7 @@ Deno.serve(async (req) => {
         if (!order.assigned_delivery_date && fulfillmentsArray.length > 0) {
           order._deliveryDateAssigned = fulfillmentsArray[0].delivery_date;
         }
-      } else if (!isSubscription) {
+      } else if (!isSubscription && !hasCustomerAdjustmentPlan) {
         // One-time orders: decompose bundles if present (into fulfillments.items ONLY)
         // CRITICAL GUARDRAIL: Never update order.line_items for one-time orders during production recalc.
         // line_items = customer-facing product identity (immutable after order placed)
@@ -710,8 +714,8 @@ Deno.serve(async (req) => {
       // Each fulfillment has its own items with correct weekly quantities.
       // DOUBLE-COUNT GUARD: subscription operational ShopifyOrders are the single source of truth.
       // Their linked FulfillmentTasks are already excluded from the FulfillmentTask loop via ordersCoveredByOrderLoop.
-      if (isSubscription && order.fulfillments && order.fulfillments.length > 0) {
-        // ─── SUBSCRIPTION: Process fulfillments array ───
+      if ((isSubscription || hasCustomerAdjustmentPlan) && order.fulfillments && order.fulfillments.length > 0) {
+        // ─── EXPLICIT FULFILLMENTS: subscriptions and customer-confirmed adjustments ───
         for (let fi = 0; fi < order.fulfillments.length; fi++) {
           const fulfillment = order.fulfillments[fi];
           const fDate = fulfillment.production_date;
@@ -761,7 +765,7 @@ Deno.serve(async (req) => {
                   customer_email: order.customer_email,
                   customer_name: order.customer_name || '',
                   quantity: componentQty,
-                  source_type: 'subscription_fulfillment',
+                  source_type: hasCustomerAdjustmentPlan ? 'customer_order_adjustment' : 'subscription_fulfillment',
                   source_item: itemTitle,
                   fulfillment_index: fi + 1,
                   fulfillment_total: fulfillmentCount,
@@ -790,7 +794,7 @@ Deno.serve(async (req) => {
                 customer_email: order.customer_email,
                 customer_name: order.customer_name || '',
                 quantity: qty,
-                source_type: 'subscription_fulfillment',
+                source_type: hasCustomerAdjustmentPlan ? 'customer_order_adjustment' : 'subscription_fulfillment',
                 source_item: normalizedTitle,
                 fulfillment_index: fi + 1,
                 fulfillment_total: fulfillmentCount,

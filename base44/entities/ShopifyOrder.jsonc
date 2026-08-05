@@ -232,6 +232,10 @@
       "format": "date",
       "description": "Assigned production date (day before delivery)."
     },
+    "schedule_source": {
+      "type": "string",
+      "description": "System or approved workflow that assigned the current production and delivery plan."
+    },
     "delivery_window_label": {
       "type": "string",
       "description": "Human-readable delivery window e.g. 5 PM \u2013 8 PM",
@@ -246,6 +250,47 @@
         "refunded",
         "partially_refunded"
       ]
+    },
+    "refund_status": {
+      "type": "string",
+      "enum": [
+        "none",
+        "pending_review",
+        "partially_refunded",
+        "fully_refunded",
+        "review_required",
+        "ignored_duplicate"
+      ],
+      "description": "Refund state separate from the order production and delivery lifecycle."
+    },
+    "refund_type": {
+      "type": "string",
+      "enum": [
+        "full",
+        "partial",
+        "unknown"
+      ]
+    },
+    "refund_amount": {
+      "type": "number"
+    },
+    "refund_currency": {
+      "type": "string"
+    },
+    "refunded_at": {
+      "type": "string"
+    },
+    "refund_source": {
+      "type": "string"
+    },
+    "refund_event_id": {
+      "type": "string"
+    },
+    "stripe_refund_id": {
+      "type": "string"
+    },
+    "refund_reason": {
+      "type": "string"
     },
     "fulfillment_status": {
       "type": "string"
