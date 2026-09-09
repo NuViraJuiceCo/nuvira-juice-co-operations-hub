@@ -1,0 +1,39 @@
+{
+  "name": "Auto-Recalculate Production Batches on Order Change",
+  "description": "Automatically recalculates all production batch quantities whenever an order is created, updated, or deleted. Decomposes bundles into individual products and upserts one batch card per product/date.",
+  "trigger": {
+    "condition": "${ ((.trigger.changed_fields | index(\"line_items\") != null) or (.trigger.changed_fields | index(\"production_status\") != null) or (.trigger.changed_fields | index(\"requested_delivery_date\") != null) or (.trigger.changed_fields | index(\"assigned_delivery_date\") != null) or (.trigger.changed_fields | index(\"source_channel\") != null) or (.trigger.changed_fields | index(\"fulfillment_method\") != null)) }",
+    "config": {
+      "trigger_type": "entity",
+      "events": [
+        "create",
+        "update",
+        "delete"
+      ],
+      "entity_name": "ShopifyOrder"
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "auto_recalculate_production_batches_on_order_change",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "recalculateProductionBatches",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "recalculateProductionBatches"
+  }
+}

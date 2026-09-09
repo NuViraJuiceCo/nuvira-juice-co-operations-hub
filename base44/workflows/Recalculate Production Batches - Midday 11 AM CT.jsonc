@@ -1,0 +1,44 @@
+{
+  "name": "Recalculate Production Batches - Midday 11 AM CT",
+  "description": "Midday catch-all recalculation at 11 AM CT. Reduced from every-30-min polling to once daily midday to prevent credit burn. Combined with the 6 AM run this gives 2x/day coverage.",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 21 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "recalculate_production_batches_midday_11_am_ct",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "recalculateProductionBatches",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "recalculateProductionBatches"
+  }
+}
