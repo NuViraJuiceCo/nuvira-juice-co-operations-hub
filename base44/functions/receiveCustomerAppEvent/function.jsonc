@@ -1,0 +1,4 @@
+{
+  "name": "receiveCustomerAppEvent",
+  "entry": "entry.ts"
+}

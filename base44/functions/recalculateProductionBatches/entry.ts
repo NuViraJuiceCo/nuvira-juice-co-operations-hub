@@ -14,7 +14,6 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
  */
 
 const PRODUCTION_DAYS = [2, 5]; // Tue=2, Fri=5 — NuVira production days ONLY (no Saturday)
-const BUSINESS_TIME_ZONE = 'America/Chicago';
 
 // ─── Phase 5: Validate production date day-of-week before creating/updating batches ──
 // Only Tue and Fri are valid. If a planMap entry has an invalid production date, skip it.
@@ -23,25 +22,6 @@ function isValidNuViraProductionDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dow = new Date(y, m - 1, d).getDay();
   return dow === 2 || dow === 5; // Tue=2, Fri=5
-}
-
-function getBusinessTodayDateString(date = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: BUSINESS_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function isPastBusinessDate(dateStr, todayStr) {
-  return Boolean(dateStr) && dateStr < todayStr;
-}
-
-function isTodayOrFutureBusinessDate(dateStr, todayStr) {
-  return Boolean(dateStr) && dateStr >= todayStr;
 }
 
 const FIRST_PRODUCTION_DATE = '2026-05-01'; // First production date (May 1st)
@@ -108,62 +88,76 @@ function normalizeProductName(name) {
   return name.trim().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
-function normalizeStatus(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function orderHasTag(order, tag) {
-  const target = normalizeStatus(tag);
-  return Array.isArray(order?.tags) && order.tags.some(t => normalizeStatus(t) === target);
-}
-
-function isExcludedFromProductionDemand(order) {
-  const paymentStatus = normalizeStatus(order?.payment_status);
-  const productionStatus = normalizeStatus(order?.production_status);
-  const fulfillmentStatus = normalizeStatus(order?.fulfillment_status);
-  const orderLockStatus = normalizeStatus(order?.order_lock_status);
-  const sourceChannel = normalizeStatus(order?.source_channel);
-  const sourceType = normalizeStatus(order?.source_type);
-  const orderType = normalizeStatus(order?.order_type);
-  const fulfillmentMethod = normalizeStatus(order?.fulfillment_method);
-
-  return (
-    paymentStatus === 'refunded' ||
-    ['refunded', 'canceled', 'cancelled', 'not_required', 'fulfilled', 'completed', 'verified_logged', 'archived'].includes(productionStatus) ||
-    ['fulfilled', 'delivered', 'completed', 'cancelled', 'canceled'].includes(fulfillmentStatus) ||
-    ['fulfilled', 'cancelled', 'canceled'].includes(orderLockStatus) ||
-    orderHasTag(order, 'excluded') ||
-    orderHasTag(order, 'no_production') ||
-    order?.requires_production === false ||
-    order?.do_not_recover === true ||
-    order?.do_not_sync === true ||
-    order?.canceled_at ||
-    order?.deleted_at ||
-    sourceChannel === 'pos' ||
-    sourceType === 'shopify_pos' ||
-    orderType === 'pos' ||
-    fulfillmentMethod === 'pos'
-  );
-}
-
 function stripArticle(name) {
   // Strip leading "The " for fuzzy bundle matching
   if (!name) return name;
   return name.replace(/^the\s+/i, '').trim();
 }
 
+function stripSellingSuffixes(name) {
+  if (!name) return '';
+  return String(name)
+    .replace(/^\d+\s*[×x]\s*/i, '')
+    .replace(/\s*\(at\s+\$[\d.,]+\s*\/\s*[^)]+\)/i, '')
+    .replace(/\s*\(\$[\d.,]+.*?\)/i, '')
+    .replace(/[–—]/g, '-')
+    .trim();
+}
+
+function stripParentheticals(name) {
+  if (!name) return '';
+  return String(name).replace(/\s*\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeBundleLookupKey(name) {
+  if (!name) return '';
+  return stripParentheticals(stripArticle(stripSellingSuffixes(name)))
+    .replace(/\b(?:3|three)\s*-\s*day\b/gi, ' ')
+    .replace(/\b(?:3|three)\s+day\b/gi, ' ')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function bundleLookupCandidates(name) {
+  const cleaned = stripSellingSuffixes(name);
+  const stripped = stripArticle(cleaned);
+  const noParenthetical = stripParentheticals(stripped);
+  return Array.from(new Set([
+    cleaned,
+    normalizeProductName(cleaned),
+    cleaned.toLowerCase(),
+    stripped,
+    normalizeProductName(stripped),
+    stripped.toLowerCase(),
+    noParenthetical,
+    normalizeProductName(noParenthetical),
+    noParenthetical.toLowerCase(),
+    normalizeBundleLookupKey(cleaned),
+    normalizeBundleLookupKey(stripped),
+  ].filter(Boolean)));
+}
+
 function findBundleComponents(bundleMap, itemTitle) {
-  // Try multiple variations: exact, normalized, lowercase, without leading "The"
-  const stripped = stripArticle(itemTitle);
-  return (
-    bundleMap[itemTitle] ||
-    bundleMap[normalizeProductName(itemTitle)] ||
-    bundleMap[itemTitle.toLowerCase()] ||
-    bundleMap[stripped] ||
-    bundleMap[normalizeProductName(stripped)] ||
-    bundleMap[stripped.toLowerCase()] ||
-    null
-  );
+  for (const candidate of bundleLookupCandidates(itemTitle)) {
+    if (bundleMap[candidate]) return bundleMap[candidate];
+  }
+  return null;
+}
+
+function findBundleData(bundleFullData, itemTitle) {
+  for (const candidate of bundleLookupCandidates(itemTitle)) {
+    if (bundleFullData[candidate]) return bundleFullData[candidate];
+  }
+  return null;
+}
+
+function shouldUseMultiFulfillmentMetadata(order) {
+  if (!order) return false;
+  if (order.source_channel === 'subscription' || order.order_type === 'subscription') return true;
+  if (order.fulfillment_mode === 'multi_delivery') return true;
+  return /\b(week|weeks|delivery|deliveries|fulfillment|fulfillments)\b/i.test(order.customer_notes || '');
 }
 
 /**
@@ -330,7 +324,8 @@ Deno.serve(async (req) => {
       base44.asServiceRole.entities.ManualProductionBatch.list('-production_date', 200),
     ]);
 
-    const todayStr = getBusinessTodayDateString();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     // Build bundle lookup map: bundle_name (normalized) -> full bundle object
     // Also map exact original names so we can match order line items flexibly
@@ -339,18 +334,10 @@ Deno.serve(async (req) => {
     for (const b of allBundles) {
       if (b.is_active !== false) {
         const comps = b.components || [];
-        bundleMap[b.bundle_name] = comps;
-        bundleMap[normalizeProductName(b.bundle_name)] = comps;
-        bundleMap[b.bundle_name.toLowerCase()] = comps;
-        // Also index without leading "The "
-        const stripped = stripArticle(b.bundle_name);
-        bundleMap[stripped] = comps;
-        bundleMap[normalizeProductName(stripped)] = comps;
-        bundleMap[stripped.toLowerCase()] = comps;
-        
-        // Store full bundle data for fulfillment_count lookup
-        const normalizedName = normalizeProductName(b.bundle_name);
-        bundleFullData[normalizedName] = b;
+        for (const candidate of bundleLookupCandidates(b.bundle_name)) {
+          bundleMap[candidate] = comps;
+          bundleFullData[candidate] = b;
+        }
       }
     }
 
@@ -397,10 +384,18 @@ Deno.serve(async (req) => {
       'service fee', 'handling fee', 'tax',
     ];
 
-    // Build a set of ShopifyOrder IDs that are active production demand candidates.
+    // Build a set of ShopifyOrder IDs that are active (not excluded) — used to guard FulfillmentTask dedup
     const activeOrderIds = new Set();
     for (const o of allOrders) {
-      if (!isExcludedFromProductionDemand(o)) activeOrderIds.add(o.id);
+      const isExcludedCheck =
+        o.payment_status === 'refunded' ||
+        o.production_status === 'refunded' ||
+        o.production_status === 'canceled' ||
+        o.production_status === 'cancelled' ||
+        (Array.isArray(o.tags) && o.tags.includes('excluded')) ||
+        o.do_not_recover === true ||
+        o.do_not_sync === true;
+      if (!isExcludedCheck) activeOrderIds.add(o.id);
     }
 
     // Build a set of order IDs whose demand will be covered by ShopifyOrder loop.
@@ -412,7 +407,15 @@ Deno.serve(async (req) => {
     // production demand — doing so causes double-counting (order + task both contribute).
     const ordersCoveredByOrderLoop = new Set();
     for (const o of allOrders) {
-      if (isExcludedFromProductionDemand(o)) continue;
+      const isExcludedCheck =
+        o.payment_status === 'refunded' ||
+        o.production_status === 'refunded' ||
+        o.production_status === 'canceled' ||
+        o.production_status === 'cancelled' ||
+        (Array.isArray(o.tags) && o.tags.includes('excluded')) ||
+        o.do_not_recover === true ||
+        o.do_not_sync === true;
+      if (isExcludedCheck) continue;
 
       const isSubscriptionOrder =
         o.source_channel === 'subscription' ||
@@ -439,12 +442,6 @@ Deno.serve(async (req) => {
       const isActiveTask = task.status && !['Cancelled', 'Completed', 'cancelled', 'completed'].includes(task.status);
       if (!isActiveTask) continue;
 
-      const linkedOrderForTask = task.order_id ? allOrders.find(o => o.id === task.order_id) : null;
-      if (linkedOrderForTask && isExcludedFromProductionDemand(linkedOrderForTask)) {
-        console.log(`[RECALC] Skipping FT ${task.id} (${task.customer_name}): linked order ${linkedOrderForTask.shopify_order_number} is fulfilled/no-production`);
-        continue;
-      }
-
       // GUARDRAIL: Skip FulfillmentTasks linked to active one-time orders (covered by ShopifyOrder loop)
       if (task.order_id && ordersCoveredByOrderLoop.has(task.order_id)) {
         console.log(`[RECALC] Skipping FT ${task.id} (${task.customer_name}): linked to active one-time order covered by order loop`);
@@ -456,7 +453,8 @@ Deno.serve(async (req) => {
       if (!taskDeliveryDate) continue;
 
       const productionDate = getProductionDateForDelivery(taskDeliveryDate);
-      if (isPastBusinessDate(productionDate, todayStr)) continue; // skip past dates in NuVira business timezone
+      const prodDateObj = new Date(productionDate + 'T00:00:00');
+      if (prodDateObj < today) continue; // skip past dates
 
       console.log(`[RECALC] Processing subscription FulfillmentTask ${task.id}: ${task.customer_name} → ${productionDate}`);
 
@@ -525,11 +523,19 @@ Deno.serve(async (req) => {
     }
 
     for (const order of allOrders) {
-      // GUARDRAIL: Exclude refunded, cancelled, POS, fulfilled, and no-production
-      // Shopify/manual orders from production planning. These may still be valid
-      // sales/accounting records, but they are not new production demand.
-      if (isExcludedFromProductionDemand(order)) {
-        console.log(`[RECALC] Skipping excluded/no-production order ${order.shopify_order_number}`);
+      // GUARDRAIL: Exclude refunded, cancelled, and test orders from production planning
+      const isExcluded =
+        order.payment_status === 'refunded' ||
+        order.production_status === 'refunded' ||
+        order.production_status === 'canceled' ||
+        order.production_status === 'cancelled' ||
+        (Array.isArray(order.tags) && order.tags.includes('excluded')) ||
+        order.do_not_recover === true ||
+        order.do_not_sync === true ||
+        order.canceled_at ||
+        order.deleted_at;
+      if (isExcluded) {
+        console.log(`[RECALC] Skipping excluded order ${order.shopify_order_number}: refunded/cancelled/test`);
         continue;
       }
 
@@ -558,6 +564,10 @@ Deno.serve(async (req) => {
         order.order_type === 'subscription' ||
         order.source_type === 'subscription_fulfillment';
       const hasValidFulfillments = isSubscription && order.fulfillments && order.fulfillments.length > 0;
+      const hasCustomerAdjustmentPlan = !isSubscription
+        && order.schedule_source === 'customer_order_adjustment'
+        && Array.isArray(order.fulfillments)
+        && order.fulfillments.length > 0;
       
       if (isSubscription && !hasValidFulfillments) {
         console.warn(`[RECALC] Subscription ${order.shopify_order_number} (${order.customer_name}) has no fulfillments — skipping`);
@@ -590,33 +600,27 @@ Deno.serve(async (req) => {
       let fulfillmentCount = 1;
       let fulfillmentDates = [];
       
-      if (isSubscription && order.fulfillments && order.fulfillments.length > 0) {
+      if ((isSubscription || hasCustomerAdjustmentPlan) && order.fulfillments && order.fulfillments.length > 0) {
         // SUBSCRIPTIONS: Use embedded fulfillments structure
         fulfillmentCount = order.fulfillments.length;
         fulfillmentDates = order.fulfillments.map(f => f.production_date);
-        console.log(`[RECALC] Subscription ${order.shopify_order_number} has ${fulfillmentCount} fulfillments from embedded array`);
+        console.log(`[RECALC] ${hasCustomerAdjustmentPlan ? 'Customer adjustment' : 'Subscription'} ${order.shopify_order_number} has ${fulfillmentCount} explicit fulfillments`);
       } else {
         // ONE-TIME ORDERS: Calculate from metadata
         // Try to get fulfillment count from Bundle metadata
-        if (order.line_items && order.line_items.length > 0) {
+        const useMultiFulfillmentMetadata = shouldUseMultiFulfillmentMetadata(order);
+        if (useMultiFulfillmentMetadata && order.line_items && order.line_items.length > 0) {
           for (const item of order.line_items) {
-            // Try to find bundle by exact name first
-            for (const bKey of Object.keys(bundleFullData)) {
-              if (bKey.toLowerCase() === item.title.toLowerCase() || 
-                  stripArticle(bKey).toLowerCase() === stripArticle(item.title).toLowerCase()) {
-                const bundleData = bundleFullData[bKey];
-                if (bundleData && bundleData.fulfillment_count) {
-                  fulfillmentCount = Math.max(1, bundleData.fulfillment_count);
-                  console.log(`[RECALC] Found bundle "${item.title}" with fulfillment_count=${fulfillmentCount}`);
-                  break;
-                }
-              }
+            const bundleData = findBundleData(bundleFullData, item.title);
+            if (bundleData && bundleData.fulfillment_count) {
+              fulfillmentCount = Math.max(1, bundleData.fulfillment_count);
+              console.log(`[RECALC] Found bundle "${item.title}" with fulfillment_count=${fulfillmentCount}`);
+              break;
             }
-            if (fulfillmentCount > 1) break;
           }
         }
         // If no bundle match, fall back to customer_notes or default to 1
-        if (fulfillmentCount === 1) {
+        if (useMultiFulfillmentMetadata && fulfillmentCount === 1) {
           fulfillmentCount = detectFulfillmentCount(order, bundleMap);
         }
         fulfillmentDates = getSubscriptionProductionDates(productionDate, fulfillmentCount);
@@ -662,7 +666,7 @@ Deno.serve(async (req) => {
         if (!order.assigned_delivery_date && fulfillmentsArray.length > 0) {
           order._deliveryDateAssigned = fulfillmentsArray[0].delivery_date;
         }
-      } else if (!isSubscription) {
+      } else if (!isSubscription && !hasCustomerAdjustmentPlan) {
         // One-time orders: decompose bundles if present (into fulfillments.items ONLY)
         // CRITICAL GUARDRAIL: Never update order.line_items for one-time orders during production recalc.
         // line_items = customer-facing product identity (immutable after order placed)
@@ -710,12 +714,13 @@ Deno.serve(async (req) => {
       // Each fulfillment has its own items with correct weekly quantities.
       // DOUBLE-COUNT GUARD: subscription operational ShopifyOrders are the single source of truth.
       // Their linked FulfillmentTasks are already excluded from the FulfillmentTask loop via ordersCoveredByOrderLoop.
-      if (isSubscription && order.fulfillments && order.fulfillments.length > 0) {
-        // ─── SUBSCRIPTION: Process fulfillments array ───
+      if ((isSubscription || hasCustomerAdjustmentPlan) && order.fulfillments && order.fulfillments.length > 0) {
+        // ─── EXPLICIT FULFILLMENTS: subscriptions and customer-confirmed adjustments ───
         for (let fi = 0; fi < order.fulfillments.length; fi++) {
           const fulfillment = order.fulfillments[fi];
           const fDate = fulfillment.production_date;
-          if (isPastBusinessDate(fDate, todayStr)) continue; // skip past dates in NuVira business timezone
+          const fDateObj = new Date(fDate + 'T00:00:00');
+          if (fDateObj < today) continue; // skip past dates
 
           const fulfillmentItems = fulfillment.items && fulfillment.items.length > 0
             ? fulfillment.items
@@ -760,7 +765,7 @@ Deno.serve(async (req) => {
                   customer_email: order.customer_email,
                   customer_name: order.customer_name || '',
                   quantity: componentQty,
-                  source_type: 'subscription_fulfillment',
+                  source_type: hasCustomerAdjustmentPlan ? 'customer_order_adjustment' : 'subscription_fulfillment',
                   source_item: itemTitle,
                   fulfillment_index: fi + 1,
                   fulfillment_total: fulfillmentCount,
@@ -789,7 +794,7 @@ Deno.serve(async (req) => {
                 customer_email: order.customer_email,
                 customer_name: order.customer_name || '',
                 quantity: qty,
-                source_type: 'subscription_fulfillment',
+                source_type: hasCustomerAdjustmentPlan ? 'customer_order_adjustment' : 'subscription_fulfillment',
                 source_item: normalizedTitle,
                 fulfillment_index: fi + 1,
                 fulfillment_total: fulfillmentCount,
@@ -800,12 +805,7 @@ Deno.serve(async (req) => {
       } else {
         // ─── ONE-TIME ORDER: Process parent line_items ───
         for (const item of order.line_items) {
-          let itemTitle = (item.title || '').trim();
-          
-          // CRITICAL FIX: Strip Stripe's quantity prefix (e.g., "1 × Monthly Ritual (at $144.00 / month)" → "Monthly Ritual")
-          itemTitle = itemTitle.replace(/^\d+\s*×\s*/, '').trim(); // Remove "1 × " prefix
-          itemTitle = itemTitle.replace(/\s*\(at\s+\$[\d.]+\s*\/\s*\w+\)/i, '').trim(); // Remove "(at $144.00 / month)"
-          itemTitle = itemTitle.replace(/\s*\(\$[\d.,]+.*?\)/i, '').trim(); // Generic price suffix removal
+          let itemTitle = stripSellingSuffixes(item.title || '');
           
           const totalQty = Number(item.quantity) || 0;
           if (totalQty <= 0 || !itemTitle) continue;
@@ -818,7 +818,8 @@ Deno.serve(async (req) => {
 
           for (let fi = 0; fi < fulfillmentDates.length; fi++) {
             const fDate = fulfillmentDates[fi];
-            if (isPastBusinessDate(fDate, todayStr)) continue; // skip past dates in NuVira business timezone
+            const fDateObj = new Date(fDate + 'T00:00:00');
+            if (fDateObj < today) continue; // skip past dates
 
             if (bundleComponents && bundleComponents.length > 0) {
               // Decompose bundle into individual products, FOR THIS FULFILLMENT ONLY
@@ -896,7 +897,8 @@ Deno.serve(async (req) => {
       if (!productionDate) continue;
 
       // Skip past dates — production has already happened or is not actionable
-      if (isPastBusinessDate(productionDate, todayStr)) continue;
+      const prodDateObj = new Date(productionDate + 'T00:00:00');
+      if (prodDateObj < today) continue;
 
       // Phase 5 guard: only valid NuVira production days (Tue=2, Fri=5)
       // Manual batches may be on any date — if it's not a valid prod day, still include
@@ -999,21 +1001,16 @@ Deno.serve(async (req) => {
         
         if (hasChange) {
           try {
-            await base44.asServiceRole.entities.ShopifyOrder.update(order.id, updateData);
-            await base44.asServiceRole.entities.OrderSyncLog.create({
-              sync_timestamp: new Date().toISOString(),
-              sync_source: 'scheduled_rebuild',
-              event_type: 'recalculateProductionBatches:order_enrichment',
-              order_id: order.id,
-              order_number: order.shopify_order_number || null,
-              customer_email: order.customer_email || null,
-              action: 'updated',
-              reason: 'Production recalculation updated operational fulfillments/assigned delivery date',
-              fields_updated: Object.keys(updateData),
-              success: true,
-            }).catch((logErr) => {
-              console.warn(`[RECALC] Failed to write OrderSyncLog for order ${order.id}: ${logErr?.message || 'unknown error'}`);
+            const safeResult = await base44.asServiceRole.functions.invoke('safeSyncOrderUpdate', {
+              incomingData: updateData,
+              source: 'operations',
+              matchBy: { internal_id: order.id },
+              _internalSecret: Deno.env.get('INTERNAL_FUNCTION_SECRET'),
             });
+            const safeData = safeResult?.data || safeResult || {};
+            if (safeData.status && !['success', 'skipped'].includes(safeData.status)) {
+              throw new Error(`safeSyncOrderUpdate rejected production recalculation order update: ${JSON.stringify(safeData)}`);
+            }
             ordersWritten++;
           } catch (err) {
             console.warn(`[RECALC] Failed to update fulfillments for order ${order.id}: ${err.message}`);
@@ -1086,7 +1083,8 @@ Deno.serve(async (req) => {
     // ─── ZERO OUT / DELETE STALE BATCHES (no longer needed) ───────────────────
     // Remaining keys in existingBatchMap were not in planMap — no orders for them
     for (const [key, batch] of Object.entries(existingBatchMap)) {
-      if (isTodayOrFutureBusinessDate(batch.production_date, todayStr) && !batch.is_locked) {
+      const prodDateObj = new Date(batch.production_date + 'T00:00:00');
+      if (prodDateObj >= today && !batch.is_locked) {
         // Delete batches that have no orders
         await base44.asServiceRole.entities.ProductionBatch.delete(batch.id);
         results.zeroed++;
